@@ -1,8 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { generateKnowledgeMap, type MapInputItem } from "@/lib/claude";
 
-export const maxDuration = 60;
-
 /** Regenerate the knowledge map from the user's current knowledge_items. */
 export async function POST() {
   const supabase = await createClient();

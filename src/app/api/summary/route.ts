@@ -3,8 +3,6 @@ import { streamSummary } from "@/lib/claude";
 import { buildSummarySystemPrompt } from "@/lib/prompts";
 import type { Profile } from "@/lib/types";
 
-export const maxDuration = 60;
-
 type Item = {
   type: string;
   term: string;

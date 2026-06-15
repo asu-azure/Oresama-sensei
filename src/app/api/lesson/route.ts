@@ -5,9 +5,6 @@ import { recallKnowledge, storeKnowledge } from "@/lib/memory";
 import { buildLessonSystemPrompt } from "@/lib/prompts";
 import type { Profile } from "@/lib/types";
 
-// 60s is the max on Vercel's Hobby (free) plan. Raise to 300 if you upgrade to Pro.
-export const maxDuration = 60;
-
 const MAX_BYTES = 12 * 1024 * 1024; // 12 MB
 const EXT: Record<string, string> = {
   "image/png": "png",

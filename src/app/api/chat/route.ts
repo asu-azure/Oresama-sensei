@@ -4,8 +4,6 @@ import { recallKnowledge, storeKnowledge, storeMessage } from "@/lib/memory";
 import { buildChatSystemPrompt } from "@/lib/prompts";
 import type { Profile } from "@/lib/types";
 
-export const maxDuration = 60;
-
 export async function POST(request: Request) {
   const supabase = await createClient();
   const {
