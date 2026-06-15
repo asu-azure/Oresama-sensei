@@ -1,10 +1,12 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { Check, X, ArrowRight, RotateCcw, Trophy } from "lucide-react";
 import { Markdown } from "@/components/markdown";
+import { RubyText } from "@/components/ruby-text";
 import { Button } from "@/components/ui/button";
+import { stripFurigana } from "@/lib/furigana";
 import { cn } from "@/lib/utils";
 import type {
   Exercise,
@@ -23,7 +25,7 @@ function shuffle<T>(arr: T[]): T[] {
 }
 
 function norm(s: string): string {
-  return s.replace(/\s+/g, "").trim();
+  return stripFurigana(s).replace(/\s+/g, "").trim();
 }
 
 export function ExercisePlayer({
@@ -50,10 +52,19 @@ export function ExercisePlayer({
   if (index >= exercises.length) {
     const pct = Math.round((correctCount / exercises.length) * 100);
     return (
-      <div className="rounded-2xl border border-border bg-surface p-8 text-center">
-        <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-600/10 text-emerald-600">
+      <motion.div
+        initial={{ opacity: 0, scale: 0.96 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="rounded-2xl border border-border bg-surface p-8 text-center"
+      >
+        <motion.div
+          initial={{ scale: 0, rotate: -20 }}
+          animate={{ scale: 1, rotate: 0 }}
+          transition={{ type: "spring", stiffness: 260, damping: 16 }}
+          className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-600/10 text-emerald-600"
+        >
           <Trophy className="h-6 w-6" />
-        </div>
+        </motion.div>
         <h3 className="text-xl font-semibold">Practice complete</h3>
         <p className="mt-1 text-sm text-muted">
           {correctCount} / {exercises.length} correct ({pct}%)
@@ -71,7 +82,7 @@ export function ExercisePlayer({
           </Button>
           {onDone && <Button onClick={onDone}>Done</Button>}
         </div>
-      </div>
+      </motion.div>
     );
   }
 
@@ -102,9 +113,11 @@ export function ExercisePlayer({
         </span>
       </div>
       <div className="mb-4 h-1.5 w-full overflow-hidden rounded-full bg-surface-2">
-        <div
-          className="h-full bg-primary transition-all"
-          style={{ width: `${(index / exercises.length) * 100}%` }}
+        <motion.div
+          className="h-full bg-primary"
+          initial={false}
+          animate={{ width: `${(index / exercises.length) * 100}%` }}
+          transition={{ duration: 0.3 }}
         />
       </div>
 
@@ -149,7 +162,11 @@ function Explanation({
   onNext: () => void;
 }) {
   return (
-    <div className="mt-4 space-y-3">
+    <motion.div
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="mt-4 space-y-3"
+    >
       <div
         className={cn(
           "flex items-start gap-2 rounded-xl border p-3 text-sm",
@@ -184,7 +201,7 @@ function Explanation({
           Next <ArrowRight className="h-4 w-4" />
         </Button>
       </div>
-    </div>
+    </motion.div>
   );
 }
 
@@ -197,6 +214,7 @@ function McqView({
   onAnswered: (correct: boolean) => void;
   onNext: () => void;
 }) {
+  const reduce = useReducedMotion();
   const [picked, setPicked] = useState<number | null>(null);
   const done = picked !== null;
   const correct = picked === ex.answer;
@@ -217,10 +235,21 @@ function McqView({
           const isAnswer = i === ex.answer;
           const isPicked = i === picked;
           return (
-            <button
+            <motion.button
               key={i}
               onClick={() => choose(i)}
               disabled={done}
+              whileTap={reduce || done ? undefined : { scale: 0.98 }}
+              animate={
+                reduce || !done
+                  ? undefined
+                  : isAnswer
+                    ? { scale: [1, 1.04, 1] }
+                    : isPicked
+                      ? { x: [0, -5, 5, -4, 4, 0] }
+                      : undefined
+              }
+              transition={{ duration: 0.32 }}
               className={cn(
                 "flex w-full items-center gap-2 rounded-xl border px-4 py-3 text-left font-jp text-sm transition-colors",
                 !done && "border-border bg-background hover:bg-surface-2",
@@ -232,14 +261,16 @@ function McqView({
               <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-current text-xs text-muted">
                 {String.fromCharCode(65 + i)}
               </span>
-              <span className="flex-1">{c}</span>
+              <span className="flex-1">
+                <RubyText>{c}</RubyText>
+              </span>
               {done && isAnswer && (
                 <Check className="h-4 w-4 text-emerald-600" />
               )}
               {done && isPicked && !isAnswer && (
                 <X className="h-4 w-4 text-accent" />
               )}
-            </button>
+            </motion.button>
           );
         })}
       </div>
@@ -259,6 +290,7 @@ function ArrangeView({
   onAnswered: (correct: boolean) => void;
   onNext: () => void;
 }) {
+  const reduce = useReducedMotion();
   const pool = useMemo(
     () => shuffle(ex.tokens.map((t, i) => ({ t, i }))),
     [ex],
@@ -297,12 +329,14 @@ function ArrangeView({
         ) : (
           <div className="flex flex-wrap gap-2">
             {built.map((t, k) => (
-              <span
+              <motion.span
                 key={k}
+                initial={reduce ? false : { scale: 0.6, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
                 className="rounded-lg bg-primary/10 px-3 py-1.5 font-jp text-sm text-primary"
               >
-                {t}
-              </span>
+                <RubyText>{t}</RubyText>
+              </motion.span>
             ))}
           </div>
         )}
@@ -310,10 +344,11 @@ function ArrangeView({
 
       <div className="mt-3 flex flex-wrap gap-2">
         {pool.map(({ t }, i) => (
-          <button
+          <motion.button
             key={i}
             onClick={() => add(i)}
             disabled={used.has(i) || checked}
+            whileTap={reduce ? undefined : { scale: 0.94 }}
             className={cn(
               "rounded-lg border px-3 py-1.5 font-jp text-sm transition-colors",
               used.has(i)
@@ -321,8 +356,8 @@ function ArrangeView({
                 : "border-border bg-surface hover:bg-surface-2",
             )}
           >
-            {t}
-          </button>
+            <RubyText>{t}</RubyText>
+          </motion.button>
         ))}
       </div>
 
@@ -349,7 +384,7 @@ function ArrangeView({
           {!correct && (
             <p className="mt-3 font-jp text-sm">
               <span className="text-muted">Answer: </span>
-              {ex.answer.join(" ")}
+              <RubyText>{ex.answer.join(" ")}</RubyText>
             </p>
           )}
           <Explanation correct={correct} text={ex.explanation} onNext={onNext} />
@@ -368,6 +403,7 @@ function ClozeView({
   onAnswered: (correct: boolean) => void;
   onNext: () => void;
 }) {
+  const reduce = useReducedMotion();
   const [value, setValue] = useState("");
   const [picked, setPicked] = useState<string | null>(null);
   const [checked, setChecked] = useState(false);
@@ -398,10 +434,11 @@ function ClozeView({
             const isAnswer = norm(c) === norm(ex.answer);
             const isPicked = c === picked;
             return (
-              <button
+              <motion.button
                 key={i}
                 onClick={() => pick(c)}
                 disabled={checked}
+                whileTap={reduce || checked ? undefined : { scale: 0.96 }}
                 className={cn(
                   "rounded-xl border px-4 py-2 font-jp text-sm transition-colors",
                   !checked && "border-border bg-background hover:bg-surface-2",
@@ -412,8 +449,8 @@ function ClozeView({
                     "border-accent/50 bg-accent/10",
                 )}
               >
-                {c}
-              </button>
+                <RubyText>{c}</RubyText>
+              </motion.button>
             );
           })}
         </div>
@@ -444,7 +481,7 @@ function ClozeView({
           {!correct && (
             <p className="mt-3 font-jp text-sm">
               <span className="text-muted">Answer: </span>
-              {ex.answer}
+              <RubyText>{ex.answer}</RubyText>
             </p>
           )}
           <Explanation correct={correct} text={ex.explanation} onNext={onNext} />

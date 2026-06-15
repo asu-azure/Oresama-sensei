@@ -16,3 +16,23 @@ export function furiganaToRuby(input: string): string {
       `<ruby>${base}<rt>${reading}</rt></ruby>`,
   );
 }
+
+/** Remove ruby markup, keeping the visible base text. Used to compare a typed
+ *  answer (plain) against an answer that may carry furigana. */
+export function stripFurigana(input: string): string {
+  if (!input) return input;
+  return input
+    .replace(/<ruby>(.*?)<rt>.*?<\/rt><\/ruby>/g, "$1")
+    .replace(/<\/?(?:ruby|rt|rp)>/g, "");
+}
+
+const KANJI_RE = /[一-鿿々〆]/;
+
+/** Whether a separate reading adds information: only when the term contains
+ *  kanji and the reading differs from the term (pure-kana terms => hide it). */
+export function showReading(
+  term: string,
+  reading: string | null | undefined,
+): reading is string {
+  return !!reading && reading !== term && KANJI_RE.test(term);
+}

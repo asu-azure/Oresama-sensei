@@ -14,9 +14,16 @@ export default async function AppLayout({
 
   if (!user) redirect("/login");
 
+  const nowIso = new Date().toISOString();
+  const { count } = await supabase
+    .from("knowledge_items")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", user.id)
+    .or(`srs_due.is.null,srs_due.lte.${nowIso}`);
+
   return (
     <div className="flex min-h-dvh flex-col">
-      <Nav />
+      <Nav reviewDue={count ?? 0} />
       <div className="mx-auto w-full max-w-4xl flex-1 px-4">{children}</div>
     </div>
   );

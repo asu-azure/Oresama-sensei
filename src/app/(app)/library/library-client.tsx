@@ -1,6 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
+import { motion, useReducedMotion } from "framer-motion";
 import { Search, Library as LibraryIcon } from "lucide-react";
 import {
   masteryLevel,
@@ -8,6 +10,8 @@ import {
   MASTERY_ORDER,
   type MasteryLevel,
 } from "@/lib/mastery";
+import { showReading } from "@/lib/furigana";
+import { SpeakButton } from "@/components/speak-button";
 import { cn } from "@/lib/utils";
 
 export type LibraryItem = {
@@ -30,6 +34,7 @@ export type LibraryItem = {
 const TYPES = ["all", "vocab", "grammar", "expression"];
 
 export function LibraryClient({ items }: { items: LibraryItem[] }) {
+  const reduce = useReducedMotion();
   const [q, setQ] = useState("");
   const [type, setType] = useState("all");
   const [jlpt, setJlpt] = useState("all");
@@ -104,7 +109,9 @@ export function LibraryClient({ items }: { items: LibraryItem[] }) {
               onClick={() => setMastery(active ? "all" : lvl)}
               className={cn(
                 "flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors",
-                active ? info.chip : "border-border bg-surface text-muted hover:bg-surface-2",
+                active
+                  ? info.chip
+                  : "border-border bg-surface text-muted hover:bg-surface-2",
               )}
             >
               <span className={cn("h-2 w-2 rounded-full", info.dot)} />
@@ -146,32 +153,36 @@ export function LibraryClient({ items }: { items: LibraryItem[] }) {
       </p>
 
       <div className="grid gap-3 sm:grid-cols-2">
-        {filtered.map(({ it, m }) => (
-          <div
+        {filtered.map(({ it, m }, idx) => (
+          <motion.div
             key={it.id}
-            className={cn(
-              "rounded-2xl border bg-surface p-4",
-              m.ring,
-            )}
+            initial={reduce ? false : { opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.2, delay: Math.min(idx * 0.015, 0.25) }}
+            whileHover={reduce ? undefined : { y: -2 }}
+            className={cn("rounded-2xl border bg-surface p-4", m.ring)}
           >
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
                 <p className="font-jp text-lg font-semibold leading-tight">
                   {it.term}
                 </p>
-                {it.reading && (
+                {showReading(it.term, it.reading) && (
                   <p className="font-jp text-sm text-muted">{it.reading}</p>
                 )}
               </div>
-              <span
-                className={cn(
-                  "flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium",
-                  m.chip,
-                )}
-              >
-                <span className={cn("h-1.5 w-1.5 rounded-full", m.dot)} />
-                {m.label}
-              </span>
+              <div className="flex shrink-0 items-center gap-1">
+                <SpeakButton text={it.reading || it.term} />
+                <span
+                  className={cn(
+                    "flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium",
+                    m.chip,
+                  )}
+                >
+                  <span className={cn("h-1.5 w-1.5 rounded-full", m.dot)} />
+                  {m.label}
+                </span>
+              </div>
             </div>
 
             {it.meaning && <p className="mt-2 text-sm">{it.meaning}</p>}
@@ -191,8 +202,14 @@ export function LibraryClient({ items }: { items: LibraryItem[] }) {
               {(it.times_seen ?? 0) > 1 && (
                 <span className="text-muted">seen {it.times_seen}x</span>
               )}
+              <Link
+                href={`/review?item=${it.id}`}
+                className="ml-auto rounded-full border border-border px-2 py-0.5 text-muted transition-colors hover:bg-surface-2 hover:text-foreground"
+              >
+                Review
+              </Link>
             </div>
-          </div>
+          </motion.div>
         ))}
       </div>
 

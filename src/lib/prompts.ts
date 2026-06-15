@@ -150,6 +150,7 @@ Rules for EVERY exercise:
 - Make distractors plausible (wrong but tempting), never obviously silly.
 - "explanation": one concise sentence on why the answer is right (Markdown ok, with furigana).
 - Always fill EVERY field in the schema. For fields that do not apply to a type, use an empty string or empty array (a cloze has empty "tokens"/"answer_order"; an mcq has empty "tokens"/"answer_order"/"answer_text"; an arrange has empty "choices"/"answer_text").
+- For "arrange", "tokens" and "answer_order" must be clean atomic units (words/particles), each its own array entry.
 - If items with ref numbers are provided, base each exercise on one of them and set "item_ref" to that number; otherwise set "item_ref" to 0.
 
 Keep prompts short and focused. Return exactly ${count} exercises (fewer only if the content is too thin).`;

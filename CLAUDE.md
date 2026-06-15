@@ -76,7 +76,11 @@ The **data lives in Supabase (cloud)**, so chats/vocab/lessons sync automaticall
 - ✅ v2 shipped: chat history windowing + past-chats drawer; **vocab/grammar library**
   (`/library`) color-coded by SRS mastery; richer **practice exercises** (multiple-choice,
   sentence-arrangement, fill-in-the-blank) generated per-lesson and as on-demand review tests.
-- ⏳ Next ideas (not built): a standalone personalized-lesson generator; TTS audio; Anki export.
+- ✅ v2.1 shipped: TTS pronunciation (browser Web Speech API) in library/flashcards;
+  library → single-item review (`/review?item=`) + due-count badge on the Review nav;
+  conversation rename/delete in the chat drawer; furigana now renders in exercise options/tokens;
+  map/library/flashcards hide redundant kana readings; tasteful tap/entrance animations (reduced-motion aware).
+- ⏳ Next ideas (not built): a standalone personalized-lesson generator; Anki export.
 
 ## Decisions log
 - Hybrid AI (Gemini OCR/embeddings + Claude chat/lessons) for best quality-per-cost.
@@ -88,3 +92,6 @@ The **data lives in Supabase (cloud)**, so chats/vocab/lessons sync automaticall
 - "Mastery" coloring is derived purely from existing `srs_*` fields (`src/lib/mastery.ts`); no new
   data is stored. New helpers: `src/components/exercises/exercise-player.tsx`, `src/app/(app)/library/*`,
   chat drawer + windowing in `src/app/(app)/chat/*`.
+- TTS uses the browser Web Speech API (ja-JP) — free, no API cost; `SpeakButton` no-ops where unsupported.
+- Furigana in short fields (exercise options/tokens) renders via `RubyText` (`src/components/ruby-text.tsx`);
+  `showReading()`/`stripFurigana()` in `src/lib/furigana.ts` hide redundant kana and normalize answer checks.

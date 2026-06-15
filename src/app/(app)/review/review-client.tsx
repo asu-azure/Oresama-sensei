@@ -7,6 +7,8 @@ import { Check, RotateCcw, Brain, ClipboardList, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ExercisePlayer } from "@/components/exercises/exercise-player";
 import { cn } from "@/lib/utils";
+import { showReading } from "@/lib/furigana";
+import { SpeakButton } from "@/components/speak-button";
 import type { Rating } from "@/lib/srs";
 import type { Exercise } from "@/lib/types";
 
@@ -250,10 +252,13 @@ function Flashcards({ cards }: { cards: ReviewCard[] }) {
           </div>
 
           <div className="font-jp text-3xl font-semibold">{card.term}</div>
+          <div className="mt-2 flex justify-center">
+            <SpeakButton text={card.reading || card.term} />
+          </div>
 
           {revealed ? (
             <div className="mt-5 space-y-2 text-left">
-              {card.reading && (
+              {showReading(card.term, card.reading) && (
                 <p className="font-jp text-lg text-muted">{card.reading}</p>
               )}
               {card.meaning && <p className="text-base">{card.meaning}</p>}

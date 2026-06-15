@@ -65,3 +65,19 @@ export async function deleteConversation(formData: FormData): Promise<void> {
   revalidatePath("/chat");
   redirect("/chat");
 }
+
+/** Rename a conversation (from the drawer). Revalidates, stays on the page. */
+export async function renameConversation(formData: FormData): Promise<void> {
+  const id = String(formData.get("conversationId") ?? "");
+  const title = String(formData.get("title") ?? "")
+    .trim()
+    .slice(0, 80);
+  if (!id || !title) return;
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return;
+  await supabase.from("conversations").update({ title }).eq("id", id);
+  revalidatePath("/chat");
+}

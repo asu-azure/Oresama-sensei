@@ -13,6 +13,7 @@ import "@xyflow/react/dist/style.css";
 import { LayoutGrid, Workflow, RefreshCw, Loader2, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn, formatDate } from "@/lib/utils";
+import { showReading } from "@/lib/furigana";
 import type { MapData } from "@/lib/types";
 
 export type MapItem = {
@@ -30,7 +31,7 @@ const COLORS = [
 ];
 
 function Term({ term, reading }: { term: string; reading: string | null }) {
-  if (reading) {
+  if (showReading(term, reading)) {
     return (
       <ruby className="font-jp">
         {term}
@@ -130,7 +131,7 @@ export function MapClient({
             x: cx + radius * Math.cos(angle) - 70,
             y: cy + radius * Math.sin(angle),
           },
-          data: { label: it.reading ? `${it.term}\n${it.reading}` : it.term },
+          data: { label: showReading(it.term, it.reading) ? `${it.term}\n${it.reading}` : it.term },
           style: {
             background: "var(--surface, #fff)",
             color: "var(--foreground, #111)",
