@@ -5,7 +5,9 @@ import { usePathname } from "next/navigation";
 import {
   MessageCircle,
   BookImage,
+  Brain,
   Network,
+  BarChart3,
   Settings,
   LogOut,
 } from "lucide-react";
@@ -15,7 +17,9 @@ import { cn } from "@/lib/utils";
 const links = [
   { href: "/chat", label: "Chat", icon: MessageCircle },
   { href: "/lessons", label: "Lessons", icon: BookImage },
+  { href: "/review", label: "Review", icon: Brain },
   { href: "/map", label: "Map", icon: Network },
+  { href: "/dashboard", label: "Progress", icon: BarChart3 },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 

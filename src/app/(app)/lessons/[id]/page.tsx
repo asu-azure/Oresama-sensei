@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { Markdown } from "@/components/markdown";
+import { DeleteLessonButton } from "../delete-lesson-button";
 import { formatDate } from "@/lib/utils";
 import type { Lesson } from "@/lib/types";
 
@@ -39,9 +40,12 @@ export default async function LessonDetailPage({
         >
           <ArrowLeft className="h-4 w-4" /> All lessons
         </Link>
-        <h1 className="font-jp text-2xl font-bold">
-          {lesson.title || "Untitled lesson"}
-        </h1>
+        <div className="flex items-start justify-between gap-3">
+          <h1 className="font-jp text-2xl font-bold">
+            {lesson.title || "Untitled lesson"}
+          </h1>
+          <DeleteLessonButton lessonId={lesson.id} variant="full" />
+        </div>
         <p className="mt-1 text-xs text-muted">{formatDate(lesson.created_at)}</p>
       </div>
 

@@ -35,6 +35,12 @@ export interface KnowledgeItem {
   times_seen: number;
   last_seen: string;
   created_at: string;
+  // Spaced-repetition scheduling
+  srs_due: string | null;
+  srs_interval: number;
+  srs_ease: number;
+  srs_reps: number;
+  srs_lapses: number;
 }
 
 export interface Lesson {
@@ -45,6 +51,7 @@ export interface Lesson {
   source_text: string | null;
   article_md: string | null;
   tags: string[] | null;
+  kind: string; // 'photo' | 'summary'
   created_at: string;
 }
 

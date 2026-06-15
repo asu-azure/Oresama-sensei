@@ -51,6 +51,23 @@ export function streamLesson(system: string, pageText: string, deep = false) {
   });
 }
 
+/** Stream a "summary of everything" review from the learner's saved items. */
+export function streamSummary(system: string, digest: string, deep = false) {
+  return anthropicClient().messages.stream({
+    model: deep ? DEEP_LESSON_MODEL : LESSON_MODEL,
+    max_tokens: 8000,
+    system,
+    thinking: { type: "adaptive" },
+    output_config: { effort: deep ? "high" : "medium" },
+    messages: [
+      {
+        role: "user",
+        content: `Here is everything I've saved so far. Write my summary review.\n\n<my_items>\n${digest}\n</my_items>`,
+      },
+    ],
+  });
+}
+
 const KNOWLEDGE_TYPES: KnowledgeType[] = ["vocab", "grammar", "expression"];
 
 const EXTRACTION_SCHEMA = {

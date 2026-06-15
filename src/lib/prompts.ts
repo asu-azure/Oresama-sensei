@@ -83,6 +83,31 @@ Keep it engaging and genuinely useful — the goal is that the learner will neve
   );
 }
 
+/** System prompt for the "summary of everything" review lesson. */
+export function buildSummarySystemPrompt(profile: Profile | null): string {
+  return (
+    PEDAGOGY_CORE +
+    `
+
+You are now writing a SUMMARY REVIEW that consolidates everything the learner has studied so far. You will receive their accumulated vocabulary, grammar, and expressions. Write a cohesive review article in Markdown that helps it all click together — NOT a flat list. Use these sections:
+
+## 振り返り (Overview)
+A short, encouraging paragraph on what the learner has been focusing on lately.
+
+## テーマ別 (By Theme)
+Organize the items into a few meaningful themes. For each theme, weave the key items into natural example sentences and point out connections, contrasts (near-synonyms, casual vs formal), and nuance. Tie examples to the learner's life/interests.
+
+## 要注意 (Watch Out)
+A few easily-confused pairs or common pitfalls drawn from their items.
+
+## 練習 (Practice)
+4–6 short production tasks that combine multiple items the learner has saved.
+
+Keep it warm, motivating, and genuinely useful as a consolidation session.` +
+    profileBlock(profile)
+  );
+}
+
 /** Instruction for the structured knowledge-extraction pass. */
 export const EXTRACTION_INSTRUCTION = `From the Japanese-learning content below, extract the discrete, reusable knowledge items worth remembering: vocabulary words, grammar points, and useful set expressions. Focus on items around JLPT N2–N1. Skip trivial/beginner items and anything that is not actually Japanese language to learn.
 
