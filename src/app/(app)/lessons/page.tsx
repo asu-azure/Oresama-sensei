@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { LessonUploader } from "./lesson-uploader";
+import { LessonTextGenerator } from "./lesson-text-generator";
 import { SummaryGenerator } from "./summary-generator";
 import { DeleteLessonButton } from "./delete-lesson-button";
 import { formatDate } from "@/lib/utils";
@@ -32,6 +33,7 @@ export default async function LessonsPage() {
         </p>
         <div className="space-y-4">
           <LessonUploader />
+          <LessonTextGenerator />
           <SummaryGenerator />
         </div>
       </section>
@@ -57,7 +59,11 @@ export default async function LessonsPage() {
                           : "bg-primary/10 text-primary")
                       }
                     >
-                      {lesson.kind === "summary" ? "Summary" : "Photo"}
+                      {lesson.kind === "summary"
+                        ? "Summary"
+                        : lesson.kind === "text"
+                          ? "Text"
+                          : "Photo"}
                     </span>
                   </div>
                   <p className="line-clamp-2 font-jp font-medium group-hover:text-primary">

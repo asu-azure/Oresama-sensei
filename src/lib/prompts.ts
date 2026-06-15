@@ -57,7 +57,7 @@ export function buildLessonSystemPrompt(
     PEDAGOGY_CORE +
     `
 
-You are now creating a LESSON from material the learner photographed. You will receive the transcribed text of the page. Produce a rich, personalized lesson in Markdown with these sections:
+You are now creating a LESSON from study material the learner has provided. You will receive the source text. Produce a rich, personalized lesson in Markdown with these sections:
 
 ## 概要 (Overview)
 A 1–2 sentence description of what this material is about.

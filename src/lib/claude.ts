@@ -47,7 +47,12 @@ const LESSON_MAX_TOKENS = 3800;
 const DEEP_LESSON_MAX_TOKENS = 4500;
 
 /** Stream a generated lesson from transcribed page text. */
-export function streamLesson(system: string, pageText: string, deep = false) {
+export function streamLesson(
+  system: string,
+  pageText: string,
+  deep = false,
+  source: "photo" | "text" = "photo",
+) {
   return anthropicClient().messages.stream({
     model: deep ? DEEP_LESSON_MODEL : LESSON_MODEL,
     max_tokens: deep ? DEEP_LESSON_MAX_TOKENS : LESSON_MAX_TOKENS,
@@ -56,7 +61,10 @@ export function streamLesson(system: string, pageText: string, deep = false) {
     messages: [
       {
         role: "user",
-        content: `Here is the transcribed text from the page I photographed. Create my lesson.\n\n<page_text>\n${pageText}\n</page_text>`,
+        content:
+          source === "text"
+            ? `Here is the text I want a lesson on. Create my lesson.\n\n<text>\n${pageText}\n</text>`
+            : `Here is the transcribed text from the page I photographed. Create my lesson.\n\n<page_text>\n${pageText}\n</page_text>`,
       },
     ],
   });
