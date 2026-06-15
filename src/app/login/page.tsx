@@ -26,7 +26,7 @@ export default function LoginPage() {
           <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-lg">
             <BookOpenText className="h-7 w-7" />
           </div>
-          <h1 className="font-jp text-2xl font-bold tracking-tight">学びのへや</h1>
+          <h1 className="font-jp text-2xl font-bold tracking-tight">俺様先生</h1>
           <p className="mt-1 text-sm text-muted">
             Your personal Japanese tutor · JLPT N2–N1
           </p>

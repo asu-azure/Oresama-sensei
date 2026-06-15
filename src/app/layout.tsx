@@ -20,7 +20,7 @@ const notoSansJp = Noto_Sans_JP({
 });
 
 export const metadata: Metadata = {
-  title: "学びのへや · JP Study",
+  title: "俺様先生 · Ore-Sama Sensei",
   description: "A personal Japanese tutor for JLPT N2–N1 that remembers everything you learn.",
 };
 

@@ -36,7 +36,7 @@ export function Nav({ reviewDue = 0 }: { reviewDue?: number }) {
           href="/chat"
           className="mr-3 font-jp text-lg font-bold tracking-tight"
         >
-          学びのへや
+          俺様先生
         </Link>
         <nav className="flex items-center gap-1">
           {links.map(({ href, label, icon: Icon }) => {
