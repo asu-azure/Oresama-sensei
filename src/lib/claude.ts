@@ -34,14 +34,19 @@ export function streamChat(system: string, messages: ChatTurn[]) {
   });
 }
 
+// Lessons/summaries run inside one Vercel function with a 60s cap (Hobby plan),
+// so they must finish fast: thinking off + a tight max_tokens. The prompts also
+// ask the model to stay concise so it concludes cleanly instead of being cut off.
+const LESSON_MAX_TOKENS = 3800;
+const DEEP_LESSON_MAX_TOKENS = 4500;
+
 /** Stream a generated lesson from transcribed page text. */
 export function streamLesson(system: string, pageText: string, deep = false) {
   return anthropicClient().messages.stream({
     model: deep ? DEEP_LESSON_MODEL : LESSON_MODEL,
-    max_tokens: 8000,
+    max_tokens: deep ? DEEP_LESSON_MAX_TOKENS : LESSON_MAX_TOKENS,
     system,
-    thinking: { type: "adaptive" },
-    output_config: { effort: deep ? "high" : "medium" },
+    thinking: { type: "disabled" },
     messages: [
       {
         role: "user",
@@ -55,10 +60,9 @@ export function streamLesson(system: string, pageText: string, deep = false) {
 export function streamSummary(system: string, digest: string, deep = false) {
   return anthropicClient().messages.stream({
     model: deep ? DEEP_LESSON_MODEL : LESSON_MODEL,
-    max_tokens: 8000,
+    max_tokens: deep ? DEEP_LESSON_MAX_TOKENS : LESSON_MAX_TOKENS,
     system,
-    thinking: { type: "adaptive" },
-    output_config: { effort: deep ? "high" : "medium" },
+    thinking: { type: "disabled" },
     messages: [
       {
         role: "user",

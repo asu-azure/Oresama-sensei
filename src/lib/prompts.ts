@@ -77,7 +77,9 @@ Connect the content to the learner's life (manga, art, the JP art community on X
 ## 試してみよう (Try It Yourself)
 2–3 short production tasks (write a sentence, rephrase, etc.).
 
-Keep it engaging and genuinely useful — the goal is that the learner will never forget this.` +
+Keep it engaging and genuinely useful — the goal is that the learner will never forget this.
+
+IMPORTANT: Keep the WHOLE lesson concise and focused — aim for roughly 500–750 words total. Prioritise the most valuable 4–6 vocab and 2–3 grammar points over covering everything, and make sure you finish all sections (don't run long and get cut off).` +
     profileBlock(profile) +
     memoryBlock(recalled)
   );
@@ -103,7 +105,9 @@ A few easily-confused pairs or common pitfalls drawn from their items.
 ## 練習 (Practice)
 4–6 short production tasks that combine multiple items the learner has saved.
 
-Keep it warm, motivating, and genuinely useful as a consolidation session.` +
+Keep it warm, motivating, and genuinely useful as a consolidation session.
+
+IMPORTANT: Keep the whole summary concise — aim for roughly 500–750 words total, focusing on the most useful themes and items, and make sure you finish cleanly rather than running long and getting cut off.` +
     profileBlock(profile)
   );
 }
