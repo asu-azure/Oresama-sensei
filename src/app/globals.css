@@ -1,0 +1,107 @@
+@import "tailwindcss";
+
+/* ---------------------------------------------------------------------------
+   Design tokens — calm "study" aesthetic: warm paper + ink, indigo, sakura
+--------------------------------------------------------------------------- */
+:root {
+  --background: #faf8f4;
+  --surface: #ffffff;
+  --surface-2: #f3efe8;
+  --foreground: #1c1917;
+  --muted: #78716c;
+  --border: #e7e1d6;
+  --primary: #4f46e5;
+  --primary-foreground: #ffffff;
+  --accent: #e11d48;
+  --ring: #6366f1;
+  --radius: 1rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0b0b10;
+    --surface: #15151d;
+    --surface-2: #1d1d27;
+    --foreground: #ededed;
+    --muted: #9b9ba6;
+    --border: #2a2a35;
+    --primary: #818cf8;
+    --primary-foreground: #0b0b10;
+    --accent: #fb7185;
+    --ring: #818cf8;
+  }
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-border: var(--border);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-accent: var(--accent);
+  --color-ring: var(--ring);
+
+  --font-sans: var(--font-noto-sans-jp), var(--font-geist-sans), ui-sans-serif,
+    system-ui, sans-serif;
+  --font-jp: var(--font-noto-sans-jp), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 0.35rem);
+  --radius-sm: calc(var(--radius) - 0.6rem);
+}
+
+* {
+  border-color: var(--border);
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+}
+
+/* Furigana: <ruby>漢字<rt>かんじ</rt></ruby> */
+ruby {
+  ruby-align: center;
+}
+rt {
+  font-size: 0.6em;
+  color: var(--muted);
+  font-weight: 400;
+}
+
+/* Thin, unobtrusive scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 9999px;
+}
+
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-fade-in-up {
+  animation: fade-in-up 0.35s ease-out both;
+}
