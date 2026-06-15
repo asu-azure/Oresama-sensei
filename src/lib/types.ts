@@ -64,3 +64,35 @@ export interface ExtractedKnowledge {
 export interface RecalledItem extends KnowledgeItem {
   similarity: number;
 }
+
+/** A themed cluster of knowledge items on the Knowledge Map. */
+export interface MapGroup {
+  id: string;
+  label: string;
+  theme: string;
+  register: string | null;
+  note: string | null;
+  item_ids: string[];
+}
+
+/** A relationship between two items on the map. */
+export interface MapEdge {
+  source: string;
+  target: string;
+  relation: string;
+}
+
+/** The full generated map structure (item ids reference knowledge_items). */
+export interface MapData {
+  groups: MapGroup[];
+  edges: MapEdge[];
+}
+
+/** A cached knowledge map row. */
+export interface KnowledgeMap {
+  id: string;
+  user_id: string;
+  data: MapData;
+  item_count: number;
+  created_at: string;
+}

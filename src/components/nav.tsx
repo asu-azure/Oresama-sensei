@@ -2,13 +2,20 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { MessageCircle, BookImage, Settings, LogOut } from "lucide-react";
+import {
+  MessageCircle,
+  BookImage,
+  Network,
+  Settings,
+  LogOut,
+} from "lucide-react";
 import { signOut } from "@/app/login/actions";
 import { cn } from "@/lib/utils";
 
 const links = [
   { href: "/chat", label: "Chat", icon: MessageCircle },
   { href: "/lessons", label: "Lessons", icon: BookImage },
+  { href: "/map", label: "Map", icon: Network },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 

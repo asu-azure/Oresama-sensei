@@ -3,6 +3,7 @@ import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import { cn } from "@/lib/utils";
+import { furiganaToRuby } from "@/lib/furigana";
 
 // Allow furigana markup (<ruby>漢字<rt>かんじ</rt></ruby>) through sanitization.
 const schema = {
@@ -29,7 +30,7 @@ export function Markdown({
         remarkPlugins={[remarkGfm]}
         rehypePlugins={[rehypeRaw, [rehypeSanitize, schema]]}
       >
-        {children}
+        {furiganaToRuby(children)}
       </ReactMarkdown>
     </div>
   );

@@ -1,6 +1,10 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { EXTRACTION_INSTRUCTION } from "@/lib/prompts";
-import type { ExtractedKnowledge, KnowledgeType } from "@/lib/types";
+import { EXTRACTION_INSTRUCTION, KNOWLEDGE_MAP_INSTRUCTION } from "@/lib/prompts";
+import type {
+  ExtractedKnowledge,
+  KnowledgeType,
+  MapData,
+} from "@/lib/types";
 
 export const CHAT_MODEL = "claude-sonnet-4-6";
 export const LESSON_MODEL = "claude-sonnet-4-6";
@@ -111,4 +115,129 @@ export async function extractKnowledge(
   } catch {
     return [];
   }
+}
+
+export type MapInputItem = {
+  id: string;
+  type: string;
+  term: string;
+  reading: string | null;
+  meaning: string | null;
+  jlpt_level: string | null;
+};
+
+const MAP_SCHEMA = {
+  type: "object",
+  properties: {
+    groups: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          label: { type: "string" },
+          theme: { type: "string" },
+          register: { type: "string" },
+          note: { type: "string" },
+          item_refs: { type: "array", items: { type: "integer" } },
+        },
+        required: ["label", "theme", "register", "note", "item_refs"],
+        additionalProperties: false,
+      },
+    },
+    edges: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          source: { type: "integer" },
+          target: { type: "integer" },
+          relation: { type: "string" },
+        },
+        required: ["source", "target", "relation"],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ["groups", "edges"],
+  additionalProperties: false,
+} as const;
+
+/**
+ * Ask Claude to group the learner's knowledge items into themed clusters with
+ * relationships. Items are sent with short integer "refs" (not UUIDs) for
+ * reliable echoing, then resolved back to real ids here.
+ */
+export async function generateKnowledgeMap(
+  items: MapInputItem[],
+): Promise<MapData> {
+  if (items.length === 0) return { groups: [], edges: [] };
+
+  const capped = items.slice(0, 200);
+  const byRef = new Map<number, MapInputItem>();
+  const lines = capped.map((it, i) => {
+    const ref = i + 1;
+    byRef.set(ref, it);
+    const bits = [`${ref}.`, `[${it.type}]`, it.term];
+    if (it.reading) bits.push(`(${it.reading})`);
+    if (it.meaning) bits.push(`— ${it.meaning}`);
+    if (it.jlpt_level) bits.push(`[${it.jlpt_level}]`);
+    return bits.join(" ");
+  });
+
+  const res = await anthropicClient().messages.create({
+    model: CHAT_MODEL,
+    max_tokens: 8000,
+    output_config: { format: { type: "json_schema", schema: MAP_SCHEMA } },
+    messages: [
+      {
+        role: "user",
+        content: `${KNOWLEDGE_MAP_INSTRUCTION}\n\n<items>\n${lines.join("\n")}\n</items>`,
+      },
+    ],
+  });
+
+  const text = res.content.find((b) => b.type === "text");
+  if (!text || text.type !== "text") return { groups: [], edges: [] };
+
+  type RawGroup = {
+    label: string;
+    theme: string;
+    register: string;
+    note: string;
+    item_refs: number[];
+  };
+  type RawEdge = { source: number; target: number; relation: string };
+
+  let parsed: { groups?: RawGroup[]; edges?: RawEdge[] };
+  try {
+    parsed = JSON.parse(text.text);
+  } catch {
+    return { groups: [], edges: [] };
+  }
+
+  const refId = (ref: number) => byRef.get(ref)?.id;
+
+  const groups = (parsed.groups ?? []).map((g, i) => ({
+    id: `g${i + 1}`,
+    label: g.label,
+    theme: g.theme,
+    register: g.register || null,
+    note: g.note || null,
+    item_ids: (g.item_refs ?? [])
+      .map(refId)
+      .filter((id): id is string => Boolean(id)),
+  }));
+
+  const edges = (parsed.edges ?? [])
+    .map((e) => ({
+      source: refId(e.source),
+      target: refId(e.target),
+      relation: e.relation,
+    }))
+    .filter(
+      (e): e is { source: string; target: string; relation: string } =>
+        Boolean(e.source) && Boolean(e.target) && e.source !== e.target,
+    );
+
+  return { groups, edges };
 }

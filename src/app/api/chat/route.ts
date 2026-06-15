@@ -79,20 +79,29 @@ export async function POST(request: Request) {
 
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
+      let answer = "";
+      let clientGone = false;
+
+      claudeStream.on("text", (delta) => {
+        answer += delta;
+        if (!clientGone) {
+          try {
+            controller.enqueue(encoder.encode(delta));
+          } catch {
+            clientGone = true;
+          }
+        }
+      });
+
       try {
-        claudeStream.on("text", (delta) => {
-          controller.enqueue(encoder.encode(delta));
-        });
-        const final = await claudeStream.finalMessage();
-        const answer = final.content
-          .filter((b) => b.type === "text")
-          .map((b) => (b.type === "text" ? b.text : ""))
-          .join("");
+        await claudeStream.finalMessage();
+      } catch (e) {
+        console.error("chat generation error:", e);
+      }
 
-        controller.close();
-
-        // Persist the answer + extract knowledge after the client has the text.
-        try {
+      // Persist regardless of whether the client is still connected.
+      try {
+        if (answer.trim()) {
           await storeMessage(supabase, {
             conversationId: convId,
             userId: user.id,
@@ -105,12 +114,15 @@ export async function POST(request: Request) {
           if (items.length > 0) {
             await storeKnowledge(supabase, user.id, items, "chat");
           }
-        } catch (e) {
-          console.error("chat persistence failed:", e);
         }
       } catch (e) {
-        console.error("chat stream error:", e);
-        controller.error(e);
+        console.error("chat persistence failed:", e);
+      }
+
+      try {
+        controller.close();
+      } catch {
+        // already closed/cancelled by the client
       }
     },
   });

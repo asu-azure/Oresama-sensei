@@ -89,3 +89,12 @@ export const EXTRACTION_INSTRUCTION = `From the Japanese-learning content below,
 For each item provide: type (vocab | grammar | expression), term (the word/grammar pattern/expression in Japanese), reading (kana reading; for grammar, the pattern reading or empty), meaning (concise English), example (one natural Japanese example sentence), jlpt_level (best guess like N2/N1, or empty), and notes (one short nuance note, optional).
 
 Return at most 12 items. If there is nothing worth saving, return an empty list.`;
+
+/** Instruction for generating the Knowledge Map (grouping + relationships). */
+export const KNOWLEDGE_MAP_INSTRUCTION = `You are organizing a Japanese learner's personal study items into an insightful "knowledge map" that helps them see structure and relationships — like a thoughtful teacher arranging a wall of cards.
+
+Each item below is numbered (its "ref"). Group the items into 4–10 meaningful clusters. Group by what is genuinely useful to a learner: shared THEME or topic (e.g. emotions, business email, art & drawing, daily conversation), real-life SITUATION where they're used, REGISTER (casual / polite / formal / written), or grammatical family. A cluster should feel coherent and have a clear, evocative label.
+
+For each group provide: label (short, in English, optionally with a Japanese word), theme (one or two words), register (if the cluster shares one, else empty), note (one sentence on what ties them together or how to think about them), and item_refs (the ref numbers that belong to it). Every ref should appear in exactly one group.
+
+Then add edges: meaningful relationships BETWEEN individual items across or within groups — e.g. near-synonyms, antonyms, casual/formal counterparts, items often used together, or easily confused pairs. For each edge give source (ref), target (ref), and a short relation label (e.g. "synonym", "more formal", "often used together", "easy to confuse"). Add only genuinely useful edges (aim for ~5–20, not every pair).`;
