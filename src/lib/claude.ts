@@ -1,6 +1,12 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { EXTRACTION_INSTRUCTION, KNOWLEDGE_MAP_INSTRUCTION } from "@/lib/prompts";
+import {
+  EXTRACTION_INSTRUCTION,
+  KNOWLEDGE_MAP_INSTRUCTION,
+  buildExerciseInstruction,
+} from "@/lib/prompts";
 import type {
+  Exercise,
+  ExerciseType,
   ExtractedKnowledge,
   KnowledgeType,
   MapData,
@@ -261,4 +267,172 @@ export async function generateKnowledgeMap(
     );
 
   return { groups, edges };
+}
+
+// --- Practice exercise generation (multiple-choice / arrange / cloze) ---
+
+const EXERCISE_SCHEMA = {
+  type: "object",
+  properties: {
+    exercises: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          type: { type: "string", enum: ["mcq", "arrange", "cloze"] },
+          prompt: { type: "string" },
+          explanation: { type: "string" },
+          choices: { type: "array", items: { type: "string" } },
+          answer_index: { type: "integer" },
+          tokens: { type: "array", items: { type: "string" } },
+          answer_order: { type: "array", items: { type: "string" } },
+          answer_text: { type: "string" },
+          item_ref: { type: "integer" },
+        },
+        required: [
+          "type",
+          "prompt",
+          "explanation",
+          "choices",
+          "answer_index",
+          "tokens",
+          "answer_order",
+          "answer_text",
+          "item_ref",
+        ],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ["exercises"],
+  additionalProperties: false,
+} as const;
+
+export interface ExerciseItemRef {
+  ref: number;
+  id: string;
+  term: string;
+  reading: string | null;
+  meaning: string | null;
+  jlpt_level: string | null;
+}
+
+export interface GenerateExercisesInput {
+  content: string;
+  items?: ExerciseItemRef[];
+  types?: ExerciseType[];
+  count?: number;
+}
+
+type RawExercise = {
+  type: ExerciseType;
+  prompt: string;
+  explanation: string;
+  choices: string[];
+  answer_index: number;
+  tokens: string[];
+  answer_order: string[];
+  answer_text: string;
+  item_ref: number;
+};
+
+function normalizeExercise(
+  r: RawExercise,
+  byRef: Map<number, string>,
+): Exercise | null {
+  const item_id =
+    r.item_ref && byRef.has(r.item_ref) ? byRef.get(r.item_ref)! : null;
+  const prompt = (r.prompt ?? "").trim();
+  if (!prompt) return null;
+  const explanation = (r.explanation ?? "").trim();
+
+  if (r.type === "mcq") {
+    const choices = (r.choices ?? []).filter((x) => x.trim().length > 0);
+    if (choices.length < 2) return null;
+    const answer = Math.max(
+      0,
+      Math.min(choices.length - 1, r.answer_index ?? 0),
+    );
+    return { type: "mcq", prompt, explanation, choices, answer, item_id };
+  }
+  if (r.type === "arrange") {
+    const answerOrder = (r.answer_order ?? []).filter(
+      (x) => x.trim().length > 0,
+    );
+    if (answerOrder.length < 2) return null;
+    const cleanTokens = (r.tokens ?? []).filter((x) => x.trim().length > 0);
+    const tokens = cleanTokens.length >= 2 ? cleanTokens : answerOrder;
+    return {
+      type: "arrange",
+      prompt,
+      explanation,
+      tokens,
+      answer: answerOrder,
+      item_id,
+    };
+  }
+  if (r.type === "cloze") {
+    const answer = (r.answer_text ?? "").trim();
+    if (!answer) return null;
+    const choices = (r.choices ?? []).filter((x) => x.trim().length > 0);
+    return {
+      type: "cloze",
+      prompt,
+      explanation,
+      answer,
+      choices: choices.length >= 2 ? choices : undefined,
+      item_id,
+    };
+  }
+  return null;
+}
+
+/** Generate practice exercises (structured output) from lesson content and/or
+ *  saved knowledge items. When items carry refs, each exercise links back to a
+ *  knowledge_items row (item_id) for SRS grading. */
+export async function generateExercises(
+  input: GenerateExercisesInput,
+): Promise<Exercise[]> {
+  const types = input.types ?? ["mcq", "arrange", "cloze"];
+  const count = input.count ?? 6;
+
+  const itemLines = (input.items ?? []).map((it) => {
+    const bits = [`${it.ref}.`, it.term];
+    if (it.reading) bits.push(`(${it.reading})`);
+    if (it.meaning) bits.push(`— ${it.meaning}`);
+    if (it.jlpt_level) bits.push(`[${it.jlpt_level}]`);
+    return bits.join(" ");
+  });
+  const itemsBlock =
+    itemLines.length > 0
+      ? `\n\n<items>\nBase each exercise on one of these saved items and set "item_ref" to its number:\n${itemLines.join("\n")}\n</items>`
+      : "";
+
+  const res = await anthropicClient().messages.create({
+    model: CHAT_MODEL,
+    max_tokens: 6000,
+    output_config: { format: { type: "json_schema", schema: EXERCISE_SCHEMA } },
+    messages: [
+      {
+        role: "user",
+        content: `${buildExerciseInstruction(types, count)}\n\n<content>\n${input.content.slice(0, 8000)}\n</content>${itemsBlock}`,
+      },
+    ],
+  });
+
+  const text = res.content.find((b) => b.type === "text");
+  if (!text || text.type !== "text") return [];
+  let parsed: { exercises?: RawExercise[] };
+  try {
+    parsed = JSON.parse(text.text);
+  } catch {
+    return [];
+  }
+
+  const byRef = new Map<number, string>();
+  for (const it of input.items ?? []) byRef.set(it.ref, it.id);
+
+  return (parsed.exercises ?? [])
+    .map((r) => normalizeExercise(r, byRef))
+    .filter((e): e is Exercise => e !== null);
 }

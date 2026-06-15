@@ -4,8 +4,9 @@ import { ArrowLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { Markdown } from "@/components/markdown";
 import { DeleteLessonButton } from "../delete-lesson-button";
+import { LessonPractice } from "../lesson-practice";
 import { formatDate } from "@/lib/utils";
-import type { Lesson } from "@/lib/types";
+import type { Lesson, Exercise } from "@/lib/types";
 
 export default async function LessonDetailPage({
   params,
@@ -66,6 +67,13 @@ export default async function LessonDetailPage({
         <p className="text-sm text-muted">
           This lesson is still being generated. Refresh in a moment.
         </p>
+      )}
+
+      {lesson.article_md && (
+        <LessonPractice
+          lessonId={lesson.id}
+          initialExercises={(lesson.exercises ?? []) as Exercise[]}
+        />
       )}
 
       {lesson.source_text && (

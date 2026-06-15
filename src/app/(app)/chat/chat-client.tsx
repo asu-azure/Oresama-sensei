@@ -5,6 +5,11 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Send, Plus, Loader2, Sparkles } from "lucide-react";
 import { Markdown } from "@/components/markdown";
 import { Button } from "@/components/ui/button";
+import {
+  ConversationDrawer,
+  type ConversationSummary,
+} from "./conversation-drawer";
+import { loadOlderMessages } from "./actions";
 import { cn } from "@/lib/utils";
 
 export type UiMessage = {
@@ -14,31 +19,77 @@ export type UiMessage = {
 };
 
 const SUGGESTIONS = [
-  "What's the nuance between ～によって and ～により?",
+  "What is the nuance between ~によって and ~により?",
   "Teach me 3 N1 expressions I can use when chatting with artists on X.",
-  "Explain the grammar 〜ともなると with examples.",
+  "Explain the grammar ~ともなると with examples.",
 ];
 
 export function ChatClient({
   initialConversationId,
   initialMessages,
+  initialHasMore,
+  initialOldestCursor,
+  conversations,
 }: {
   initialConversationId: string | null;
   initialMessages: UiMessage[];
+  initialHasMore: boolean;
+  initialOldestCursor: string | null;
+  conversations: ConversationSummary[];
 }) {
   const [conversationId, setConversationId] = useState(initialConversationId);
   const [messages, setMessages] = useState<UiMessage[]>(initialMessages);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [hasMore, setHasMore] = useState(initialHasMore);
+  const [oldestCursor, setOldestCursor] = useState<string | null>(
+    initialOldestCursor,
+  );
+  const [loadingOlder, setLoadingOlder] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const prependingRef = useRef(false);
+  const prevScrollHeight = useRef<number | null>(null);
 
+  // Keep pinned to the newest message, EXCEPT right after prepending older
+  // history (then we restore the prior scroll position so the view doesn't jump).
   useEffect(() => {
-    scrollRef.current?.scrollTo({
-      top: scrollRef.current.scrollHeight,
-      behavior: "smooth",
-    });
+    const el = scrollRef.current;
+    if (!el) return;
+    if (prependingRef.current) {
+      if (prevScrollHeight.current != null) {
+        el.scrollTop = el.scrollHeight - prevScrollHeight.current;
+      }
+      prependingRef.current = false;
+      prevScrollHeight.current = null;
+      return;
+    }
+    el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
   }, [messages]);
+
+  async function loadOlder() {
+    if (!conversationId || loadingOlder || !oldestCursor) return;
+    setLoadingOlder(true);
+    const el = scrollRef.current;
+    prevScrollHeight.current = el ? el.scrollHeight : null;
+    prependingRef.current = true;
+    try {
+      const res = await loadOlderMessages(conversationId, oldestCursor, 30);
+      if (res.messages.length > 0) {
+        setMessages((m) => [...res.messages, ...m]);
+      } else {
+        prependingRef.current = false;
+        prevScrollHeight.current = null;
+      }
+      setHasMore(res.hasMore);
+      setOldestCursor(res.oldestCursor);
+    } catch {
+      prependingRef.current = false;
+      prevScrollHeight.current = null;
+    } finally {
+      setLoadingOlder(false);
+    }
+  }
 
   async function send(text: string) {
     const content = text.trim();
@@ -67,7 +118,9 @@ export function ChatClient({
       });
       if (!res.ok || !res.body) {
         throw new Error(
-          res.status === 401 ? "Your session expired. Please sign in again." : "Something went wrong.",
+          res.status === 401
+            ? "Your session expired. Please sign in again."
+            : "Something went wrong.",
         );
       }
       const cid = res.headers.get("x-conversation-id");
@@ -100,23 +153,45 @@ export function ChatClient({
     setConversationId(null);
     setMessages([]);
     setError(null);
+    setHasMore(false);
+    setOldestCursor(null);
   }
 
   return (
     <div className="flex h-[calc(100dvh-3.5rem)] flex-col">
       <div className="flex items-center justify-between py-3">
-        <h1 className="text-sm font-medium text-muted">
-          {messages.length > 0 ? "Conversation" : "Ask anything"}
-        </h1>
+        <div className="flex items-center gap-2">
+          <ConversationDrawer
+            conversations={conversations}
+            activeId={conversationId}
+          />
+          <h1 className="text-sm font-medium text-muted">
+            {messages.length > 0 ? "Conversation" : "Ask anything"}
+          </h1>
+        </div>
         <Button variant="outline" size="sm" onClick={newChat} disabled={busy}>
           <Plus className="h-4 w-4" /> New chat
         </Button>
       </div>
 
-      <div
-        ref={scrollRef}
-        className="flex-1 space-y-4 overflow-y-auto pb-4"
-      >
+      <div ref={scrollRef} className="flex-1 space-y-4 overflow-y-auto pb-4">
+        {hasMore && messages.length > 0 && (
+          <div className="flex justify-center pt-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={loadOlder}
+              disabled={loadingOlder}
+            >
+              {loadingOlder ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                "Load earlier messages"
+              )}
+            </Button>
+          </div>
+        )}
+
         {messages.length === 0 && (
           <div className="flex h-full flex-col items-center justify-center text-center">
             <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">

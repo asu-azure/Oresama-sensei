@@ -127,3 +127,30 @@ Each item below is numbered (its "ref"). Group the items into 4–10 meaningful 
 For each group provide: label (short, in English, optionally with a Japanese word), theme (one or two words), register (if the cluster shares one, else empty), note (one sentence on what ties them together or how to think about them), and item_refs (the ref numbers that belong to it). Every ref should appear in exactly one group.
 
 Then add edges: meaningful relationships BETWEEN individual items across or within groups — e.g. near-synonyms, antonyms, casual/formal counterparts, items often used together, or easily confused pairs. For each edge give source (ref), target (ref), and a short relation label (e.g. "synonym", "more formal", "often used together", "easy to confuse"). Add only genuinely useful edges (aim for ~5–20, not every pair).`;
+
+/** Builds the instruction for generating practice exercises (structured output). */
+export function buildExerciseInstruction(
+  types: string[],
+  count: number,
+): string {
+  const typeNames: Record<string, string> = {
+    mcq: 'multiple-choice (set "type":"mcq", fill "choices" with 3-4 options and "answer_index" with the 0-based index of the correct one)',
+    arrange:
+      'sentence-arrangement (set "type":"arrange", put the correctly ordered words/chunks in "answer_order", and the same words shuffled in "tokens")',
+    cloze:
+      'fill-in-the-blank (set "type":"cloze", write the sentence in "prompt" with the missing part shown as ＿＿, put the missing text in "answer_text"; optionally add 3-4 "choices" including the answer)',
+  };
+  const list = types.map((t) => `- ${typeNames[t] ?? t}`).join("\n");
+  return `You are creating ${count} short practice exercises for an advanced Japanese learner (JLPT N2-N1), based on the content below. Mix these exercise types:
+${list}
+
+Rules for EVERY exercise:
+- Write Japanese with furigana using ruby markup: <ruby>漢字<rt>かんじ</rt></ruby>.
+- Test genuinely useful vocabulary, grammar, or usage from the content — not trivia.
+- Make distractors plausible (wrong but tempting), never obviously silly.
+- "explanation": one concise sentence on why the answer is right (Markdown ok, with furigana).
+- Always fill EVERY field in the schema. For fields that do not apply to a type, use an empty string or empty array (a cloze has empty "tokens"/"answer_order"; an mcq has empty "tokens"/"answer_order"/"answer_text"; an arrange has empty "choices"/"answer_text").
+- If items with ref numbers are provided, base each exercise on one of them and set "item_ref" to that number; otherwise set "item_ref" to 0.
+
+Keep prompts short and focused. Return exactly ${count} exercises (fewer only if the content is too thin).`;
+}

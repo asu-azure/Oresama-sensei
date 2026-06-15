@@ -52,6 +52,7 @@ export interface Lesson {
   article_md: string | null;
   tags: string[] | null;
   kind: string; // 'photo' | 'summary'
+  exercises: Exercise[] | null;
   created_at: string;
 }
 
@@ -102,4 +103,47 @@ export interface KnowledgeMap {
   data: MapData;
   item_count: number;
   created_at: string;
+}
+
+// --- Practice exercises (generated from a lesson or a review test) ---
+
+export type ExerciseType = "mcq" | "arrange" | "cloze";
+
+interface ExerciseBase {
+  type: ExerciseType;
+  /** Question / instruction. May contain Japanese with <ruby> furigana. */
+  prompt: string;
+  /** Short why-this-is-right note shown after answering. */
+  explanation: string;
+  /** When set, links the exercise to a knowledge_items row for SRS grading. */
+  item_id?: string | null;
+}
+
+export interface McqExercise extends ExerciseBase {
+  type: "mcq";
+  choices: string[];
+  /** Index into `choices` of the correct option. */
+  answer: number;
+}
+
+export interface ArrangeExercise extends ExerciseBase {
+  type: "arrange";
+  /** Scrambled tokens shown to the learner. */
+  tokens: string[];
+  /** Correct ordering of the tokens. */
+  answer: string[];
+}
+
+export interface ClozeExercise extends ExerciseBase {
+  type: "cloze";
+  /** The text that belongs in the blank. */
+  answer: string;
+  /** Optional multiple-choice options for the blank (pick mode). */
+  choices?: string[];
+}
+
+export type Exercise = McqExercise | ArrangeExercise | ClozeExercise;
+
+export interface ExerciseSet {
+  exercises: Exercise[];
 }

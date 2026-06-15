@@ -49,7 +49,7 @@ Two core features:
 - `supabase/migrations/0001_init.sql` — schema, pgvector, RLS, `match_knowledge`, storage, profile trigger.
 
 ## Running it
-1. Supabase project → run `supabase/migrations/0001_init.sql` in the SQL editor.
+1. Supabase project → run the SQL files in `supabase/migrations/` (0001–0005) in order in the SQL editor.
 2. `.env.local` (NOT committed) with: `NEXT_PUBLIC_SUPABASE_URL`,
    `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`. See `.env.example`.
 3. `npm install` → `npm run dev` → http://localhost:3000. Restart dev after editing `.env.local`
@@ -73,11 +73,18 @@ The **data lives in Supabase (cloud)**, so chats/vocab/lessons sync automaticall
 
 ## Status & roadmap
 - ✅ v1 shipped: auth, chat-with-memory, photo→lesson, settings/profile.
-- ⏳ Next ideas (not built): a **vocabulary bank page** to browse/review saved items with
-  **spaced repetition**; a standalone personalized-lesson generator; progress dashboard;
-  TTS audio; Anki export.
+- ✅ v2 shipped: chat history windowing + past-chats drawer; **vocab/grammar library**
+  (`/library`) color-coded by SRS mastery; richer **practice exercises** (multiple-choice,
+  sentence-arrangement, fill-in-the-blank) generated per-lesson and as on-demand review tests.
+- ⏳ Next ideas (not built): a standalone personalized-lesson generator; TTS audio; Anki export.
 
 ## Decisions log
 - Hybrid AI (Gemini OCR/embeddings + Claude chat/lessons) for best quality-per-cost.
 - Single-user auth kept (RLS needs a user); email confirmation off so it's effectively
   "log in once." No service-role key — RLS via the user session.
+- Practice exercises use Claude structured outputs, generated BOTH automatically at lesson time
+  (cached in `lessons.exercises`) and on demand (review tests from due items). Sonnet (`CHAT_MODEL`)
+  for cost; review-test exercises carry `item_id`s so answers feed the SRS scheduler.
+- "Mastery" coloring is derived purely from existing `srs_*` fields (`src/lib/mastery.ts`); no new
+  data is stored. New helpers: `src/components/exercises/exercise-player.tsx`, `src/app/(app)/library/*`,
+  chat drawer + windowing in `src/app/(app)/chat/*`.

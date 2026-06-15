@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { ocrImage } from "@/lib/gemini";
-import { streamLesson, extractKnowledge } from "@/lib/claude";
+import { streamLesson, extractKnowledge, generateExercises } from "@/lib/claude";
 import { recallKnowledge, storeKnowledge } from "@/lib/memory";
 import { buildLessonSystemPrompt } from "@/lib/prompts";
 import type { Profile } from "@/lib/types";
@@ -134,6 +134,25 @@ export async function POST(request: Request) {
         controller.close();
       } catch {
         // already closed/cancelled by the client
+      }
+
+      // Background: generate practice exercises now that the client already has
+      // the lesson. Safe on an always-on host (no per-request timeout).
+      try {
+        if (article.trim()) {
+          const exercises = await generateExercises({
+            content: article,
+            count: 6,
+          });
+          if (exercises.length > 0) {
+            await supabase
+              .from("lessons")
+              .update({ exercises })
+              .eq("id", lessonId);
+          }
+        }
+      } catch (e) {
+        console.error("exercise generation failed:", e);
       }
     },
   });

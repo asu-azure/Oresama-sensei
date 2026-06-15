@@ -3,9 +3,12 @@
 import { useState } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
-import { Check, RotateCcw } from "lucide-react";
+import { Check, RotateCcw, Brain, ClipboardList, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ExercisePlayer } from "@/components/exercises/exercise-player";
+import { cn } from "@/lib/utils";
 import type { Rating } from "@/lib/srs";
+import type { Exercise } from "@/lib/types";
 
 export type ReviewCard = {
   id: string;
@@ -25,20 +28,145 @@ const RATINGS: { rating: Rating; label: string; cls: string }[] = [
 ];
 
 export function ReviewClient({ cards }: { cards: ReviewCard[] }) {
+  const [mode, setMode] = useState<"flash" | "test">("flash");
+  const [testExercises, setTestExercises] = useState<Exercise[] | null>(null);
+  const [loadingTest, setLoadingTest] = useState(false);
+  const [testError, setTestError] = useState<string | null>(null);
+
+  async function startTest() {
+    setLoadingTest(true);
+    setTestError(null);
+    try {
+      const res = await fetch("/api/review-test", { method: "POST" });
+      if (!res.ok) {
+        throw new Error(
+          (await res.text().catch(() => "")) || "Failed to generate a test.",
+        );
+      }
+      const data = await res.json();
+      setTestExercises((data.exercises ?? []) as Exercise[]);
+      setMode("test");
+    } catch (e) {
+      setTestError(e instanceof Error ? e.message : "Something went wrong.");
+    } finally {
+      setLoadingTest(false);
+    }
+  }
+
+  function gradeItem(itemId: string, correct: boolean) {
+    fetch("/api/srs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ itemId, rating: correct ? "good" : "again" }),
+    }).catch(() => {});
+  }
+
+  return (
+    <div className="mx-auto max-w-lg py-6">
+      <div className="mb-5 flex items-center justify-between gap-2">
+        <div className="inline-flex rounded-xl border border-border bg-surface p-0.5">
+          <button
+            onClick={() => setMode("flash")}
+            className={tabCls(mode === "flash")}
+          >
+            <Brain className="h-4 w-4" /> Flashcards
+          </button>
+          <button
+            onClick={() => {
+              if (testExercises && testExercises.length > 0) setMode("test");
+              else startTest();
+            }}
+            disabled={loadingTest}
+            className={tabCls(mode === "test")}
+          >
+            {loadingTest ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <ClipboardList className="h-4 w-4" />
+            )}
+            Test
+          </button>
+        </div>
+        {mode === "test" && testExercises && testExercises.length > 0 && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={startTest}
+            disabled={loadingTest}
+          >
+            {loadingTest ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <RotateCcw className="h-4 w-4" />
+            )}
+            New test
+          </Button>
+        )}
+      </div>
+
+      {testError && <p className="mb-3 text-sm text-accent">{testError}</p>}
+
+      {mode === "test" ? (
+        testExercises && testExercises.length > 0 ? (
+          <ExercisePlayer
+            exercises={testExercises}
+            onGrade={gradeItem}
+            onDone={() => setMode("flash")}
+          />
+        ) : (
+          <div className="py-12 text-center">
+            <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+              <ClipboardList className="h-6 w-6" />
+            </div>
+            <h1 className="text-xl font-semibold">Practice test</h1>
+            <p className="mx-auto mt-1 max-w-sm text-sm text-muted">
+              Generate multiple-choice, sentence-arrangement, and
+              fill-in-the-blank questions from the items you are due to review.
+              Your answers update your spaced-repetition schedule.
+            </p>
+            <div className="mt-5">
+              <Button onClick={startTest} disabled={loadingTest}>
+                {loadingTest ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" /> Generating…
+                  </>
+                ) : (
+                  "Generate a test"
+                )}
+              </Button>
+            </div>
+          </div>
+        )
+      ) : (
+        <Flashcards cards={cards} />
+      )}
+    </div>
+  );
+}
+
+function tabCls(active: boolean): string {
+  return cn(
+    "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors",
+    active ? "bg-surface-2 text-foreground" : "text-muted hover:text-foreground",
+  );
+}
+
+function Flashcards({ cards }: { cards: ReviewCard[] }) {
   const [index, setIndex] = useState(0);
   const [revealed, setRevealed] = useState(false);
   const [reviewed, setReviewed] = useState(0);
 
   if (cards.length === 0) {
     return (
-      <div className="py-16 text-center">
+      <div className="py-12 text-center">
         <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-600/10 text-emerald-600">
           <Check className="h-6 w-6" />
         </div>
         <h1 className="text-xl font-semibold">Nothing due right now</h1>
         <p className="mx-auto mt-1 max-w-sm text-sm text-muted">
-          You&apos;re all caught up. New items become reviewable as you chat and
-          make lessons; scheduled ones come back when they&apos;re due.
+          You are all caught up. New items become reviewable as you chat and make
+          lessons; scheduled ones come back when they are due. You can still
+          generate a practice test above.
         </p>
         <div className="mt-5 flex justify-center gap-2">
           <Link href="/chat">
@@ -51,7 +179,7 @@ export function ReviewClient({ cards }: { cards: ReviewCard[] }) {
 
   if (index >= cards.length) {
     return (
-      <div className="py-16 text-center">
+      <div className="py-12 text-center">
         <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-600/10 text-emerald-600">
           <Check className="h-6 w-6" />
         </div>
@@ -74,7 +202,6 @@ export function ReviewClient({ cards }: { cards: ReviewCard[] }) {
   const card = cards[index];
 
   function grade(rating: Rating) {
-    // Fire-and-forget; advance immediately for a snappy review flow.
     fetch("/api/srs", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -86,7 +213,7 @@ export function ReviewClient({ cards }: { cards: ReviewCard[] }) {
   }
 
   return (
-    <div className="mx-auto max-w-lg py-6">
+    <>
       <div className="mb-4 flex items-center justify-between text-sm text-muted">
         <span>
           Review · {index + 1} / {cards.length}
@@ -157,6 +284,6 @@ export function ReviewClient({ cards }: { cards: ReviewCard[] }) {
           ))}
         </div>
       )}
-    </div>
+    </>
   );
 }
