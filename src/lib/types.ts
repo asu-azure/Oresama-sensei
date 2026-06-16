@@ -135,6 +135,11 @@ export interface ArrangeExercise extends ExerciseBase {
   tokens: string[];
   /** Correct ordering of the tokens. */
   answer: string[];
+  /** JLPT "★" sentence-ordering mode: when set (0–3), `prompt` contains the
+   *  marker `{{BLANKS}}` where four ordered slots render, the slot at this index
+   *  carries the ★, and the graded answer is `answer[star_index]`. Absent on
+   *  legacy/whole-sentence arrange exercises. */
+  star_index?: number | null;
 }
 
 export interface ClozeExercise extends ExerciseBase {
@@ -149,4 +154,16 @@ export type Exercise = McqExercise | ArrangeExercise | ClozeExercise;
 
 export interface ExerciseSet {
   exercises: Exercise[];
+}
+
+/** A saved practice test (the "test bank"). `exercises` replays for free. */
+export interface ReviewTest {
+  id: string;
+  title: string;
+  scope: string; // 'struggling' | 'new' | 'due' | 'filter'
+  meta: { level?: string | null; type?: string | null; item_count?: number } | null;
+  exercises: Exercise[];
+  created_at: string;
+  last_used_at: string | null;
+  used_count: number;
 }

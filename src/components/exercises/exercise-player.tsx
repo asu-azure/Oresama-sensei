@@ -2,6 +2,16 @@
 
 import { useMemo, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import {
+  DndContext,
+  useDraggable,
+  useDroppable,
+  PointerSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
 import { Check, X, ArrowRight, RotateCcw, Trophy } from "lucide-react";
 import { Markdown } from "@/components/markdown";
 import { RubyText } from "@/components/ruby-text";
@@ -108,7 +118,9 @@ export function ExercisePlayer({
           {ex.type === "mcq"
             ? "Multiple choice"
             : ex.type === "arrange"
-              ? "Arrange"
+              ? ex.star_index != null && ex.star_index >= 0
+                ? "Sentence ★"
+                : "Arrange"
               : "Fill the blank"}
         </span>
       </div>
@@ -132,9 +144,12 @@ export function ExercisePlayer({
           {ex.type === "mcq" && (
             <McqView ex={ex} onAnswered={handleAnswered} onNext={next} />
           )}
-          {ex.type === "arrange" && (
-            <ArrangeView ex={ex} onAnswered={handleAnswered} onNext={next} />
-          )}
+          {ex.type === "arrange" &&
+            (ex.star_index != null && ex.star_index >= 0 ? (
+              <StarArrangeView ex={ex} onAnswered={handleAnswered} onNext={next} />
+            ) : (
+              <ArrangeView ex={ex} onAnswered={handleAnswered} onNext={next} />
+            ))}
           {ex.type === "cloze" && (
             <ClozeView ex={ex} onAnswered={handleAnswered} onNext={next} />
           )}
@@ -391,6 +406,257 @@ function ArrangeView({
         </>
       )}
     </Card>
+  );
+}
+
+// JLPT 並べ替え "★" sentence-ordering: a context sentence with four blanks (one
+// marked ★). The learner places four shuffled tiles into the blanks by drag or
+// tap; only the tile on the ★ blank is graded (like the real exam).
+function StarArrangeView({
+  ex,
+  onAnswered,
+  onNext,
+}: {
+  ex: ArrangeExercise;
+  onAnswered: (correct: boolean) => void;
+  onNext: () => void;
+}) {
+  const starIndex = ex.star_index ?? 0;
+  const tiles = useMemo(
+    () => shuffle(ex.tokens.map((t, i) => ({ id: `t${i}`, t }))),
+    [ex],
+  );
+  const [slots, setSlots] = useState<(string | null)[]>([
+    null,
+    null,
+    null,
+    null,
+  ]);
+  const [checked, setChecked] = useState(false);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(TouchSensor, {
+      activationConstraint: { delay: 120, tolerance: 8 },
+    }),
+  );
+
+  const tileOf = (id: string | null) =>
+    id ? (tiles.find((x) => x.id === id) ?? null) : null;
+  const placed = new Set(slots.filter((s): s is string => s !== null));
+  const tray = tiles.filter((x) => !placed.has(x.id));
+  const allFilled = slots.every((s) => s !== null);
+
+  function placeFirstEmpty(id: string) {
+    if (checked) return;
+    setSlots((prev) => {
+      if (prev.includes(id)) return prev;
+      const empty = prev.indexOf(null);
+      if (empty === -1) return prev;
+      const next = [...prev];
+      next[empty] = id;
+      return next;
+    });
+  }
+  function placeAt(slotIdx: number, id: string) {
+    if (checked) return;
+    setSlots((prev) => {
+      const next = prev.map((s) => (s === id ? null : s));
+      next[slotIdx] = id;
+      return next;
+    });
+  }
+  function clearSlot(slotIdx: number) {
+    if (checked) return;
+    setSlots((prev) => {
+      const next = [...prev];
+      next[slotIdx] = null;
+      return next;
+    });
+  }
+
+  function onDragEnd(e: DragEndEvent) {
+    if (checked) return;
+    const id = String(e.active.id);
+    const over = e.over?.id;
+    if (over == null) return;
+    if (typeof over === "string" && over.startsWith("slot-")) {
+      placeAt(Number(over.slice(5)), id);
+    } else if (over === "tray") {
+      setSlots((prev) => prev.map((s) => (s === id ? null : s)));
+    }
+  }
+
+  const starTile = tileOf(slots[starIndex]);
+  const correct =
+    !!starTile && norm(starTile.t) === norm(ex.answer[starIndex] ?? "");
+
+  function check() {
+    setChecked(true);
+    onAnswered(correct);
+  }
+
+  const [before, after] = ex.prompt.split("{{BLANKS}}");
+
+  return (
+    <Card>
+      <DndContext sensors={sensors} onDragEnd={onDragEnd}>
+        <div className="font-jp text-base leading-9">
+          {before && <RubyText>{before}</RubyText>}
+          <span className="mx-1 inline-flex flex-wrap items-center gap-1 align-middle">
+            {slots.map((id, idx) => {
+              const tile = tileOf(id);
+              return (
+                <Slot
+                  key={idx}
+                  idx={idx}
+                  isStar={idx === starIndex}
+                  disabled={checked}
+                >
+                  {tile ? (
+                    <Tile
+                      id={tile.id}
+                      t={tile.t}
+                      disabled={checked}
+                      onClick={() => clearSlot(idx)}
+                    />
+                  ) : null}
+                </Slot>
+              );
+            })}
+          </span>
+          {after && <RubyText>{after}</RubyText>}
+        </div>
+
+        <TrayDrop>
+          {tray.length === 0 ? (
+            <span className="text-xs text-muted">
+              All placed — check your answer.
+            </span>
+          ) : (
+            tray.map((tile) => (
+              <Tile
+                key={tile.id}
+                id={tile.id}
+                t={tile.t}
+                disabled={checked}
+                onClick={() => placeFirstEmpty(tile.id)}
+              />
+            ))
+          )}
+        </TrayDrop>
+      </DndContext>
+
+      {!checked ? (
+        <div className="mt-4 flex justify-between">
+          <p className="self-center text-xs text-muted">
+            Drag or tap into the blanks · ★ is the answer
+          </p>
+          <Button size="sm" onClick={check} disabled={!allFilled}>
+            Check
+          </Button>
+        </div>
+      ) : (
+        <>
+          <p className="mt-3 text-sm">
+            <span className="text-muted">★ answer: </span>
+            <span className="font-jp font-medium">
+              <RubyText>{ex.answer[starIndex] ?? ""}</RubyText>
+            </span>
+            <span className="ml-3 text-muted">Full order: </span>
+            <span className="font-jp">
+              <RubyText>{ex.answer.join(" ")}</RubyText>
+            </span>
+          </p>
+          <Explanation correct={correct} text={ex.explanation} onNext={onNext} />
+        </>
+      )}
+    </Card>
+  );
+}
+
+function Slot({
+  idx,
+  isStar,
+  disabled,
+  children,
+}: {
+  idx: number;
+  isStar: boolean;
+  disabled: boolean;
+  children: React.ReactNode;
+}) {
+  const { setNodeRef, isOver } = useDroppable({ id: `slot-${idx}`, disabled });
+  return (
+    <span
+      ref={setNodeRef}
+      className={cn(
+        "relative inline-flex min-h-[2.25rem] min-w-[3rem] items-center justify-center rounded-lg border-2 px-1 py-0.5 align-middle transition-colors",
+        isStar ? "border-primary bg-primary/5" : "border-dashed border-border",
+        isOver && "bg-primary/15",
+      )}
+    >
+      {isStar && (
+        <span className="absolute -right-1.5 -top-2 text-xs text-primary">
+          ★
+        </span>
+      )}
+      {children ?? <span className="text-muted">＿＿</span>}
+    </span>
+  );
+}
+
+function TrayDrop({ children }: { children: React.ReactNode }) {
+  const { setNodeRef, isOver } = useDroppable({ id: "tray" });
+  return (
+    <div
+      ref={setNodeRef}
+      className={cn(
+        "mt-4 flex min-h-[3rem] flex-wrap items-center gap-2 rounded-xl border border-dashed border-border bg-background p-3 transition-colors",
+        isOver && "bg-surface-2",
+      )}
+    >
+      {children}
+    </div>
+  );
+}
+
+function Tile({
+  id,
+  t,
+  disabled,
+  onClick,
+}: {
+  id: string;
+  t: string;
+  disabled: boolean;
+  onClick: () => void;
+}) {
+  const { setNodeRef, listeners, attributes, isDragging, transform } =
+    useDraggable({ id, disabled });
+  const style = transform
+    ? {
+        transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
+        zIndex: 50,
+      }
+    : undefined;
+  return (
+    <button
+      ref={setNodeRef}
+      style={style}
+      onClick={onClick}
+      disabled={disabled}
+      {...listeners}
+      {...attributes}
+      className={cn(
+        "touch-none rounded-lg border px-3 py-1.5 font-jp text-sm transition-colors",
+        isDragging
+          ? "border-primary bg-primary/10 opacity-80"
+          : "border-border bg-surface hover:bg-surface-2",
+      )}
+    >
+      <RubyText>{t}</RubyText>
+    </button>
   );
 }
 

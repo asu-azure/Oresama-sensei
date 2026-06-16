@@ -295,6 +295,7 @@ const EXERCISE_SCHEMA = {
           tokens: { type: "array", items: { type: "string" } },
           answer_order: { type: "array", items: { type: "string" } },
           answer_text: { type: "string" },
+          star_index: { type: "integer" },
           item_ref: { type: "integer" },
         },
         required: [
@@ -306,6 +307,7 @@ const EXERCISE_SCHEMA = {
           "tokens",
           "answer_order",
           "answer_text",
+          "star_index",
           "item_ref",
         ],
         additionalProperties: false,
@@ -341,6 +343,7 @@ type RawExercise = {
   tokens: string[];
   answer_order: string[];
   answer_text: string;
+  star_index: number;
   item_ref: number;
 };
 
@@ -370,12 +373,22 @@ function normalizeExercise(
     if (answerOrder.length < 2) return null;
     const cleanTokens = (r.tokens ?? []).filter((x) => x.trim().length > 0);
     const tokens = cleanTokens.length >= 2 ? cleanTokens : answerOrder;
+    // JLPT "★" mode requires exactly four pieces, a valid star slot, and the
+    // {{BLANKS}} marker in the prompt; otherwise fall back to whole-sentence.
+    const star = r.star_index ?? -1;
+    const starMode =
+      answerOrder.length === 4 &&
+      tokens.length === 4 &&
+      star >= 0 &&
+      star <= 3 &&
+      prompt.includes("{{BLANKS}}");
     return {
       type: "arrange",
       prompt,
       explanation,
       tokens,
       answer: answerOrder,
+      star_index: starMode ? star : null,
       item_id,
     };
   }

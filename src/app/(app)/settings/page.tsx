@@ -79,13 +79,15 @@ export default async function SettingsPage() {
           <textarea
             id="interests"
             name="interests"
-            rows={4}
+            rows={5}
             defaultValue={p?.interests ?? ""}
-            placeholder="e.g. Manga artist; active on X with Japanese illustrators; love character design, doujinshi culture, and casual online conversation."
+            placeholder="e.g. Manga artist active on X with Japanese illustrators; background in English-language teaching; into music; follow lots of world news — politics, crime, science, technology, food. Love character design and casual online conversation."
             className={FIELD}
           />
           <p className="text-xs text-muted">
-            Used to make examples relevant to your real life.
+            Used to make examples relevant to your real life. Anything you add
+            here is combined with your core background; the tutor also draws on a
+            wide range of real-world JLPT topics.
           </p>
         </div>
 

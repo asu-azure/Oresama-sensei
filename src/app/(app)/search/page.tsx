@@ -1,0 +1,19 @@
+import { createClient } from "@/lib/supabase/server";
+import { SearchClient, type SearchItem } from "./search-client";
+
+export default async function SearchPage() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  // Load the user's items once; matching runs live in the browser (free, instant).
+  const { data } = await supabase
+    .from("knowledge_items")
+    .select("id,type,term,reading,meaning,example,jlpt_level")
+    .eq("user_id", user!.id)
+    .order("last_seen", { ascending: false })
+    .limit(5000);
+
+  return <SearchClient items={(data ?? []) as SearchItem[]} />;
+}

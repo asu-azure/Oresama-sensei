@@ -49,7 +49,7 @@ Two core features:
 - `supabase/migrations/0001_init.sql` — schema, pgvector, RLS, `match_knowledge`, storage, profile trigger.
 
 ## Running it
-1. Supabase project → run the SQL files in `supabase/migrations/` (0001–0005) in order in the SQL editor.
+1. Supabase project → run the SQL files in `supabase/migrations/` (0001–0006) in order in the SQL editor.
 2. `.env.local` (NOT committed) with: `NEXT_PUBLIC_SUPABASE_URL`,
    `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`. See `.env.example`.
 3. `npm install` → `npm run dev` → http://localhost:3000. Restart dev after editing `.env.local`
@@ -96,6 +96,25 @@ The **data lives in Supabase (cloud)**, so chats/vocab/lessons sync automaticall
   grid spacing scale with item count and nodes size to content. Tapping a node (or a Board row)
   opens a detail panel with **Practice this** (`/review?item=`) and **Lessons mentioning this**
   (`findLessonsForTerm`, an `ilike` text search since items have no lesson FK).
+- ✅ v2.4 shipped (search + test bank + richer prompts): new **Search** tab (`/search`) — live,
+  no-Enter lookup over saved items by kanji/kana/**rōmaji**/English with typo tolerance (`fuse.js`
+  + `wanakana`, all client-side) plus a debounced lesson text-search (`search/actions.ts`); new
+  **Tests** tab (`/tests`) — a saved **test bank** (table `review_tests`, migration **0006**) with a
+  scope picker (Struggling / New / Due / by level+type, counts from SQL = $0) that generates once and
+  **replays for free** (`/api/tests`, `/api/tests/[id]`); Review is now flashcards-only and links to
+  Tests (old `/api/review-test` deleted). `arrange` exercises are now the JLPT **★ 並べ替え** format
+  (context sentence with four blanks, one ★; drag **or** tap to place via `@dnd-kit/core`; graded on
+  the ★ slot) — see `ArrangeExercise.star_index`, the `{{BLANKS}}` marker, and `StarArrangeView`.
+  Prompts enriched in `lib/prompts.ts` (`LEARNER_CONTEXT` + `CONTEXT_VARIETY`) so answers reflect the
+  full learner profile (manga + English-teaching + music + world news) and span authentic JLPT topics.
+- ✅ v2.5 **Stage A** shipped (kanji): new **Kanji** tab (`/kanji`) — browse the full **JLPT N5–N1**
+  set (2211 kanji) with **stroke-order animation**, on/kun **readings + meanings + JLPT/strokes**, and
+  **component/radical breakdown** (tappable to drill in); kanji from your saved words are badged, and
+  each card lists your words containing it. **Offline**: data is bundled in `src/data/kanji/*`
+  (built by `scripts/build-kanji-data.mjs`, `npm run kanji:build`) from **KanjiVG** (CC-BY-SA 3.0,
+  strokes+components) + **kanji-data** (MIT, readings/meanings/levels), split per level and
+  lazy-loaded. Stroke animation is our own `StrokeOrder` SVG component (not markdown). ⏳ **Stage B
+  (not built):** AI mnemonics (cached, `0007_kanji.sql`) + inline tappable kanji chips on vocab items.
 - ⏳ Next ideas (not built): a standalone personalized-lesson generator; Anki export; paginate
   `/dashboard` and `/map` (still fetch all items — covered for now by `loading.tsx`); real
   brand icon to replace the placeholder seal in `src/lib/icon-art.tsx`; a true `lesson_id` link on
@@ -124,3 +143,16 @@ The **data lives in Supabase (cloud)**, so chats/vocab/lessons sync automaticall
   `onNodeDragStop` and saved into `knowledge_maps.data.positions` (jsonb, no migration). Node positions key
   on item id / `group-<id>`. Lesson-fetch + loading state run in the click handler (not an effect) to stay
   clear of the `react-hooks/set-state-in-effect` lint rule.
+- Search (`/search`) matches client-side with `fuse.js` over `term/reading/romaji/meaning`, querying both
+  the raw text and `wanakana.toHiragana(query)` so rōmaji/kana/kanji/English all hit; debounced server
+  actions (driven from the input handler, not an effect) do the lesson `ilike`. Test "scopes" are pure SQL
+  on `srs_*` (free); tokens are only spent in `POST /api/tests`; replays (`GET /api/tests/[id]`) are free.
+  Generated tests persist in `review_tests`. `arrange` is JLPT ★-mode when the model emits a `{{BLANKS}}`
+  marker + valid `star_index` + exactly four pieces; otherwise it falls back to the legacy whole-sentence
+  arrange (old cached exercises keep working). Grading checks only the ★ slot.
+- Kanji data is **bundled offline**: `npm run kanji:build` (`scripts/build-kanji-data.mjs`) downloads
+  KanjiVG (per-glyph SVG via jsDelivr, cached in gitignored `scripts/.cache`) + kanji-data `kanji.json`,
+  and emits `src/data/kanji/{levels,info/n*,strokes/n*}.json` grouped by JLPT (common-first). `src/lib/kanji.ts`
+  eagerly loads the tiny `levels.json` for `levelOf`/lists and **lazy-loads** per-level info/strokes via
+  dynamic `import()` (memoized). Components come from KanjiVG `kvg:element` group nesting (root's direct
+  children); strokes are the ordered `<path d>`. Attribution (CC-BY-SA) is shown on the Kanji page.

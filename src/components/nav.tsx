@@ -12,6 +12,9 @@ import {
   BarChart3,
   Settings,
   LogOut,
+  Search,
+  GraduationCap,
+  PenLine,
 } from "lucide-react";
 import { signOut } from "@/app/login/actions";
 import { cn } from "@/lib/utils";
@@ -20,7 +23,10 @@ const links = [
   { href: "/chat", label: "Chat", icon: MessageCircle },
   { href: "/lessons", label: "Lessons", icon: BookImage },
   { href: "/review", label: "Review", icon: Brain },
+  { href: "/tests", label: "Tests", icon: GraduationCap },
+  { href: "/search", label: "Search", icon: Search },
   { href: "/library", label: "Vocab", icon: Library },
+  { href: "/kanji", label: "Kanji", icon: PenLine },
   { href: "/map", label: "Map", icon: Network },
   { href: "/dashboard", label: "Progress", icon: BarChart3 },
   { href: "/settings", label: "Settings", icon: Settings },
