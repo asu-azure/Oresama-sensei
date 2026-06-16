@@ -94,6 +94,9 @@ export interface MapEdge {
 export interface MapData {
   groups: MapGroup[];
   edges: MapEdge[];
+  /** Manually-dragged node positions, keyed by node id (item id or
+   *  `group-<id>`). Persisted in-place; absent on a freshly generated map. */
+  positions?: Record<string, { x: number; y: number }>;
 }
 
 /** A cached knowledge map row. */

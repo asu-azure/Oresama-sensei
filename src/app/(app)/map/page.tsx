@@ -22,7 +22,7 @@ export default async function MapPage() {
       .eq("user_id", user!.id),
     supabase
       .from("knowledge_items")
-      .select("id,type,term,reading,meaning,jlpt_level")
+      .select("id,type,term,reading,meaning,example,jlpt_level")
       .eq("user_id", user!.id),
   ]);
 

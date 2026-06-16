@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   ReactFlow,
@@ -8,13 +8,28 @@ import {
   Controls,
   type Node,
   type Edge,
+  type NodeMouseHandler,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { LayoutGrid, Workflow, RefreshCw, Loader2, Sparkles } from "lucide-react";
+import {
+  LayoutGrid,
+  Workflow,
+  RefreshCw,
+  Loader2,
+  Sparkles,
+  X,
+  Dumbbell,
+  BookOpen,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn, formatDate } from "@/lib/utils";
 import { showReading } from "@/lib/furigana";
 import type { MapData } from "@/lib/types";
+import {
+  saveMapPositions,
+  findLessonsForTerm,
+  type LessonHit,
+} from "./actions";
 
 export type MapItem = {
   id: string;
@@ -22,6 +37,7 @@ export type MapItem = {
   term: string;
   reading: string | null;
   meaning: string | null;
+  example: string | null;
   jlpt_level: string | null;
 };
 
@@ -42,6 +58,95 @@ function Term({ term, reading }: { term: string; reading: string | null }) {
   return <span className="font-jp">{term}</span>;
 }
 
+/** Build React Flow nodes/edges from the generated map. Clusters items in a
+ *  ring around each group label; ring size and grid spacing scale with the
+ *  number of items so dense groups don't pile up. Honors any manually-dragged
+ *  positions stored on `data.positions`. */
+function buildGraph(
+  data: MapData | null,
+  itemsById: Map<string, MapItem>,
+): { nodes: Node[]; edges: Edge[] } {
+  if (!data) return { nodes: [], edges: [] };
+  const pos = data.positions ?? {};
+
+  const radii = data.groups.map((g) => Math.max(150, 26 * g.item_ids.length));
+  const maxRadius = Math.max(150, ...radii);
+  const cell = 2 * maxRadius + 140;
+  const cols = Math.max(1, Math.ceil(Math.sqrt(data.groups.length)));
+
+  const nodes: Node[] = [];
+
+  data.groups.forEach((g, gi) => {
+    const color = COLORS[gi % COLORS.length];
+    const cx = (gi % cols) * cell + cell / 2;
+    const cy = Math.floor(gi / cols) * cell + cell / 2;
+
+    const gid = `group-${g.id}`;
+    nodes.push({
+      id: gid,
+      position: pos[gid] ?? { x: cx - 100, y: cy - radii[gi] - 70 },
+      data: { label: g.label },
+      style: {
+        background: color,
+        color: "#fff",
+        border: "none",
+        borderRadius: 10,
+        fontWeight: 600,
+        fontSize: 13,
+        padding: "6px 10px",
+        width: 200,
+        textAlign: "center",
+      },
+    });
+
+    const n = g.item_ids.length;
+    const r = n <= 1 ? 0 : radii[gi];
+    g.item_ids.forEach((id, idx) => {
+      const it = itemsById.get(id);
+      if (!it) return;
+      const angle = (2 * Math.PI * idx) / Math.max(1, n) - Math.PI / 2;
+      nodes.push({
+        id,
+        position: pos[id] ?? {
+          x: cx + r * Math.cos(angle) - 70,
+          y: cy + r * Math.sin(angle) - 20,
+        },
+        data: {
+          label: showReading(it.term, it.reading)
+            ? `${it.term}\n${it.reading}`
+            : it.term,
+        },
+        style: {
+          background: "var(--surface, #fff)",
+          color: "var(--foreground, #111)",
+          border: `2px solid ${color}`,
+          borderRadius: 10,
+          fontSize: 12,
+          padding: "6px 10px",
+          maxWidth: 180,
+          whiteSpace: "pre-line",
+          textAlign: "center",
+          cursor: "pointer",
+        },
+      });
+    });
+  });
+
+  const present = new Set(nodes.map((nd) => nd.id));
+  const edges: Edge[] = data.edges
+    .filter((e) => present.has(e.source) && present.has(e.target))
+    .map((e, i) => ({
+      id: `e${i}`,
+      source: e.source,
+      target: e.target,
+      label: e.relation,
+      labelStyle: { fontSize: 10, fill: "var(--muted, #666)" },
+      style: { stroke: "var(--border, #ccc)" },
+    }));
+
+  return { nodes, edges };
+}
+
 export function MapClient({
   initialData,
   generatedCount,
@@ -59,9 +164,14 @@ export function MapClient({
   const [view, setView] = useState<"board" | "graph">("board");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [mounted, setMounted] = useState(false);
+  // Bumped only on regenerate, to remount React Flow with a fresh layout.
+  const [version, setVersion] = useState(0);
 
-  useEffect(() => setMounted(true), []);
+  // Selected item detail panel + its "lessons mentioning this" results.
+  const [selected, setSelected] = useState<MapItem | null>(null);
+  const [lessons, setLessons] = useState<LessonHit[] | null>(null);
+  const [lessonsLoading, setLessonsLoading] = useState(false);
+  const lessonReq = useRef(0);
 
   const itemsById = useMemo(() => {
     const m = new Map<string, MapItem>();
@@ -69,7 +179,76 @@ export function MapClient({
     return m;
   }, [items]);
 
-  const stale = generatedCount !== null && generatedCount !== totalItems;
+  const { nodes, edges } = useMemo(
+    () => buildGraph(data, itemsById),
+    [data, itemsById],
+  );
+
+  // Live snapshot of node positions, kept in sync with the latest layout and
+  // updated as nodes are dragged. Seeded (not setState) so no render churn.
+  const positionsRef = useRef<Record<string, { x: number; y: number }>>({});
+  useEffect(() => {
+    positionsRef.current = Object.fromEntries(
+      nodes.map((n) => [n.id, n.position]),
+    );
+  }, [nodes]);
+
+  // Debounced persistence of dragged positions.
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scheduleSave = useCallback(
+    (positions: Record<string, { x: number; y: number }>) => {
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+      saveTimer.current = setTimeout(() => {
+        saveMapPositions(positions);
+      }, 800);
+    },
+    [],
+  );
+  useEffect(
+    () => () => {
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+    },
+    [],
+  );
+
+  const onNodeDragStop = useCallback(
+    (_: unknown, node: Node) => {
+      const next = { ...positionsRef.current, [node.id]: node.position };
+      positionsRef.current = next;
+      // Keep local data in sync so toggling Board<->Graph preserves the layout.
+      setData((prev) => (prev ? { ...prev, positions: next } : prev));
+      scheduleSave(next);
+    },
+    [scheduleSave],
+  );
+
+  const openItem = useCallback((it: MapItem) => {
+    const req = ++lessonReq.current;
+    setSelected(it);
+    setLessons(null);
+    setLessonsLoading(true);
+    findLessonsForTerm(it.term)
+      .then((res) => {
+        if (lessonReq.current === req) {
+          setLessons(res);
+          setLessonsLoading(false);
+        }
+      })
+      .catch(() => {
+        if (lessonReq.current === req) {
+          setLessons([]);
+          setLessonsLoading(false);
+        }
+      });
+  }, []);
+
+  const onNodeClick: NodeMouseHandler = useCallback(
+    (_, node) => {
+      const it = itemsById.get(node.id);
+      if (it) openItem(it);
+    },
+    [itemsById, openItem],
+  );
 
   async function regenerate() {
     if (busy) return;
@@ -80,87 +259,13 @@ export function MapClient({
       if (!res.ok) throw new Error(await res.text().catch(() => "Failed."));
       const json = (await res.json()) as { data: MapData };
       setData(json.data);
+      setVersion((v) => v + 1);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong.");
     } finally {
       setBusy(false);
     }
   }
-
-  // Build graph nodes/edges with a simple clustered layout.
-  const { nodes, edges } = useMemo<{ nodes: Node[]; edges: Edge[] }>(() => {
-    if (!data) return { nodes: [], edges: [] };
-    const nodes: Node[] = [];
-    const cols = Math.max(1, Math.ceil(Math.sqrt(data.groups.length)));
-    const cellW = 420;
-    const cellH = 380;
-
-    data.groups.forEach((g, gi) => {
-      const color = COLORS[gi % COLORS.length];
-      const cx = (gi % cols) * cellW + 200;
-      const cy = Math.floor(gi / cols) * cellH + 160;
-
-      nodes.push({
-        id: `group-${g.id}`,
-        position: { x: cx - 80, y: cy - 150 },
-        data: { label: g.label },
-        draggable: false,
-        selectable: false,
-        style: {
-          background: color,
-          color: "#fff",
-          border: "none",
-          borderRadius: 10,
-          fontWeight: 600,
-          fontSize: 13,
-          padding: "6px 10px",
-          width: 200,
-          textAlign: "center",
-        },
-      });
-
-      const n = g.item_ids.length;
-      g.item_ids.forEach((id, idx) => {
-        const it = itemsById.get(id);
-        if (!it) return;
-        const angle = (2 * Math.PI * idx) / Math.max(1, n) - Math.PI / 2;
-        const radius = n <= 1 ? 0 : 120;
-        nodes.push({
-          id,
-          position: {
-            x: cx + radius * Math.cos(angle) - 70,
-            y: cy + radius * Math.sin(angle),
-          },
-          data: { label: showReading(it.term, it.reading) ? `${it.term}\n${it.reading}` : it.term },
-          style: {
-            background: "var(--surface, #fff)",
-            color: "var(--foreground, #111)",
-            border: `2px solid ${color}`,
-            borderRadius: 10,
-            fontSize: 12,
-            padding: "6px 8px",
-            width: 140,
-            whiteSpace: "pre-line",
-            textAlign: "center",
-          },
-        });
-      });
-    });
-
-    const present = new Set(nodes.map((nd) => nd.id));
-    const edges: Edge[] = data.edges
-      .filter((e) => present.has(e.source) && present.has(e.target))
-      .map((e, i) => ({
-        id: `e${i}`,
-        source: e.source,
-        target: e.target,
-        label: e.relation,
-        labelStyle: { fontSize: 10, fill: "var(--muted, #666)" },
-        style: { stroke: "var(--border, #ccc)" },
-      }));
-
-    return { nodes, edges };
-  }, [data, itemsById]);
 
   // --- Empty states ---
   if (totalItems === 0) {
@@ -185,6 +290,8 @@ export function MapClient({
       </div>
     );
   }
+
+  const stale = generatedCount !== null && generatedCount !== totalItems;
 
   return (
     <div className="py-4">
@@ -269,21 +376,28 @@ export function MapClient({
                   </span>
                 )}
                 {g.note && <p className="mt-2 text-sm text-muted">{g.note}</p>}
-                <ul className="mt-3 space-y-1.5">
+                <ul className="mt-3 space-y-1">
                   {g.item_ids.map((id) => {
                     const it = itemsById.get(id);
                     if (!it) return null;
                     return (
-                      <li key={id} className="text-sm">
-                        <Term term={it.term} reading={it.reading} />
-                        {it.meaning && (
-                          <span className="text-muted"> — {it.meaning}</span>
-                        )}
-                        {it.jlpt_level && (
-                          <span className="ml-1 text-xs text-primary">
-                            {it.jlpt_level}
+                      <li key={id}>
+                        <button
+                          onClick={() => openItem(it)}
+                          className="-mx-2 flex w-full rounded-md px-2 py-1 text-left text-sm transition-colors hover:bg-surface-2"
+                        >
+                          <span>
+                            <Term term={it.term} reading={it.reading} />
+                            {it.meaning && (
+                              <span className="text-muted"> — {it.meaning}</span>
+                            )}
+                            {it.jlpt_level && (
+                              <span className="ml-1 text-xs text-primary">
+                                {it.jlpt_level}
+                              </span>
+                            )}
                           </span>
-                        )}
+                        </button>
                       </li>
                     );
                   })}
@@ -295,12 +409,88 @@ export function MapClient({
       )}
 
       {/* Graph view */}
-      {data && view === "graph" && mounted && (
+      {data && view === "graph" && (
         <div className="h-[70dvh] overflow-hidden rounded-2xl border border-border bg-surface">
-          <ReactFlow nodes={nodes} edges={edges} fitView minZoom={0.2}>
+          <ReactFlow
+            key={version}
+            defaultNodes={nodes}
+            defaultEdges={edges}
+            onNodeClick={onNodeClick}
+            onNodeDragStop={onNodeDragStop}
+            fitView
+            minZoom={0.2}
+          >
             <Background />
             <Controls />
           </ReactFlow>
+        </div>
+      )}
+
+      {/* Item detail panel (both views) */}
+      {selected && (
+        <div className="fixed inset-x-4 bottom-4 z-30 mx-auto max-w-sm rounded-2xl border border-border bg-surface p-4 shadow-xl sm:left-auto sm:right-6 sm:mx-0 sm:w-80">
+          <button
+            onClick={() => setSelected(null)}
+            aria-label="Close"
+            className="absolute right-3 top-3 rounded-md p-1 text-muted transition-colors hover:bg-surface-2 hover:text-foreground"
+          >
+            <X className="h-4 w-4" />
+          </button>
+
+          <h3 className="pr-6 text-lg font-semibold leading-tight">
+            <Term term={selected.term} reading={selected.reading} />
+          </h3>
+          <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px]">
+            <span className="rounded-full bg-surface-2 px-2 py-0.5 text-muted">
+              {selected.type}
+            </span>
+            {selected.jlpt_level && (
+              <span className="rounded-full bg-primary/10 px-2 py-0.5 text-primary">
+                {selected.jlpt_level}
+              </span>
+            )}
+          </div>
+          {selected.meaning && <p className="mt-2 text-sm">{selected.meaning}</p>}
+          {selected.example && (
+            <p className="mt-1 font-jp text-xs text-muted">{selected.example}</p>
+          )}
+
+          <div className="mt-3">
+            <Link href={`/review?item=${selected.id}`}>
+              <Button size="sm" className="w-full">
+                <Dumbbell className="h-4 w-4" /> Practice this
+              </Button>
+            </Link>
+          </div>
+
+          <div className="mt-3 border-t border-border pt-3">
+            <p className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-muted">
+              <BookOpen className="h-3.5 w-3.5" /> Lessons mentioning this
+            </p>
+            {lessonsLoading ? (
+              <p className="flex items-center gap-1.5 text-xs text-muted">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" /> searching…
+              </p>
+            ) : lessons && lessons.length > 0 ? (
+              <ul className="max-h-40 space-y-1 overflow-y-auto">
+                {lessons.map((l) => (
+                  <li key={l.id}>
+                    <Link
+                      href={`/lessons/${l.id}`}
+                      className="block truncate rounded-md px-2 py-1 text-sm transition-colors hover:bg-surface-2"
+                    >
+                      {l.title || "Untitled lesson"}
+                      <span className="ml-1 text-xs text-muted">
+                        {formatDate(l.created_at)}
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-xs text-muted">No lessons mention this yet.</p>
+            )}
+          </div>
         </div>
       )}
     </div>

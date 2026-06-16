@@ -90,9 +90,16 @@ The **data lives in Supabase (cloud)**, so chats/vocab/lessons sync automaticall
   calendar heat-map (`library-calendar.tsx`) that filters the list by day; compact rows (term + mastery
   dot) that expand on tap; initial fetch trimmed from 2000 → 150 with infinite scroll (`actions.ts`
   `loadMoreItems`/`loadItemsForDay`).
+- ✅ v2.3 shipped (interactive map): the `/map` **Graph** view is now draggable (React Flow used
+  uncontrolled via `defaultNodes`/`defaultEdges`; drags persist into `knowledge_maps.data.positions`
+  via `map/actions.ts` `saveMapPositions`, debounced). Layout no longer overlaps — ring radius +
+  grid spacing scale with item count and nodes size to content. Tapping a node (or a Board row)
+  opens a detail panel with **Practice this** (`/review?item=`) and **Lessons mentioning this**
+  (`findLessonsForTerm`, an `ilike` text search since items have no lesson FK).
 - ⏳ Next ideas (not built): a standalone personalized-lesson generator; Anki export; paginate
   `/dashboard` and `/map` (still fetch all items — covered for now by `loading.tsx`); real
-  brand icon to replace the placeholder seal in `src/lib/icon-art.tsx`.
+  brand icon to replace the placeholder seal in `src/lib/icon-art.tsx`; a true `lesson_id` link on
+  `knowledge_items` (would replace the text-match in "Lessons mentioning this", future items only).
 
 ## Decisions log
 - Hybrid AI (Gemini OCR/embeddings + Claude chat/lessons) for best quality-per-cost.
@@ -112,3 +119,8 @@ The **data lives in Supabase (cloud)**, so chats/vocab/lessons sync automaticall
   at build with `ImageResponse` (no binary assets) — `LIBRARY_COLS` lives in `library/columns.ts` because a
   `"use server"` module may only export async functions. Calendar buckets by **UTC** day (matches dashboard);
   acceptable for a single user, revisit if local-tz day boundaries matter.
+- Map Graph uses React Flow **uncontrolled** (`defaultNodes`/`defaultEdges` + `key={version}` to remount on
+  Regenerate) so dragging works without `useNodesState`; positions are snapshotted in a ref on
+  `onNodeDragStop` and saved into `knowledge_maps.data.positions` (jsonb, no migration). Node positions key
+  on item id / `group-<id>`. Lesson-fetch + loading state run in the click handler (not an effect) to stay
+  clear of the `react-hooks/set-state-in-effect` lint rule.
