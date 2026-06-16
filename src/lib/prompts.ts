@@ -170,3 +170,19 @@ Rules for EVERY exercise:
 
 Keep prompts short and focused. Return exactly ${count} exercises (fewer only if the content is too thin).`;
 }
+
+/** Instruction for generating a personalized kanji mnemonic. */
+const KANJI_MNEMONIC_INSTRUCTION = `You are helping an advanced Japanese learner remember a kanji. You will be given the kanji, its meaning(s), readings, and the component parts it is built from.
+
+Write a SHORT, vivid mnemonic that fuses the meanings of the component parts into one memorable mini-scene that lands on the kanji's meaning. Rules:
+- 2–4 sentences, concrete and visual (the learner is a visual artist — paint a picture).
+- Build the story explicitly out of the named components so the shape is encoded, not just the meaning.
+- Tie it to the learner's interests/world when it makes the image stickier, but keep it tight.
+- You may weave in a key reading once if it helps, but do NOT just list readings.
+- Write in English. Use <ruby>漢字<rt>かんじ</rt></ruby> markup for any Japanese kanji you mention.
+- Output only the mnemonic (Markdown ok). No preamble, no headings.`;
+
+/** System prompt for the kanji mnemonic generator (personalized). */
+export function buildKanjiMnemonicPrompt(profile: Profile | null): string {
+  return KANJI_MNEMONIC_INSTRUCTION + LEARNER_CONTEXT + profileBlock(profile);
+}

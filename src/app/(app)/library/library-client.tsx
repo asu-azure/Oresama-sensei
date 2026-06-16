@@ -22,6 +22,7 @@ import {
 } from "@/lib/mastery";
 import { showReading } from "@/lib/furigana";
 import { SpeakButton } from "@/components/speak-button";
+import { KanjiChips } from "@/components/kanji/kanji-chips";
 import { cn, formatDate } from "@/lib/utils";
 import { LibraryCalendar } from "./library-calendar";
 import { loadItemsForDay, loadMoreItems } from "./actions";
@@ -360,6 +361,7 @@ export function LibraryClient({
                           Review
                         </Link>
                       </div>
+                      <KanjiChips term={it.term} />
                     </div>
                   </motion.div>
                 )}

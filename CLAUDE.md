@@ -49,7 +49,7 @@ Two core features:
 - `supabase/migrations/0001_init.sql` — schema, pgvector, RLS, `match_knowledge`, storage, profile trigger.
 
 ## Running it
-1. Supabase project → run the SQL files in `supabase/migrations/` (0001–0006) in order in the SQL editor.
+1. Supabase project → run the SQL files in `supabase/migrations/` (0001–0007) in order in the SQL editor.
 2. `.env.local` (NOT committed) with: `NEXT_PUBLIC_SUPABASE_URL`,
    `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`. See `.env.example`.
 3. `npm install` → `npm run dev` → http://localhost:3000. Restart dev after editing `.env.local`
@@ -113,8 +113,12 @@ The **data lives in Supabase (cloud)**, so chats/vocab/lessons sync automaticall
   each card lists your words containing it. **Offline**: data is bundled in `src/data/kanji/*`
   (built by `scripts/build-kanji-data.mjs`, `npm run kanji:build`) from **KanjiVG** (CC-BY-SA 3.0,
   strokes+components) + **kanji-data** (MIT, readings/meanings/levels), split per level and
-  lazy-loaded. Stroke animation is our own `StrokeOrder` SVG component (not markdown). ⏳ **Stage B
-  (not built):** AI mnemonics (cached, `0007_kanji.sql`) + inline tappable kanji chips on vocab items.
+  lazy-loaded. Stroke animation is our own `StrokeOrder` SVG component (not markdown).
+- ✅ v2.5 **Stage B** shipped (kanji): per-kanji **AI mnemonic** — Claude builds a vivid, personalized
+  memory story from the components + learner profile (`generateKanjiMnemonic` + `KANJI_MNEMONIC_INSTRUCTION`),
+  cached per-user in the **`kanji`** table (migration **0007**) so revisiting is free; a **Mark learned**
+  toggle; and **tappable kanji chips** on each vocab word in Library/Search (`KanjiChips`) that open the
+  kanji card. Kanji actions (`kanji/actions.ts`) degrade gracefully if `0007` hasn't been run yet.
 - ⏳ Next ideas (not built): a standalone personalized-lesson generator; Anki export; paginate
   `/dashboard` and `/map` (still fetch all items — covered for now by `loading.tsx`); real
   brand icon to replace the placeholder seal in `src/lib/icon-art.tsx`; a true `lesson_id` link on

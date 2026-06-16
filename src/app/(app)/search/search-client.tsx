@@ -15,6 +15,7 @@ import {
 import { cn } from "@/lib/utils";
 import { showReading } from "@/lib/furigana";
 import { SpeakButton } from "@/components/speak-button";
+import { KanjiChips } from "@/components/kanji/kanji-chips";
 import { searchLessons, type LessonHit } from "./actions";
 
 export type SearchItem = {
@@ -220,6 +221,7 @@ export function SearchClient({ items }: { items: SearchItem[] }) {
                               Practice
                             </Link>
                           </div>
+                          <KanjiChips term={it.term} />
                         </div>
                       </motion.div>
                     )}

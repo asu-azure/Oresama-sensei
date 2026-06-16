@@ -1,11 +1,15 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Sparkles, Loader2, Check, Lightbulb } from "lucide-react";
 import { StrokeOrder } from "@/components/kanji/stroke-order";
 import { SpeakButton } from "@/components/speak-button";
+import { Markdown } from "@/components/markdown";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { levelOf, isKanji, type KanjiInfo, type KanjiStrokes } from "@/lib/kanji";
+import { getOrGenerateMnemonic, setLearned } from "../actions";
 
 export type ExampleWord = {
   id: string;
@@ -19,24 +23,61 @@ export function KanjiDetail({
   info,
   strokes,
   examples,
+  initialMnemonic,
+  initialLearned,
 }: {
   char: string;
   info: KanjiInfo | null;
   strokes: KanjiStrokes | null;
   examples: ExampleWord[];
+  initialMnemonic: string | null;
+  initialLearned: boolean;
 }) {
   // Best reading to speak: a kun (okurigana dots stripped), else on, else the kanji.
   const speakText =
     info?.kun[0]?.replace(/[.\-]/g, "") || info?.on[0] || char;
 
+  const [mnemonic, setMnemonic] = useState<string | null>(initialMnemonic);
+  const [generating, setGenerating] = useState(false);
+  const [mnemonicError, setMnemonicError] = useState<string | null>(null);
+  const [learned, setLearnedState] = useState(initialLearned);
+
+  async function generate() {
+    setGenerating(true);
+    setMnemonicError(null);
+    const res = await getOrGenerateMnemonic(char);
+    if ("mnemonic" in res) setMnemonic(res.mnemonic);
+    else setMnemonicError(res.error);
+    setGenerating(false);
+  }
+
+  function toggleLearned() {
+    const next = !learned;
+    setLearnedState(next);
+    setLearned(char, next).catch(() => setLearnedState(!next));
+  }
+
   return (
     <div className="space-y-5 py-4">
-      <Link
-        href="/kanji"
-        className="inline-flex items-center gap-1.5 text-sm text-muted transition-colors hover:text-foreground"
-      >
-        <ArrowLeft className="h-4 w-4" /> All kanji
-      </Link>
+      <div className="flex items-center justify-between gap-2">
+        <Link
+          href="/kanji"
+          className="inline-flex items-center gap-1.5 text-sm text-muted transition-colors hover:text-foreground"
+        >
+          <ArrowLeft className="h-4 w-4" /> All kanji
+        </Link>
+        <button
+          onClick={toggleLearned}
+          className={cn(
+            "flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm font-medium transition-colors",
+            learned
+              ? "border-emerald-600/40 bg-emerald-600/10 text-emerald-700"
+              : "border-border bg-surface text-muted hover:bg-surface-2",
+          )}
+        >
+          <Check className="h-4 w-4" /> {learned ? "Learned" : "Mark learned"}
+        </button>
+      </div>
 
       <div className="grid gap-5 sm:grid-cols-[200px_1fr]">
         {/* Stroke order */}
@@ -145,6 +186,48 @@ export function KanjiDetail({
           </div>
         </section>
       )}
+
+      {/* Personalized mnemonic */}
+      <section className="rounded-2xl border border-border bg-surface p-4">
+        <h2 className="mb-2 flex items-center gap-1.5 text-sm font-medium text-muted">
+          <Lightbulb className="h-4 w-4 text-primary" /> Mnemonic
+        </h2>
+        {mnemonic ? (
+          <div className="space-y-2">
+            <div className="text-sm">
+              <Markdown>{mnemonic}</Markdown>
+            </div>
+            <button
+              onClick={generate}
+              disabled={generating}
+              className="text-xs text-muted underline transition-colors hover:text-foreground disabled:opacity-50"
+            >
+              {generating ? "Regenerating…" : "Regenerate"}
+            </button>
+          </div>
+        ) : (
+          <div>
+            <p className="mb-3 text-sm text-muted">
+              Get a vivid memory story built from {char}&apos;s parts and tailored
+              to you.
+            </p>
+            <Button size="sm" onClick={generate} disabled={generating}>
+              {generating ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" /> Generating…
+                </>
+              ) : (
+                <>
+                  <Sparkles className="h-4 w-4" /> Generate mnemonic
+                </>
+              )}
+            </Button>
+          </div>
+        )}
+        {mnemonicError && (
+          <p className="mt-2 text-xs text-accent">{mnemonicError}</p>
+        )}
+      </section>
 
       {/* Example words from the learner's library */}
       <section>

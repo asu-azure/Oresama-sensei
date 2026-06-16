@@ -3,6 +3,7 @@ import {
   EXTRACTION_INSTRUCTION,
   KNOWLEDGE_MAP_INSTRUCTION,
   buildExerciseInstruction,
+  buildKanjiMnemonicPrompt,
 } from "@/lib/prompts";
 import type {
   Exercise,
@@ -10,7 +11,9 @@ import type {
   ExtractedKnowledge,
   KnowledgeType,
   MapData,
+  Profile,
 } from "@/lib/types";
+import type { KanjiInfo, KanjiComponent } from "@/lib/kanji";
 
 export const CHAT_MODEL = "claude-sonnet-4-6";
 export const LESSON_MODEL = "claude-sonnet-4-6";
@@ -456,4 +459,35 @@ export async function generateExercises(
   return (parsed.exercises ?? [])
     .map((r) => normalizeExercise(r, byRef))
     .filter((e): e is Exercise => e !== null);
+}
+
+/** Generate a short, personalized kanji mnemonic from its meaning, readings,
+ *  and KanjiVG components. Returns Markdown (may contain <ruby> furigana). */
+export async function generateKanjiMnemonic(input: {
+  char: string;
+  info: KanjiInfo | null;
+  components: KanjiComponent[];
+  profile: Profile | null;
+}): Promise<string> {
+  const meaning = input.info?.meanings.join(", ") || "(unknown)";
+  const readings = [...(input.info?.kun ?? []), ...(input.info?.on ?? [])].join(
+    "、",
+  );
+  const components =
+    input.components.map((c) => c.el).join(" + ") || "(no sub-components)";
+
+  const res = await anthropicClient().messages.create({
+    model: CHAT_MODEL,
+    max_tokens: 700,
+    system: buildKanjiMnemonicPrompt(input.profile),
+    messages: [
+      {
+        role: "user",
+        content: `Kanji: ${input.char}\nMeaning: ${meaning}\nReadings: ${readings || "(none)"}\nComponents: ${components}`,
+      },
+    ],
+  });
+
+  const text = res.content.find((b) => b.type === "text");
+  return text && text.type === "text" ? text.text.trim() : "";
 }
