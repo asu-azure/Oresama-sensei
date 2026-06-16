@@ -92,6 +92,16 @@ rt {
   border-radius: 9999px;
 }
 
+/* Opt-out: hide the scrollbar entirely (e.g. the horizontally scrollable
+   nav tab strip on narrow screens). */
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
 @keyframes fade-in-up {
   from {
     opacity: 0;

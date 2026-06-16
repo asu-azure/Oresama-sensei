@@ -1,9 +1,19 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { motion, useReducedMotion } from "framer-motion";
-import { Search, Library as LibraryIcon } from "lucide-react";
+import {
+  AnimatePresence,
+  motion,
+  useReducedMotion,
+} from "framer-motion";
+import {
+  Search,
+  Library as LibraryIcon,
+  ChevronDown,
+  X,
+  Loader2,
+} from "lucide-react";
 import {
   masteryLevel,
   masteryInfo,
@@ -12,7 +22,9 @@ import {
 } from "@/lib/mastery";
 import { showReading } from "@/lib/furigana";
 import { SpeakButton } from "@/components/speak-button";
-import { cn } from "@/lib/utils";
+import { cn, formatDate } from "@/lib/utils";
+import { LibraryCalendar } from "./library-calendar";
+import { loadItemsForDay, loadMoreItems } from "./actions";
 
 export type LibraryItem = {
   id: string;
@@ -29,16 +41,98 @@ export type LibraryItem = {
   srs_due: string | null;
   times_seen: number | null;
   last_seen: string;
+  created_at: string;
 };
 
 const TYPES = ["all", "vocab", "grammar", "expression"];
 
-export function LibraryClient({ items }: { items: LibraryItem[] }) {
+export function LibraryClient({
+  initialItems,
+  dayCounts,
+  total,
+  pageSize,
+}: {
+  initialItems: LibraryItem[];
+  dayCounts: Record<string, number>;
+  total: number;
+  pageSize: number;
+}) {
   const reduce = useReducedMotion();
+
+  // Filters
   const [q, setQ] = useState("");
   const [type, setType] = useState("all");
   const [jlpt, setJlpt] = useState("all");
   const [mastery, setMastery] = useState<MasteryLevel | "all">("all");
+
+  // Recent list + infinite scroll
+  const [items, setItems] = useState<LibraryItem[]>(initialItems);
+  const [hasMore, setHasMore] = useState(initialItems.length < total);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const offsetRef = useRef(initialItems.length);
+  const loadingRef = useRef(false);
+
+  // Calendar date filtering
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [dayItems, setDayItems] = useState<LibraryItem[]>([]);
+  const [loadingDay, setLoadingDay] = useState(false);
+
+  // Expand/collapse
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const toggle = useCallback((id: string) => {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const loadMore = useCallback(async () => {
+    if (loadingRef.current || !hasMore) return;
+    loadingRef.current = true;
+    setLoadingMore(true);
+    const res = await loadMoreItems(offsetRef.current, pageSize);
+    setItems((prev) => {
+      const seen = new Set(prev.map((p) => p.id));
+      return [...prev, ...res.items.filter((i) => !seen.has(i.id))];
+    });
+    offsetRef.current += res.items.length;
+    setHasMore(res.hasMore);
+    setLoadingMore(false);
+    loadingRef.current = false;
+  }, [hasMore, pageSize]);
+
+  const selectDate = useCallback(async (day: string | null) => {
+    setSelectedDate(day);
+    setExpanded(new Set());
+    if (day === null) {
+      setDayItems([]);
+      return;
+    }
+    setLoadingDay(true);
+    const its = await loadItemsForDay(day);
+    setDayItems(its);
+    setLoadingDay(false);
+  }, []);
+
+  // Auto-load more when the sentinel scrolls into view (recent list only).
+  const sentinelRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (selectedDate || !hasMore) return;
+    const el = sentinelRef.current;
+    if (!el) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) loadMore();
+      },
+      { rootMargin: "400px" },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [selectedDate, hasMore, loadMore]);
+
+  const base = selectedDate ? dayItems : items;
 
   const jlptLevels = useMemo(() => {
     const s = new Set<string>();
@@ -47,8 +141,8 @@ export function LibraryClient({ items }: { items: LibraryItem[] }) {
   }, [items]);
 
   const withMastery = useMemo(
-    () => items.map((it) => ({ it, m: masteryLevel(it) })),
-    [items],
+    () => base.map((it) => ({ it, m: masteryLevel(it) })),
+    [base],
   );
 
   const counts = useMemo(() => {
@@ -73,7 +167,7 @@ export function LibraryClient({ items }: { items: LibraryItem[] }) {
     });
   }, [withMastery, q, type, jlpt, mastery]);
 
-  if (items.length === 0) {
+  if (total === 0) {
     return (
       <div className="py-16 text-center">
         <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
@@ -93,10 +187,32 @@ export function LibraryClient({ items }: { items: LibraryItem[] }) {
       <div>
         <h1 className="text-2xl font-bold">Vocab &amp; grammar</h1>
         <p className="mt-1 text-sm text-muted">
-          {items.length} saved {items.length === 1 ? "item" : "items"}, colored
-          by how well you have practiced them.
+          {total} saved {total === 1 ? "item" : "items"} · tap a day to see what
+          you added, tap any item to expand it.
         </p>
       </div>
+
+      <LibraryCalendar
+        dayCounts={dayCounts}
+        selectedDate={selectedDate}
+        onSelect={selectDate}
+      />
+
+      {selectedDate && (
+        <div className="flex items-center gap-2 rounded-xl border border-primary/30 bg-primary/5 px-3 py-2 text-sm">
+          <span className="font-medium">{formatDate(selectedDate)}</span>
+          <span className="text-muted">
+            · {loadingDay ? "loading…" : `${dayItems.length} added`}
+          </span>
+          <button
+            onClick={() => selectDate(null)}
+            className="ml-auto flex items-center gap-1 rounded-full border border-border bg-surface px-2 py-0.5 text-xs text-muted transition-colors hover:text-foreground"
+          >
+            <X className="h-3 w-3" />
+            clear
+          </button>
+        </div>
+      )}
 
       {/* Mastery legend doubles as a filter */}
       <div className="flex flex-wrap gap-2">
@@ -149,74 +265,124 @@ export function LibraryClient({ items }: { items: LibraryItem[] }) {
       </div>
 
       <p className="text-xs text-muted">
-        Showing {filtered.length} of {items.length}
+        {selectedDate
+          ? `${filtered.length} on this day`
+          : `${filtered.length} shown · ${total} total`}
       </p>
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        {filtered.map(({ it, m }, idx) => (
-          <motion.div
-            key={it.id}
-            initial={reduce ? false : { opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.2, delay: Math.min(idx * 0.015, 0.25) }}
-            whileHover={reduce ? undefined : { y: -2 }}
-            className={cn("rounded-2xl border bg-surface p-4", m.ring)}
-          >
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0">
-                <p className="font-jp text-lg font-semibold leading-tight">
-                  {it.term}
-                </p>
-                {showReading(it.term, it.reading) && (
-                  <p className="font-jp text-sm text-muted">{it.reading}</p>
-                )}
-              </div>
-              <div className="flex shrink-0 items-center gap-1">
-                <SpeakButton text={it.reading || it.term} />
-                <span
-                  className={cn(
-                    "flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium",
-                    m.chip,
-                  )}
-                >
-                  <span className={cn("h-1.5 w-1.5 rounded-full", m.dot)} />
-                  {m.label}
-                </span>
-              </div>
-            </div>
-
-            {it.meaning && <p className="mt-2 text-sm">{it.meaning}</p>}
-            {it.example && (
-              <p className="mt-1 font-jp text-xs text-muted">{it.example}</p>
-            )}
-
-            <div className="mt-3 flex flex-wrap items-center gap-1.5 text-[11px]">
-              <span className="rounded-full bg-surface-2 px-2 py-0.5 text-muted">
-                {it.type}
-              </span>
-              {it.jlpt_level && (
-                <span className="rounded-full bg-primary/10 px-2 py-0.5 text-primary">
-                  {it.jlpt_level}
-                </span>
+      <div className="space-y-2">
+        {filtered.map(({ it, m }) => {
+          const open = expanded.has(it.id);
+          return (
+            <div
+              key={it.id}
+              className={cn(
+                "overflow-hidden rounded-xl border bg-surface",
+                m.ring,
               )}
-              {(it.times_seen ?? 0) > 1 && (
-                <span className="text-muted">seen {it.times_seen}x</span>
-              )}
-              <Link
-                href={`/review?item=${it.id}`}
-                className="ml-auto rounded-full border border-border px-2 py-0.5 text-muted transition-colors hover:bg-surface-2 hover:text-foreground"
+            >
+              <button
+                onClick={() => toggle(it.id)}
+                className="flex w-full items-center gap-3 px-3 py-2.5 text-left"
+                aria-expanded={open}
               >
-                Review
-              </Link>
+                <span
+                  className={cn("h-2.5 w-2.5 shrink-0 rounded-full", m.dot)}
+                  title={m.label}
+                />
+                <span className="min-w-0 flex-1 truncate font-jp text-base font-medium">
+                  {it.term}
+                </span>
+                <ChevronDown
+                  className={cn(
+                    "h-4 w-4 shrink-0 text-muted transition-transform",
+                    open && "rotate-180",
+                  )}
+                />
+              </button>
+
+              <AnimatePresence initial={false}>
+                {open && (
+                  <motion.div
+                    initial={reduce ? false : { height: 0, opacity: 0 }}
+                    animate={{ height: "auto", opacity: 1 }}
+                    exit={reduce ? undefined : { height: 0, opacity: 0 }}
+                    transition={{ duration: 0.18, ease: "easeOut" }}
+                    className="overflow-hidden"
+                  >
+                    <div className="border-t border-border px-3 pb-3 pt-2.5">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          {showReading(it.term, it.reading) && (
+                            <p className="font-jp text-sm text-muted">
+                              {it.reading}
+                            </p>
+                          )}
+                          {it.meaning && (
+                            <p className="mt-1 text-sm">{it.meaning}</p>
+                          )}
+                          {it.example && (
+                            <p className="mt-1 font-jp text-xs text-muted">
+                              {it.example}
+                            </p>
+                          )}
+                        </div>
+                        <SpeakButton text={it.reading || it.term} />
+                      </div>
+
+                      <div className="mt-2.5 flex flex-wrap items-center gap-1.5 text-[11px]">
+                        <span className="rounded-full bg-surface-2 px-2 py-0.5 text-muted">
+                          {it.type}
+                        </span>
+                        {it.jlpt_level && (
+                          <span className="rounded-full bg-primary/10 px-2 py-0.5 text-primary">
+                            {it.jlpt_level}
+                          </span>
+                        )}
+                        <span
+                          className={cn(
+                            "flex items-center gap-1 rounded-full border px-2 py-0.5",
+                            m.chip,
+                          )}
+                        >
+                          <span className={cn("h-1.5 w-1.5 rounded-full", m.dot)} />
+                          {m.label}
+                        </span>
+                        {(it.times_seen ?? 0) > 1 && (
+                          <span className="text-muted">
+                            seen {it.times_seen}x
+                          </span>
+                        )}
+                        <Link
+                          href={`/review?item=${it.id}`}
+                          className="ml-auto rounded-full border border-border px-2 py-0.5 text-muted transition-colors hover:bg-surface-2 hover:text-foreground"
+                        >
+                          Review
+                        </Link>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
-          </motion.div>
-        ))}
+          );
+        })}
       </div>
 
-      {filtered.length === 0 && (
+      {filtered.length === 0 && !loadingDay && (
         <p className="py-10 text-center text-sm text-muted">
           No items match these filters.
         </p>
+      )}
+
+      {/* Infinite-scroll sentinel (recent list only) */}
+      {!selectedDate && hasMore && (
+        <div
+          ref={sentinelRef}
+          className="flex justify-center py-4 text-sm text-muted"
+        >
+          {loadingMore && <Loader2 className="h-4 w-4 animate-spin" />}
+        </div>
       )}
     </div>
   );

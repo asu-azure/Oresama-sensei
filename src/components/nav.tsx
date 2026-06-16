@@ -30,15 +30,15 @@ export function Nav({ reviewDue = 0 }: { reviewDue?: number }) {
   const pathname = usePathname();
 
   return (
-    <header className="sticky top-0 z-20 border-b border-border bg-surface/80 backdrop-blur-md">
-      <div className="mx-auto flex h-14 max-w-4xl items-center gap-1 px-4">
+    <header className="sticky top-0 z-20 border-b border-border bg-surface/80 backdrop-blur-md [padding-top:env(safe-area-inset-top)]">
+      <div className="mx-auto flex h-14 max-w-4xl items-center gap-2 pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))]">
         <Link
           href="/chat"
-          className="mr-3 font-jp text-lg font-bold tracking-tight"
+          className="shrink-0 whitespace-nowrap font-jp text-base font-bold tracking-tight sm:text-lg"
         >
           俺様先生
         </Link>
-        <nav className="flex items-center gap-1">
+        <nav className="no-scrollbar -mx-1 flex min-w-0 flex-1 items-center gap-1 overflow-x-auto px-1">
           {links.map(({ href, label, icon: Icon }) => {
             const active = pathname.startsWith(href);
             const showBadge = href === "/review" && reviewDue > 0;
@@ -47,7 +47,7 @@ export function Nav({ reviewDue = 0 }: { reviewDue?: number }) {
                 key={href}
                 href={href}
                 className={cn(
-                  "relative flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+                  "relative flex shrink-0 items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
                   active
                     ? "text-foreground"
                     : "text-muted hover:text-foreground",
@@ -71,7 +71,7 @@ export function Nav({ reviewDue = 0 }: { reviewDue?: number }) {
             );
           })}
         </nav>
-        <form action={signOut} className="ml-auto">
+        <form action={signOut} className="shrink-0">
           <button
             type="submit"
             className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium text-muted transition-colors hover:bg-surface-2 hover:text-foreground"

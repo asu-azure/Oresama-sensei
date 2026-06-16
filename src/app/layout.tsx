@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono, Noto_Sans_JP } from "next/font/google";
 import "./globals.css";
 
@@ -22,6 +22,27 @@ const notoSansJp = Noto_Sans_JP({
 export const metadata: Metadata = {
   title: "俺様先生 · Ore-Sama Sensei",
   description: "A personal Japanese tutor for JLPT N2–N1 that remembers everything you learn.",
+  // Installed-as-web-app (iOS "Add to Home Screen") behavior. The manifest link
+  // is injected automatically by app/manifest.ts; this adds the Apple-specific
+  // meta so the app launches standalone with the right title.
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "俺様先生",
+  },
+};
+
+// Without an explicit viewport the app rendered "zoomed in" on iOS. device-width
+// + initial-scale 1 fixes the scale; viewport-fit cover lets us paint edge-to-edge
+// and handle the notch/home-indicator via env(safe-area-inset-*) in the layout.
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#faf8f4" },
+    { media: "(prefers-color-scheme: dark)", color: "#0b0b10" },
+  ],
 };
 
 export default function RootLayout({

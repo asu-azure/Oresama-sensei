@@ -26,7 +26,9 @@ export default async function AppLayout({
     <div className="flex min-h-dvh flex-col">
       <SplashScreen />
       <Nav reviewDue={count ?? 0} />
-      <div className="mx-auto w-full max-w-4xl flex-1 px-4">{children}</div>
+      <div className="mx-auto w-full max-w-4xl flex-1 px-4 pb-[env(safe-area-inset-bottom)]">
+        {children}
+      </div>
     </div>
   );
 }

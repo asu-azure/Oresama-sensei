@@ -80,7 +80,19 @@ The **data lives in Supabase (cloud)**, so chats/vocab/lessons sync automaticall
   library → single-item review (`/review?item=`) + due-count badge on the Review nav;
   conversation rename/delete in the chat drawer; furigana now renders in exercise options/tokens;
   map/library/flashcards hide redundant kana readings; tasteful tap/entrance animations (reduced-motion aware).
-- ⏳ Next ideas (not built): a standalone personalized-lesson generator; Anki export.
+- ✅ v2.2 shipped (mobile/PWA polish): proper `viewport` export (fixes iOS "zoomed in") +
+  `viewportFit: cover` with `env(safe-area-inset-*)`; installable **PWA** — `app/manifest.ts`
+  (`scope:"/"`, `display:standalone`, `start_url:/chat`) + `appleWebApp` meta, which fixes the iOS
+  home-screen app opening every tab in a hovering Safari overlay; generated app icons
+  (`app/icon.tsx`, `app/apple-icon.tsx`, `app/icons/{192,512}`, art in `src/lib/icon-art.tsx`);
+  `loading.tsx` skeletons on `/library`, `/dashboard`, `/map` so tab switches paint instantly;
+  header title 俺様先生 no longer wraps (scrollable tab strip). **Library redesigned**: GitHub-style
+  calendar heat-map (`library-calendar.tsx`) that filters the list by day; compact rows (term + mastery
+  dot) that expand on tap; initial fetch trimmed from 2000 → 150 with infinite scroll (`actions.ts`
+  `loadMoreItems`/`loadItemsForDay`).
+- ⏳ Next ideas (not built): a standalone personalized-lesson generator; Anki export; paginate
+  `/dashboard` and `/map` (still fetch all items — covered for now by `loading.tsx`); real
+  brand icon to replace the placeholder seal in `src/lib/icon-art.tsx`.
 
 ## Decisions log
 - Hybrid AI (Gemini OCR/embeddings + Claude chat/lessons) for best quality-per-cost.
@@ -95,3 +107,8 @@ The **data lives in Supabase (cloud)**, so chats/vocab/lessons sync automaticall
 - TTS uses the browser Web Speech API (ja-JP) — free, no API cost; `SpeakButton` no-ops where unsupported.
 - Furigana in short fields (exercise options/tokens) renders via `RubyText` (`src/components/ruby-text.tsx`);
   `showReading()`/`stripFurigana()` in `src/lib/furigana.ts` hide redundant kana and normalize answer checks.
+- PWA scope fix relies on `app/manifest.ts` (`scope:"/"`, `display:standalone`); the iOS home-screen app
+  must be **removed and re-added** after deploy for a new manifest to take effect. App icons are generated
+  at build with `ImageResponse` (no binary assets) — `LIBRARY_COLS` lives in `library/columns.ts` because a
+  `"use server"` module may only export async functions. Calendar buckets by **UTC** day (matches dashboard);
+  acceptable for a single user, revisit if local-tz day boundaries matter.
