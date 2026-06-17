@@ -25,19 +25,20 @@
   --pop-green: #16a34a;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #052e16;
-    --surface: #0d3321;
-    --surface-2: #14532d;
-    --foreground: #f0fdf4;
-    --muted: #86efac;
-    --border: #166534;
-    --primary: #4ade80;
-    --primary-foreground: #052e16;
-    --accent: #fb7185;
-    --ring: #4ade80;
-  }
+/* Dark mode is class-based (`<html class="dark">`) so the in-app toggle can
+   override the OS setting. A no-flash inline script in app/layout.tsx adds the
+   class before paint (system pref on first visit, stored choice after). */
+:root.dark {
+  --background: #052e16;
+  --surface: #0d3321;
+  --surface-2: #14532d;
+  --foreground: #f0fdf4;
+  --muted: #86efac;
+  --border: #166534;
+  --primary: #4ade80;
+  --primary-foreground: #052e16;
+  --accent: #fb7185;
+  --ring: #4ade80;
 }
 
 @theme inline {
@@ -154,6 +155,65 @@ rt {
   100% { transform: translate(0, 0)      rotate(180deg); }
 }
 
+@keyframes pop-wipe {
+  0%   { transform: translateX(-100%) skewX(-12deg); }
+  55%  { transform: translateX(0%)    skewX(-12deg); }
+  100% { transform: translateX(110%)  skewX(-12deg); }
+}
+
+/* ---------------------------------------------------------------------------
+   Pop-art UI utilities — bright accents + geometry on a plain surface
+--------------------------------------------------------------------------- */
+
+/* Halftone dot motif. Use with a low-opacity colored `color:` (currentColor
+   drives the dots), e.g. text-[var(--pop-cyan)]/30. */
+.halftone {
+  background-image: radial-gradient(currentColor 1.5px, transparent 1.6px);
+  background-size: 12px 12px;
+  background-position: 0 0;
+}
+
+/* "Sticker" card — bold border + hard offset shadow, like a die-cut decal.
+   Lifts slightly on hover, presses down on tap. */
+.pop-card {
+  border-width: 2px;
+  border-color: var(--primary);
+  box-shadow: 6px 6px 0 0 var(--primary);
+  transition:
+    transform 0.12s ease,
+    box-shadow 0.12s ease;
+}
+.pop-card:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: 8px 8px 0 0 var(--primary);
+}
+.pop-card:active {
+  transform: translate(3px, 3px);
+  box-shadow: 2px 2px 0 0 var(--primary);
+}
+
+/* Thick multi-color accent rule for section breaks. */
+.pop-divider {
+  height: 4px;
+  border: 0;
+  border-radius: 9999px;
+  background: linear-gradient(
+    90deg,
+    var(--pop-pink) 0%,
+    var(--pop-yellow) 25%,
+    var(--pop-green) 50%,
+    var(--pop-cyan) 75%,
+    var(--pop-purple) 100%
+  );
+}
+
 @media (prefers-reduced-motion: reduce) {
   .pop-particle { animation: none !important; }
+  .pop-card {
+    transition: none;
+  }
+  .pop-card:hover,
+  .pop-card:active {
+    transform: none;
+  }
 }

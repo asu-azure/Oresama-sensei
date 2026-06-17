@@ -41,7 +41,7 @@ function StatCard({
   href?: string;
 }) {
   const inner = (
-    <div className="rounded-2xl border border-border bg-surface p-4">
+    <div className="pop-card rounded-2xl bg-surface p-4">
       <div className="flex items-center gap-2 text-muted">
         {icon}
         <span className="text-sm">{label}</span>

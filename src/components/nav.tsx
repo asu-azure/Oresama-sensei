@@ -17,6 +17,7 @@ import {
   PenLine,
 } from "lucide-react";
 import { signOut } from "@/app/login/actions";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { cn } from "@/lib/utils";
 
 const links = [
@@ -36,7 +37,16 @@ export function Nav({ reviewDue = 0 }: { reviewDue?: number }) {
   const pathname = usePathname();
 
   return (
-    <header className="sticky top-0 z-20 border-b border-border bg-surface/80 backdrop-blur-md [padding-top:env(safe-area-inset-top)]">
+    <header className="sticky top-0 z-20 border-b-2 border-border bg-surface/80 backdrop-blur-md [padding-top:env(safe-area-inset-top)]">
+      {/* Pop-art accent bar */}
+      <div
+        aria-hidden="true"
+        className="h-1 w-full"
+        style={{
+          background:
+            "linear-gradient(90deg, var(--pop-pink) 0%, var(--pop-yellow) 25%, var(--primary) 50%, var(--pop-cyan) 75%, var(--pop-purple) 100%)",
+        }}
+      />
       <div className="mx-auto flex min-h-14 max-w-4xl items-center gap-2 py-1.5 pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))]">
         <Link
           href="/chat"
@@ -79,6 +89,7 @@ export function Nav({ reviewDue = 0 }: { reviewDue?: number }) {
             );
           })}
         </nav>
+        <ThemeToggle />
         <form action={signOut} className="shrink-0">
           <button
             type="submit"

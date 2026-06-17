@@ -17,7 +17,7 @@ export function StudyNext({ insights }: { insights: LearnerInsights }) {
   const { priorities, byType } = insights;
 
   return (
-    <section className="rounded-2xl border border-border bg-surface p-5">
+    <section className="pop-card rounded-2xl bg-surface p-5">
       <h2 className="mb-3 flex items-center gap-2 text-sm font-medium text-muted">
         <Target className="h-4 w-4 text-primary" /> Study next
       </h2>
