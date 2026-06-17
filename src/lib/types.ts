@@ -35,12 +35,16 @@ export interface KnowledgeItem {
   times_seen: number;
   last_seen: string;
   created_at: string;
-  // Spaced-repetition scheduling
+  // Spaced-repetition scheduling (FSRS; srs_ease is legacy SM-2, unused)
   srs_due: string | null;
   srs_interval: number;
   srs_ease: number;
   srs_reps: number;
   srs_lapses: number;
+  srs_stability: number | null;
+  srs_difficulty: number | null;
+  srs_state: number | null;
+  srs_last_review: string | null;
 }
 
 export interface Lesson {

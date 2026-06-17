@@ -15,7 +15,7 @@ export async function POST(request: Request) {
   } = await supabase.auth.getUser();
   if (!user) return new Response("Unauthorized", { status: 401 });
 
-  let body: { text?: string; deep?: boolean };
+  let body: { text?: string; deep?: boolean; kind?: string };
   try {
     body = await request.json();
   } catch {
@@ -23,6 +23,8 @@ export async function POST(request: Request) {
   }
   const text = (body.text ?? "").trim();
   const deep = body.deep === true;
+  // "text" (typed) by default; "chat" when saving a chat answer as a lesson.
+  const kind = body.kind === "chat" ? "chat" : "text";
   if (!text) {
     return new Response("Please enter some Japanese text or a sentence.", {
       status: 400,
@@ -34,12 +36,14 @@ export async function POST(request: Request) {
     });
   }
 
-  const title = text.split("\n")[0].slice(0, 60) || "Text lesson";
+  const title =
+    text.split("\n")[0].replace(/[#*`>]/g, "").trim().slice(0, 60) ||
+    (kind === "chat" ? "Chat lesson" : "Text lesson");
 
-  // Create the lesson row up front (no image; kind = "text").
+  // Create the lesson row up front (no image).
   const { data: lesson, error: lessonError } = await supabase
     .from("lessons")
-    .insert({ user_id: user.id, title, source_text: text, kind: "text" })
+    .insert({ user_id: user.id, title, source_text: text, kind })
     .select("id")
     .single();
   if (lessonError || !lesson) {

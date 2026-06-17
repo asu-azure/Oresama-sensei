@@ -15,7 +15,7 @@ export default async function TestsPage() {
       .from("knowledge_items")
       .select("id", { count: "exact", head: true })
       .eq("user_id", uid)
-      .or("srs_lapses.gte.2,srs_ease.lte.1.6"),
+      .or("srs_lapses.gte.2,srs_difficulty.gte.7"),
     supabase
       .from("knowledge_items")
       .select("id", { count: "exact", head: true })

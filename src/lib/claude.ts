@@ -4,6 +4,8 @@ import {
   KNOWLEDGE_MAP_INSTRUCTION,
   buildExerciseInstruction,
   buildKanjiMnemonicPrompt,
+  EXERCISE_REFINE_INSTRUCTION,
+  buildDeepDivePrompt,
 } from "@/lib/prompts";
 import type {
   Exercise,
@@ -361,12 +363,20 @@ function normalizeExercise(
   const explanation = (r.explanation ?? "").trim();
 
   if (r.type === "mcq") {
-    const choices = (r.choices ?? []).filter((x) => x.trim().length > 0);
+    const raw = (r.choices ?? []).map((x) => x.trim()).filter((x) => x.length > 0);
+    if (raw.length < 2) return null;
+    const correct = raw[Math.max(0, Math.min(raw.length - 1, r.answer_index ?? 0))];
+    // Drop duplicate options (a common malformation), keeping first occurrence.
+    const seen = new Set<string>();
+    const choices: string[] = [];
+    for (const c of raw) {
+      if (!seen.has(c)) {
+        seen.add(c);
+        choices.push(c);
+      }
+    }
     if (choices.length < 2) return null;
-    const answer = Math.max(
-      0,
-      Math.min(choices.length - 1, r.answer_index ?? 0),
-    );
+    const answer = Math.max(0, choices.indexOf(correct));
     return { type: "mcq", prompt, explanation, choices, answer, item_id };
   }
   if (r.type === "arrange") {
@@ -374,24 +384,36 @@ function normalizeExercise(
       (x) => x.trim().length > 0,
     );
     if (answerOrder.length < 2) return null;
-    const cleanTokens = (r.tokens ?? []).filter((x) => x.trim().length > 0);
-    const tokens = cleanTokens.length >= 2 ? cleanTokens : answerOrder;
-    // JLPT "★" mode requires exactly four pieces, a valid star slot, and the
-    // {{BLANKS}} marker in the prompt; otherwise fall back to whole-sentence.
+    // JLPT "★" mode needs four answer pieces, a valid star slot, and the
+    // {{BLANKS}} marker. In that mode the tiles are ALWAYS exactly the four
+    // answer pieces (the player shuffles them) — this ignores any malformed or
+    // excess "tokens" the model emitted. Otherwise fall back to whole-sentence.
     const star = r.star_index ?? -1;
     const starMode =
       answerOrder.length === 4 &&
-      tokens.length === 4 &&
       star >= 0 &&
       star <= 3 &&
       prompt.includes("{{BLANKS}}");
+    if (starMode) {
+      return {
+        type: "arrange",
+        prompt,
+        explanation,
+        tokens: answerOrder,
+        answer: answerOrder,
+        star_index: star,
+        item_id,
+      };
+    }
+    const cleanTokens = (r.tokens ?? []).filter((x) => x.trim().length > 0);
+    const tokens = cleanTokens.length >= 2 ? cleanTokens : answerOrder;
     return {
       type: "arrange",
       prompt,
       explanation,
       tokens,
       answer: answerOrder,
-      star_index: starMode ? star : null,
+      star_index: null,
       item_id,
     };
   }
@@ -459,6 +481,133 @@ export async function generateExercises(
   return (parsed.exercises ?? [])
     .map((r) => normalizeExercise(r, byRef))
     .filter((e): e is Exercise => e !== null);
+}
+
+/** Serialize a typed Exercise back into the flat schema shape Claude expects. */
+function exerciseToRaw(ex: Exercise): RawExercise {
+  return {
+    type: ex.type,
+    prompt: ex.prompt,
+    explanation: ex.explanation,
+    choices:
+      ex.type === "mcq" ? ex.choices : ex.type === "cloze" ? (ex.choices ?? []) : [],
+    answer_index: ex.type === "mcq" ? ex.answer : -1,
+    tokens: ex.type === "arrange" ? ex.tokens : [],
+    answer_order: ex.type === "arrange" ? ex.answer : [],
+    answer_text: ex.type === "cloze" ? ex.answer : "",
+    star_index: ex.type === "arrange" ? (ex.star_index ?? -1) : -1,
+    item_ref: 0,
+  };
+}
+
+/** Ask Claude to verify and, if needed, fix a single flagged exercise. Returns a
+ *  normalized Exercise (unchanged if it was already fine), preserving item_id. */
+export async function refineExercise(ex: Exercise): Promise<Exercise | null> {
+  const res = await anthropicClient().messages.create({
+    model: CHAT_MODEL,
+    max_tokens: 1500,
+    output_config: { format: { type: "json_schema", schema: EXERCISE_SCHEMA } },
+    messages: [
+      {
+        role: "user",
+        content: `${EXERCISE_REFINE_INSTRUCTION}\n\n<exercise>\n${JSON.stringify(exerciseToRaw(ex))}\n</exercise>`,
+      },
+    ],
+  });
+
+  const text = res.content.find((b) => b.type === "text");
+  if (!text || text.type !== "text") return null;
+  let parsed: { exercises?: RawExercise[] };
+  try {
+    parsed = JSON.parse(text.text);
+  } catch {
+    return null;
+  }
+  const raw = parsed.exercises?.[0];
+  if (!raw) return null;
+  const refined = normalizeExercise(raw, new Map());
+  if (!refined) return null;
+  refined.item_id = ex.item_id ?? null; // keep SRS linkage
+  return refined;
+}
+
+const DEEP_DIVE_SCHEMA = {
+  type: "object",
+  properties: {
+    explanation: { type: "string" },
+    examples: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: { ja: { type: "string" }, en: { type: "string" } },
+        required: ["ja", "en"],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ["explanation", "examples"],
+  additionalProperties: false,
+} as const;
+
+export type DeepDiveExample = { ja: string; en: string };
+
+/** Generate a personalized deep-dive (nuance/register/pitfalls + fresh examples)
+ *  for one saved item. Structured output so it always parses. */
+export async function generateDeepDive(input: {
+  item: {
+    type: string;
+    term: string;
+    reading: string | null;
+    meaning: string | null;
+    example: string | null;
+    jlpt_level: string | null;
+    notes: string | null;
+  };
+  profile: Profile | null;
+  recalled: { term: string; reading: string | null; meaning: string | null }[];
+}): Promise<{ explanation: string; examples: DeepDiveExample[] }> {
+  const it = input.item;
+  const related =
+    input.recalled
+      .map(
+        (r) =>
+          `- ${r.term}${r.reading ? ` (${r.reading})` : ""}: ${r.meaning ?? ""}`,
+      )
+      .join("\n") || "(none)";
+  const user = `Item:
+- term: ${it.term}
+- reading: ${it.reading || "(none)"}
+- meaning: ${it.meaning || "(unknown)"}
+- type: ${it.type}
+- JLPT: ${it.jlpt_level || "?"}
+- saved example: ${it.example || "(none)"}
+- notes: ${it.notes || "(none)"}
+
+Related items they've studied (avoid repeating these):
+${related}`;
+
+  const res = await anthropicClient().messages.create({
+    model: CHAT_MODEL,
+    max_tokens: 1800,
+    output_config: { format: { type: "json_schema", schema: DEEP_DIVE_SCHEMA } },
+    system: buildDeepDivePrompt(input.profile),
+    messages: [{ role: "user", content: user }],
+  });
+
+  const text = res.content.find((b) => b.type === "text");
+  if (!text || text.type !== "text") return { explanation: "", examples: [] };
+  try {
+    const parsed = JSON.parse(text.text) as {
+      explanation?: string;
+      examples?: DeepDiveExample[];
+    };
+    return {
+      explanation: (parsed.explanation ?? "").trim(),
+      examples: (parsed.examples ?? []).slice(0, 4),
+    };
+  } catch {
+    return { explanation: "", examples: [] };
+  }
 }
 
 /** Generate a short, personalized kanji mnemonic from its meaning, readings,

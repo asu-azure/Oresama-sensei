@@ -18,9 +18,10 @@ export interface MasteryInfo {
 
 export interface SrsLike {
   srs_reps?: number | null;
-  srs_interval?: number | null;
-  srs_ease?: number | null;
   srs_lapses?: number | null;
+  srs_stability?: number | null;
+  srs_difficulty?: number | null;
+  srs_interval?: number | null; // legacy fallback before the first FSRS review
 }
 
 const PRESET: Record<MasteryLevel, Omit<MasteryInfo, "level">> = {
@@ -71,15 +72,17 @@ export function masteryInfo(level: MasteryLevel): MasteryInfo {
 
 export function masteryLevel(item: SrsLike): MasteryInfo {
   const reps = item.srs_reps ?? 0;
-  const interval = item.srs_interval ?? 0;
-  const ease = item.srs_ease ?? 2.5;
   const lapses = item.srs_lapses ?? 0;
+  const difficulty = item.srs_difficulty ?? 0;
+  // FSRS "stability" ≈ days until recall drops to ~90%. Until an item's first
+  // FSRS review fills it in, fall back to its old SM-2 interval.
+  const stability = item.srs_stability ?? item.srs_interval ?? 0;
 
   let level: MasteryLevel;
   if (reps === 0) level = "new";
-  else if (lapses >= 2 || ease <= 1.6) level = "struggling";
-  else if (interval < 7) level = "learning";
-  else if (interval < 21) level = "young";
+  else if (lapses >= 2 || difficulty >= 7) level = "struggling";
+  else if (stability < 7) level = "learning";
+  else if (stability < 21) level = "young";
   else level = "mastered";
 
   return masteryInfo(level);

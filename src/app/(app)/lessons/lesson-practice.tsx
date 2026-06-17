@@ -5,6 +5,7 @@ import { Sparkles, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ExercisePlayer } from "@/components/exercises/exercise-player";
 import type { Exercise } from "@/lib/types";
+import { refineExercise } from "../tests/actions";
 
 export function LessonPractice({
   lessonId,
@@ -17,6 +18,7 @@ export function LessonPractice({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [playing, setPlaying] = useState(false);
+  const [playToken, setPlayToken] = useState(0);
 
   async function generate() {
     setBusy(true);
@@ -32,6 +34,7 @@ export function LessonPractice({
       }
       const data = await res.json();
       setExercises((data.exercises ?? []) as Exercise[]);
+      setPlayToken((t) => t + 1);
       setPlaying(true);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong.");
@@ -64,8 +67,17 @@ export function LessonPractice({
           </p>
         ) : playing ? (
           <ExercisePlayer
+            key={playToken}
             exercises={exercises}
             onDone={() => setPlaying(false)}
+            onRefine={async (index, ex) => {
+              const res = await refineExercise({
+                exercise: ex,
+                lessonId,
+                index,
+              });
+              return "exercise" in res ? res.exercise : null;
+            }}
           />
         ) : (
           <Button onClick={() => setPlaying(true)}>

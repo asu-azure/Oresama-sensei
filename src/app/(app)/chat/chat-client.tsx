@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
-import { Send, Plus, Loader2, Sparkles } from "lucide-react";
+import { Send, Plus, Loader2, Sparkles, BookPlus } from "lucide-react";
 import { Markdown } from "@/components/markdown";
 import { Button } from "@/components/ui/button";
 import {
@@ -50,6 +51,47 @@ export function ChatClient({
   const scrollRef = useRef<HTMLDivElement>(null);
   const prependingRef = useRef(false);
   const prevScrollHeight = useRef<number | null>(null);
+  const router = useRouter();
+  const [savingLessonId, setSavingLessonId] = useState<string | null>(null);
+
+  // Turn a chat answer (plus the question that prompted it) into a Lesson by
+  // reusing the text-lesson pipeline (restructure + extract + exercises).
+  async function saveAsLesson(m: UiMessage) {
+    if (savingLessonId) return;
+    setSavingLessonId(m.id);
+    setError(null);
+    try {
+      const idx = messages.findIndex((x) => x.id === m.id);
+      let question = "";
+      for (let i = idx - 1; i >= 0; i--) {
+        if (messages[i].role === "user") {
+          question = messages[i].content;
+          break;
+        }
+      }
+      const text = (question ? `${question}\n\n${m.content}` : m.content).slice(
+        0,
+        4000,
+      );
+      const res = await fetch("/api/lesson/text", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, kind: "chat" }),
+      });
+      if (!res.ok) {
+        throw new Error(
+          (await res.text().catch(() => "")) || "Couldn't save as lesson.",
+        );
+      }
+      const lessonId = res.headers.get("x-lesson-id");
+      await res.text().catch(() => {}); // drain so article + exercises persist
+      if (lessonId) router.push(`/lessons/${lessonId}`);
+      else setSavingLessonId(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Couldn't save as lesson.");
+      setSavingLessonId(null);
+    }
+  }
 
   // Keep pinned to the newest message, EXCEPT right after prepending older
   // history (then we restore the prior scroll position so the view doesn't jump).
@@ -238,7 +280,26 @@ export function ChatClient({
               >
                 {m.role === "assistant" ? (
                   m.content ? (
-                    <Markdown>{m.content}</Markdown>
+                    <>
+                      <Markdown>{m.content}</Markdown>
+                      {!busy && (
+                        <div className="mt-2 flex justify-end border-t border-border/60 pt-1.5">
+                          <button
+                            onClick={() => saveAsLesson(m)}
+                            disabled={savingLessonId === m.id}
+                            title="Save this answer as a lesson (with practice exercises)"
+                            className="flex items-center gap-1 text-xs text-muted transition-colors hover:text-foreground disabled:opacity-50"
+                          >
+                            {savingLessonId === m.id ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <BookPlus className="h-3.5 w-3.5" />
+                            )}
+                            Save as lesson
+                          </button>
+                        </div>
+                      )}
+                    </>
                   ) : (
                     <Loader2 className="h-4 w-4 animate-spin text-muted" />
                   )

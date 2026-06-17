@@ -23,7 +23,9 @@ export async function POST(request: Request) {
 
   const { data: item, error } = await supabase
     .from("knowledge_items")
-    .select("srs_interval,srs_ease,srs_reps,srs_lapses")
+    .select(
+      "srs_stability,srs_difficulty,srs_state,srs_interval,srs_reps,srs_lapses,srs_last_review,last_seen",
+    )
     .eq("id", itemId)
     .maybeSingle();
   if (error || !item) return new Response("Item not found", { status: 404 });

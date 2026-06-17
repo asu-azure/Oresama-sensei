@@ -37,14 +37,16 @@ export function Nav({ reviewDue = 0 }: { reviewDue?: number }) {
 
   return (
     <header className="sticky top-0 z-20 border-b border-border bg-surface/80 backdrop-blur-md [padding-top:env(safe-area-inset-top)]">
-      <div className="mx-auto flex h-14 max-w-4xl items-center gap-2 pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))]">
+      <div className="mx-auto flex min-h-14 max-w-4xl items-center gap-2 py-1.5 pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))]">
         <Link
           href="/chat"
           className="shrink-0 whitespace-nowrap font-jp text-base font-bold tracking-tight sm:text-lg"
         >
           俺様先生
         </Link>
-        <nav className="no-scrollbar -mx-1 flex min-w-0 flex-1 items-center gap-1 overflow-x-auto px-1">
+        {/* On small screens the tabs scroll horizontally (finger-drag); on md+
+            they wrap onto extra rows so every tab is visible on desktop. */}
+        <nav className="no-scrollbar -mx-1 flex min-w-0 flex-1 items-center gap-1 overflow-x-auto px-1 md:flex-wrap md:overflow-visible">
           {links.map(({ href, label, icon: Icon }) => {
             const active = pathname.startsWith(href);
             const showBadge = href === "/review" && reviewDue > 0;

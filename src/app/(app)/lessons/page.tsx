@@ -63,7 +63,9 @@ export default async function LessonsPage() {
                         ? "Summary"
                         : lesson.kind === "text"
                           ? "Text"
-                          : "Photo"}
+                          : lesson.kind === "chat"
+                            ? "Chat"
+                            : "Photo"}
                     </span>
                   </div>
                   <p className="line-clamp-2 font-jp font-medium group-hover:text-primary">

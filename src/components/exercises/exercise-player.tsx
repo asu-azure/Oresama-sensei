@@ -12,7 +12,7 @@ import {
   useSensors,
   type DragEndEvent,
 } from "@dnd-kit/core";
-import { Check, X, ArrowRight, RotateCcw, Trophy } from "lucide-react";
+import { Check, X, ArrowRight, RotateCcw, Trophy, Wand2, Loader2 } from "lucide-react";
 import { Markdown } from "@/components/markdown";
 import { RubyText } from "@/components/ruby-text";
 import { Button } from "@/components/ui/button";
@@ -42,16 +42,50 @@ export function ExercisePlayer({
   exercises,
   onGrade,
   onDone,
+  onRefine,
 }: {
   exercises: Exercise[];
   onGrade?: (itemId: string, correct: boolean) => void;
   onDone?: () => void;
+  /** When provided, shows a per-question "Check & fix" button that calls this
+   *  to verify/refine the exercise; return the corrected one (or null). */
+  onRefine?: (index: number, ex: Exercise) => Promise<Exercise | null>;
 }) {
   const [index, setIndex] = useState(0);
   const [correctCount, setCorrectCount] = useState(0);
   const [cardKey, setCardKey] = useState(0);
+  // Local copy so a question can be replaced in place (Check & fix). The parent
+  // remounts this component (via `key`) when it loads a different exercise set,
+  // which re-initializes this from the new prop.
+  const [items, setItems] = useState<Exercise[]>(exercises);
+  const [refining, setRefining] = useState(false);
+  const [refineNote, setRefineNote] = useState<string | null>(null);
 
-  if (exercises.length === 0) {
+  async function checkAndFix() {
+    if (!onRefine || refining) return;
+    setRefining(true);
+    setRefineNote(null);
+    try {
+      const fixed = await onRefine(index, items[index]);
+      if (fixed) {
+        setItems((prev) => {
+          const next = [...prev];
+          next[index] = fixed;
+          return next;
+        });
+        setCardKey((k) => k + 1); // remount the question fresh
+        setRefineNote("Question checked & refined.");
+      } else {
+        setRefineNote("Couldn't refine this one.");
+      }
+    } catch {
+      setRefineNote("Couldn't refine this one.");
+    } finally {
+      setRefining(false);
+    }
+  }
+
+  if (items.length === 0) {
     return (
       <p className="py-8 text-center text-sm text-muted">
         No exercises available.
@@ -59,8 +93,8 @@ export function ExercisePlayer({
     );
   }
 
-  if (index >= exercises.length) {
-    const pct = Math.round((correctCount / exercises.length) * 100);
+  if (index >= items.length) {
+    const pct = Math.round((correctCount / items.length) * 100);
     return (
       <motion.div
         initial={{ opacity: 0, scale: 0.96 }}
@@ -77,7 +111,7 @@ export function ExercisePlayer({
         </motion.div>
         <h3 className="text-xl font-semibold">Practice complete</h3>
         <p className="mt-1 text-sm text-muted">
-          {correctCount} / {exercises.length} correct ({pct}%)
+          {correctCount} / {items.length} correct ({pct}%)
         </p>
         <div className="mt-5 flex justify-center gap-2">
           <Button
@@ -96,7 +130,7 @@ export function ExercisePlayer({
     );
   }
 
-  const ex = exercises[index];
+  const ex = items[index];
 
   function handleAnswered(correct: boolean) {
     if (correct) setCorrectCount((n) => n + 1);
@@ -112,23 +146,43 @@ export function ExercisePlayer({
     <div>
       <div className="mb-3 flex items-center justify-between text-sm text-muted">
         <span>
-          Exercise {index + 1} / {exercises.length}
+          Exercise {index + 1} / {items.length}
         </span>
-        <span className="rounded-full bg-surface-2 px-2 py-0.5 text-xs uppercase tracking-wide">
-          {ex.type === "mcq"
-            ? "Multiple choice"
-            : ex.type === "arrange"
-              ? ex.star_index != null && ex.star_index >= 0
-                ? "Sentence ★"
-                : "Arrange"
-              : "Fill the blank"}
-        </span>
+        <div className="flex items-center gap-2">
+          {onRefine && (
+            <button
+              onClick={checkAndFix}
+              disabled={refining}
+              title="Looks wrong? Ask AI to check & fix this question"
+              className="flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-xs transition-colors hover:bg-surface-2 disabled:opacity-50"
+            >
+              {refining ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Wand2 className="h-3.5 w-3.5" />
+              )}
+              Check &amp; fix
+            </button>
+          )}
+          <span className="rounded-full bg-surface-2 px-2 py-0.5 text-xs uppercase tracking-wide">
+            {ex.type === "mcq"
+              ? "Multiple choice"
+              : ex.type === "arrange"
+                ? ex.star_index != null && ex.star_index >= 0
+                  ? "Sentence ★"
+                  : "Arrange"
+                : "Fill the blank"}
+          </span>
+        </div>
       </div>
+      {refineNote && (
+        <p className="mb-2 text-xs text-muted">{refineNote}</p>
+      )}
       <div className="mb-4 h-1.5 w-full overflow-hidden rounded-full bg-surface-2">
         <motion.div
           className="h-full bg-primary"
           initial={false}
-          animate={{ width: `${(index / exercises.length) * 100}%` }}
+          animate={{ width: `${(index / items.length) * 100}%` }}
           transition={{ duration: 0.3 }}
         />
       </div>
@@ -461,8 +515,14 @@ function StarArrangeView({
   function placeAt(slotIdx: number, id: string) {
     if (checked) return;
     setSlots((prev) => {
-      const next = prev.map((s) => (s === id ? null : s));
+      if (prev[slotIdx] === id) return prev;
+      const fromIdx = prev.indexOf(id); // -1 if dragged from the tray
+      const occupant = prev[slotIdx];
+      const next = [...prev];
       next[slotIdx] = id;
+      // slot→slot: swap (occupant, which may be null, moves to id's old slot).
+      // tray→slot: occupant just returns to the tray (no longer in slots).
+      if (fromIdx !== -1) next[fromIdx] = occupant;
       return next;
     });
   }

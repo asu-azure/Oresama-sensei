@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { ExercisePlayer } from "@/components/exercises/exercise-player";
 import { cn, formatDate } from "@/lib/utils";
 import type { Exercise } from "@/lib/types";
+import { refineExercise } from "./actions";
 
 export type SavedTestRow = {
   id: string;
@@ -52,6 +53,8 @@ export function TestsClient({
 
   const [phase, setPhase] = useState<"browse" | "playing">("browse");
   const [exercises, setExercises] = useState<Exercise[]>([]);
+  const [playingTestId, setPlayingTestId] = useState<string | null>(null);
+  const [playToken, setPlayToken] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -83,6 +86,8 @@ export function TestsClient({
       }
       const data = await res.json();
       setExercises((data.exercises ?? []) as Exercise[]);
+      setPlayingTestId(data.id ?? null);
+      setPlayToken((t) => t + 1);
       setPhase("playing");
       if (data.id) {
         setSavedList((prev) => [
@@ -113,6 +118,8 @@ export function TestsClient({
       if (!res.ok) throw new Error("Couldn't load that test.");
       const data = await res.json();
       setExercises((data.test?.exercises ?? []) as Exercise[]);
+      setPlayingTestId(id);
+      setPlayToken((t) => t + 1);
       setPhase("playing");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong.");
@@ -136,9 +143,18 @@ export function TestsClient({
           <ArrowLeft className="h-4 w-4" /> Back to tests
         </button>
         <ExercisePlayer
+          key={playToken}
           exercises={exercises}
           onGrade={gradeItem}
           onDone={() => setPhase("browse")}
+          onRefine={async (index, ex) => {
+            const res = await refineExercise({
+              exercise: ex,
+              testId: playingTestId ?? undefined,
+              index,
+            });
+            return "exercise" in res ? res.exercise : null;
+          }}
         />
       </div>
     );

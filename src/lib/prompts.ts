@@ -162,13 +162,35 @@ ${CONTEXT_VARIETY}
 Rules for EVERY exercise:
 - Write Japanese with furigana using ruby markup: <ruby>漢字<rt>かんじ</rt></ruby>.
 - Test genuinely useful vocabulary, grammar, or usage from the content — not trivia.
-- Make distractors plausible (wrong but tempting), never obviously silly.
+- For "mcq": exactly ONE correct option plus 3 distractors that are plausible (wrong but tempting), all DISTINCT from each other and from the answer — never duplicate or near-identical options.
 - "explanation": one concise sentence on why the answer is right (Markdown ok, with furigana).
 - Always fill EVERY field in the schema. For fields that do not apply to a type, use an empty string or empty array, and set "star_index" to -1 for mcq and cloze. A cloze has empty "tokens"/"answer_order"; an mcq has empty "tokens"/"answer_order"/"answer_text".
-- For "arrange": "tokens" and "answer_order" must each hold exactly four clean atomic units (words/particles), "prompt" must contain {{BLANKS}} once and must NOT contain the answer, and "star_index" must be 0-3.
+- For "arrange": "answer_order" must hold EXACTLY four clean atomic units (words/particles) — never three or five. "tokens" must be exactly those same four pieces, just shuffled (never add a fifth piece or extra option). "prompt" must contain {{BLANKS}} once and must NOT contain the answer, and "star_index" must be 0-3.
 - If items with ref numbers are provided, base each exercise on one of them and set "item_ref" to that number; otherwise set "item_ref" to 0.
 
 Keep prompts short and focused. Return exactly ${count} exercises (fewer only if the content is too thin).`;
+}
+
+/** Instruction for checking/fixing a single flagged exercise. */
+export const EXERCISE_REFINE_INSTRUCTION = `You are reviewing ONE Japanese practice exercise that a learner flagged as possibly wrong or malformed. Check it carefully:
+- Is the marked answer genuinely correct, and is the Japanese natural with exactly one defensible answer (no ambiguity, no second option that also works)?
+- Is the format valid for its type? mcq: exactly one correct option plus distinct, plausible distractors. arrange (JLPT ★): a natural context sentence whose "prompt" contains the literal {{BLANKS}} marker once and does NOT reveal the order, with EXACTLY four atomic pieces in "answer_order", the same four (shuffled) in "tokens", and "star_index" 0-3. cloze: a sentence showing the blank as ＿＿ with the correct "answer_text".
+
+If it is already valid and correct, return it unchanged. Otherwise return a corrected version of the SAME type that is valid and has a single unambiguous correct answer. Keep furigana ruby markup (<ruby>漢字<rt>かんじ</rt></ruby>). Return EXACTLY ONE exercise, filling every schema field (empty string/array and "star_index":-1 where a field doesn't apply).`;
+
+/** Instruction for an on-demand "deep dive" on a saved vocab/grammar item. */
+const DEEP_DIVE_INSTRUCTION = `You are giving an advanced learner (JLPT N2–N1) a deeper look at ONE Japanese vocabulary/grammar/expression item they've already saved. Go beyond the basic meaning. In the "explanation" (Markdown, concise — about 150–250 words):
+- WHY/WHEN it's used and the nuance vs. near-synonyms or easily-confused items.
+- Register & tone (casual / polite / formal / written / spoken) and any collocations.
+- One common pitfall or mistake to avoid.
+- Keep it tied to the learner's interests/world when it makes it stick, but stay focused.
+Use furigana ruby markup <ruby>漢字<rt>かんじ</rt></ruby> for kanji. Do NOT restate the dictionary gloss verbatim.
+
+Then give 3–4 FRESH, natural example sentences (different from any they already saved), each with an English translation. Vary the contexts (mirror real JLPT topics).`;
+
+/** System prompt for the deep-dive generator (personalized). */
+export function buildDeepDivePrompt(profile: Profile | null): string {
+  return DEEP_DIVE_INSTRUCTION + LEARNER_CONTEXT + profileBlock(profile);
 }
 
 /** Instruction for generating a personalized kanji mnemonic. */

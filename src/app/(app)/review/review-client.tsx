@@ -7,7 +7,7 @@ import { Check, RotateCcw, Brain, GraduationCap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { showReading } from "@/lib/furigana";
 import { SpeakButton } from "@/components/speak-button";
-import type { Rating } from "@/lib/srs";
+import type { Rating, IntervalPreview } from "@/lib/srs";
 
 export type ReviewCard = {
   id: string;
@@ -26,7 +26,13 @@ const RATINGS: { rating: Rating; label: string; cls: string }[] = [
   { rating: "easy", label: "Easy", cls: "bg-emerald-600 text-white" },
 ];
 
-export function ReviewClient({ cards }: { cards: ReviewCard[] }) {
+export function ReviewClient({
+  cards,
+  previews = {},
+}: {
+  cards: ReviewCard[];
+  previews?: Record<string, IntervalPreview>;
+}) {
   return (
     <div className="mx-auto max-w-lg py-6">
       <div className="mb-5 flex items-center justify-between gap-2">
@@ -40,12 +46,18 @@ export function ReviewClient({ cards }: { cards: ReviewCard[] }) {
           <GraduationCap className="h-4 w-4" /> Practice tests
         </Link>
       </div>
-      <Flashcards cards={cards} />
+      <Flashcards cards={cards} previews={previews} />
     </div>
   );
 }
 
-function Flashcards({ cards }: { cards: ReviewCard[] }) {
+function Flashcards({
+  cards,
+  previews,
+}: {
+  cards: ReviewCard[];
+  previews: Record<string, IntervalPreview>;
+}) {
   const [index, setIndex] = useState(0);
   const [revealed, setRevealed] = useState(false);
   const [reviewed, setReviewed] = useState(0);
@@ -170,15 +182,23 @@ function Flashcards({ cards }: { cards: ReviewCard[] }) {
 
       {revealed && (
         <div className="mt-4 grid grid-cols-4 gap-2">
-          {RATINGS.map((r) => (
-            <button
-              key={r.rating}
-              onClick={() => grade(r.rating)}
-              className={`rounded-xl px-2 py-3 text-sm font-medium transition-transform active:scale-95 ${r.cls}`}
-            >
-              {r.label}
-            </button>
-          ))}
+          {RATINGS.map((r) => {
+            const eta = previews[card.id]?.[r.rating];
+            return (
+              <button
+                key={r.rating}
+                onClick={() => grade(r.rating)}
+                className={`flex flex-col items-center gap-0.5 rounded-xl px-2 py-2.5 text-sm font-medium transition-transform active:scale-95 ${r.cls}`}
+              >
+                {r.label}
+                {eta && (
+                  <span className="text-[10px] font-normal opacity-80">
+                    {eta}
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
       )}
     </>

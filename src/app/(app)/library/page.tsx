@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { LibraryClient, type LibraryItem } from "./library-client";
 import { LIBRARY_COLS } from "./columns";
+import { loadExplanations } from "./explanations";
 
 const PAGE_SIZE = 150;
 
@@ -36,12 +37,22 @@ export default async function LibraryPage() {
     dayCounts[key] = (dayCounts[key] ?? 0) + 1;
   }
 
+  // Prefetch existing deep-dive explanations so they show instantly (and are
+  // badged). The table is small; gracefully empty if migration 0008 isn't run.
+  const { explanations, explainedIds } = await loadExplanations(
+    supabase,
+    user!.id,
+    new Set(items.map((i) => i.id)),
+  );
+
   return (
     <LibraryClient
       initialItems={items}
       dayCounts={dayCounts}
       total={allDates.length}
       pageSize={PAGE_SIZE}
+      explanations={explanations}
+      explainedIds={explainedIds}
     />
   );
 }

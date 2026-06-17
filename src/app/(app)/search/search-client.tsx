@@ -11,11 +11,14 @@ import {
   BookOpen,
   Loader2,
   MessageCircle,
+  Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { showReading } from "@/lib/furigana";
 import { SpeakButton } from "@/components/speak-button";
 import { KanjiChips } from "@/components/kanji/kanji-chips";
+import { DeepDiveSection } from "@/components/knowledge/deep-dive-section";
+import type { ExplanationMap } from "../library/explanations";
 import { searchLessons, type LessonHit } from "./actions";
 
 export type SearchItem = {
@@ -28,8 +31,17 @@ export type SearchItem = {
   jlpt_level: string | null;
 };
 
-export function SearchClient({ items }: { items: SearchItem[] }) {
+export function SearchClient({
+  items,
+  explanations,
+  explainedIds,
+}: {
+  items: SearchItem[];
+  explanations: ExplanationMap;
+  explainedIds: string[];
+}) {
   const reduce = useReducedMotion();
+  const explainedSet = useMemo(() => new Set(explainedIds), [explainedIds]);
   const [q, setQ] = useState("");
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [lessons, setLessons] = useState<LessonHit[]>([]);
@@ -170,6 +182,12 @@ export function SearchClient({ items }: { items: SearchItem[] }) {
                     <span className="min-w-0 flex-1 truncate font-jp text-base font-medium">
                       {it.term}
                     </span>
+                    {explainedSet.has(it.id) && (
+                      <Sparkles
+                        className="h-3.5 w-3.5 shrink-0 text-primary"
+                        aria-label="Has a saved explanation"
+                      />
+                    )}
                     {it.jlpt_level && (
                       <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] text-primary">
                         {it.jlpt_level}
@@ -222,6 +240,13 @@ export function SearchClient({ items }: { items: SearchItem[] }) {
                             </Link>
                           </div>
                           <KanjiChips term={it.term} />
+                          <DeepDiveSection
+                            itemId={it.id}
+                            initialExplanation={
+                              explanations[it.id]?.explanation_md ?? null
+                            }
+                            initialExamples={explanations[it.id]?.examples ?? []}
+                          />
                         </div>
                       </motion.div>
                     )}

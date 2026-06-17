@@ -13,6 +13,7 @@ import {
   ChevronDown,
   X,
   Loader2,
+  Sparkles,
 } from "lucide-react";
 import {
   masteryLevel,
@@ -23,6 +24,8 @@ import {
 import { showReading } from "@/lib/furigana";
 import { SpeakButton } from "@/components/speak-button";
 import { KanjiChips } from "@/components/kanji/kanji-chips";
+import { DeepDiveSection } from "@/components/knowledge/deep-dive-section";
+import type { ExplanationMap } from "./explanations";
 import { cn, formatDate } from "@/lib/utils";
 import { LibraryCalendar } from "./library-calendar";
 import { loadItemsForDay, loadMoreItems } from "./actions";
@@ -37,8 +40,9 @@ export type LibraryItem = {
   jlpt_level: string | null;
   srs_reps: number | null;
   srs_interval: number | null;
-  srs_ease: number | null;
   srs_lapses: number | null;
+  srs_stability: number | null;
+  srs_difficulty: number | null;
   srs_due: string | null;
   times_seen: number | null;
   last_seen: string;
@@ -52,13 +56,18 @@ export function LibraryClient({
   dayCounts,
   total,
   pageSize,
+  explanations,
+  explainedIds,
 }: {
   initialItems: LibraryItem[];
   dayCounts: Record<string, number>;
   total: number;
   pageSize: number;
+  explanations: ExplanationMap;
+  explainedIds: string[];
 }) {
   const reduce = useReducedMotion();
+  const explainedSet = useMemo(() => new Set(explainedIds), [explainedIds]);
 
   // Filters
   const [q, setQ] = useState("");
@@ -239,6 +248,46 @@ export function LibraryClient({
         })}
       </div>
 
+      <details className="rounded-xl border border-border bg-surface px-3 py-2 text-xs text-muted">
+        <summary className="cursor-pointer select-none font-medium">
+          How are these levels decided?
+        </summary>
+        <p className="mt-2">
+          Levels come from <span className="font-medium">FSRS</span>, which
+          models your memory and estimates each item&apos;s{" "}
+          <span className="font-medium">stability</span> — roughly how long
+          you&apos;d still remember it. It grows as you recall correctly and
+          shrinks when you slip.
+        </p>
+        <ul className="mt-2 space-y-1">
+          <li>
+            <span className="font-medium text-foreground">New</span> — saved but
+            never reviewed yet.
+          </li>
+          <li>
+            <span className="font-medium text-foreground">Learning</span> —
+            stability under ~1 week.
+          </li>
+          <li>
+            <span className="font-medium text-foreground">Young</span> — getting
+            solid: stability ~1–3 weeks.
+          </li>
+          <li>
+            <span className="font-medium text-foreground">Mastered</span> —
+            stability past ~3 weeks.
+          </li>
+          <li>
+            <span className="font-medium text-foreground">Struggling</span> —
+            you&apos;ve missed it a couple of times (or FSRS rates it hard), so
+            it&apos;s flagged for extra practice regardless of stability.
+          </li>
+        </ul>
+        <p className="mt-2">
+          Practicing in Review/Tests updates this automatically. Tap a level
+          above to filter.
+        </p>
+      </details>
+
       {/* Search + filters */}
       <div className="space-y-3">
         <div className="relative">
@@ -294,6 +343,12 @@ export function LibraryClient({
                 <span className="min-w-0 flex-1 truncate font-jp text-base font-medium">
                   {it.term}
                 </span>
+                {explainedSet.has(it.id) && (
+                  <Sparkles
+                    className="h-3.5 w-3.5 shrink-0 text-primary"
+                    aria-label="Has a saved explanation"
+                  />
+                )}
                 <ChevronDown
                   className={cn(
                     "h-4 w-4 shrink-0 text-muted transition-transform",
@@ -362,6 +417,13 @@ export function LibraryClient({
                         </Link>
                       </div>
                       <KanjiChips term={it.term} />
+                      <DeepDiveSection
+                        itemId={it.id}
+                        initialExplanation={
+                          explanations[it.id]?.explanation_md ?? null
+                        }
+                        initialExamples={explanations[it.id]?.examples ?? []}
+                      />
                     </div>
                   </motion.div>
                 )}

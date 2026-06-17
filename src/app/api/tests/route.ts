@@ -55,7 +55,7 @@ export async function POST(req: Request) {
 
   if (scope === "struggling") {
     query = query
-      .or("srs_lapses.gte.2,srs_ease.lte.1.6")
+      .or("srs_lapses.gte.2,srs_difficulty.gte.7")
       .order("srs_reps", { ascending: false });
     titleBase = "Struggling";
   } else if (scope === "new") {

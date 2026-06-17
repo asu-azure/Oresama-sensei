@@ -49,7 +49,7 @@ Two core features:
 - `supabase/migrations/0001_init.sql` — schema, pgvector, RLS, `match_knowledge`, storage, profile trigger.
 
 ## Running it
-1. Supabase project → run the SQL files in `supabase/migrations/` (0001–0007) in order in the SQL editor.
+1. Supabase project → run the SQL files in `supabase/migrations/` (0001–0009) in order in the SQL editor.
 2. `.env.local` (NOT committed) with: `NEXT_PUBLIC_SUPABASE_URL`,
    `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`. See `.env.example`.
 3. `npm install` → `npm run dev` → http://localhost:3000. Restart dev after editing `.env.local`
@@ -119,6 +119,38 @@ The **data lives in Supabase (cloud)**, so chats/vocab/lessons sync automaticall
   cached per-user in the **`kanji`** table (migration **0007**) so revisiting is free; a **Mark learned**
   toggle; and **tappable kanji chips** on each vocab word in Library/Search (`KanjiChips`) that open the
   kanji card. Kanji actions (`kanji/actions.ts`) degrade gracefully if `0007` hasn't been run yet.
+- ExercisePlayer holds a **local copy** of the exercises (so Check & fix can replace a question in
+  place) and is **remounted via `key={playToken}`** by tests-client/lesson-practice when a new set
+  loads — don't reintroduce a render-time prop→state sync (it trips `react-hooks`). `refineExercise`
+  persists to whichever of `review_tests`/`lessons` the caller names by `index`. Deep-dive + chat→lesson
+  degrade gracefully without their migrations (`0008`; chat reuses the existing text-lesson route with
+  an optional `kind:"chat"`).
+- SRS is **FSRS** via `ts-fsrs` (`src/lib/srs.ts`). It's **server-only** (imports ts-fsrs); client code
+  imports only the `Rating`/`IntervalPreview` **types** (`import type`, erased). `schedule(row,rating)`
+  returns the column bag written by `api/srs`; `previewIntervals(row)` (used by `review/page.tsx`) powers
+  the per-button ETAs. `cardFromRow` seeds legacy SM-2 rows (stability ≈ old interval, difficulty 5). Don't
+  reintroduce `srs_ease` logic — mastery/scopes now key on `srs_stability`/`srs_difficulty`.
+- Deep-dive explanations are **prefetched server-side** (`library/explanations.ts` `loadExplanations`)
+  and passed into `DeepDiveSection` as `initialExplanation`/`initialExamples` so cached ones render
+  instantly (open by default) — don't rely only on the on-tap fetch. Rows with an explanation get a ✨
+  badge (`explainedIds`). The nav tab strip scrolls on mobile but **wraps on `md+`** (`min-h-14`,
+  `md:flex-wrap`) so all tabs are visible on desktop. The library has a "How are these levels decided?"
+  `<details>` explaining the SRS-derived mastery levels (`src/lib/mastery.ts`).
+- ✅ v2.6 shipped (exercise quality + chat→lesson + deep-dive): **★ arrange** hardened — the player
+  now **swaps** tiles on drop (was evicting), and `normalizeExercise` forces the tiles to be exactly
+  the four answer pieces (kills "excess options") + de-dupes MCQ choices; a per-question **Check & fix**
+  button (`refineExercise` in `claude.ts` + `tests/actions.ts`) verifies/repairs a flagged exercise and
+  **persists** it back into `review_tests.exercises` / `lessons.exercises`. Chat answers have a **Save
+  as lesson** button (reuses `/api/lesson/text` with `kind:"chat"`). Saved vocab/grammar rows have an
+  **Explain more** deep-dive (`generateDeepDive` + `knowledge_explanations` table, migration **0008**,
+  `DeepDiveSection`) shown inline in Library + Search.
+- ✅ v2.7 shipped (FSRS scheduler): spaced repetition moved from the hand-rolled SM-2 to **FSRS**
+  (`ts-fsrs`, FSRS v6, target retention 0.9) — see `src/lib/srs.ts` (`schedule`/`previewIntervals`,
+  legacy items seeded from their old interval on first review). New columns `srs_stability/
+  srs_difficulty/srs_state/srs_last_review` (migration **0009**; `srs_ease` now legacy). Mastery
+  labels derive from **stability** (`src/lib/mastery.ts`), the Tests "Struggling" scope uses
+  `srs_difficulty>=7`, and flashcards now show the **predicted next interval under each rating
+  button** (Again/Hard/Good/Easy).
 - ⏳ Next ideas (not built): a standalone personalized-lesson generator; Anki export; paginate
   `/dashboard` and `/map` (still fetch all items — covered for now by `loading.tsx`); real
   brand icon to replace the placeholder seal in `src/lib/icon-art.tsx`; a true `lesson_id` link on

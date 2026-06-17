@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { SearchClient, type SearchItem } from "./search-client";
+import { loadExplanations } from "../library/explanations";
 
 export default async function SearchPage() {
   const supabase = await createClient();
@@ -15,5 +16,18 @@ export default async function SearchPage() {
     .order("last_seen", { ascending: false })
     .limit(5000);
 
-  return <SearchClient items={(data ?? []) as SearchItem[]} />;
+  const items = (data ?? []) as SearchItem[];
+  const { explanations, explainedIds } = await loadExplanations(
+    supabase,
+    user!.id,
+    new Set(items.map((i) => i.id)),
+  );
+
+  return (
+    <SearchClient
+      items={items}
+      explanations={explanations}
+      explainedIds={explainedIds}
+    />
+  );
 }
