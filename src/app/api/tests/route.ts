@@ -30,8 +30,8 @@ export async function GET() {
   return Response.json({ tests: data ?? [] });
 }
 
-/** Generate a test for a chosen scope, save it, and return it to play. The only
- *  step that spends tokens (scope selection is plain SQL; replay is free). */
+/** Generate a test for a chosen scope (or explicit item IDs for remix), save it,
+ *  and return it to play. The only step that spends tokens. */
 export async function POST(req: Request) {
   const supabase = await createClient();
   const {
@@ -43,51 +43,85 @@ export async function POST(req: Request) {
     scope?: string;
     level?: string;
     type?: string;
+    /** Remix mode: explicit knowledge_items IDs to generate from. */
+    itemIds?: string[];
   };
-  const scope = body.scope ?? "due";
+
   const nowIso = new Date().toISOString();
+  const dateLabel = new Date().toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+  });
 
-  let query = supabase
-    .from("knowledge_items")
-    .select(COLS)
-    .eq("user_id", user.id);
+  let rows: ItemRow[] = [];
   let titleBase = "Practice";
+  let scope = body.scope ?? "due";
 
-  if (scope === "struggling") {
-    query = query
-      .or("srs_lapses.gte.2,srs_difficulty.gte.7")
-      .order("srs_reps", { ascending: false });
-    titleBase = "Struggling";
-  } else if (scope === "new") {
-    query = query.eq("srs_reps", 0).order("created_at", { ascending: false });
-    titleBase = "New & unpracticed";
-  } else if (scope === "filter") {
-    if (body.level) query = query.eq("jlpt_level", body.level);
-    if (body.type) query = query.eq("type", body.type);
-    query = query.order("last_seen", { ascending: false });
-    titleBase = [body.level, body.type].filter(Boolean).join(" ") || "Filtered";
-  } else {
-    query = query
-      .or(`srs_due.is.null,srs_due.lte.${nowIso}`)
-      .order("srs_due", { ascending: true, nullsFirst: true });
-    titleBase = "Due now";
-  }
-
-  const { data } = await query.limit(16);
-  let rows = (data ?? []) as ItemRow[];
-  if (rows.length < 4) {
-    const { data: recent } = await supabase
+  if (body.itemIds?.length) {
+    // --- Remix mode: fetch specific knowledge items by ID ---
+    let q = supabase
       .from("knowledge_items")
       .select(COLS)
-      .eq("user_id", user.id)
-      .order("last_seen", { ascending: false })
-      .limit(16);
-    rows = (recent ?? []) as ItemRow[];
-  }
-  if (rows.length === 0) {
-    return new Response("Nothing to test yet — chat or make a lesson first.", {
-      status: 422,
-    });
+      .in("id", body.itemIds.slice(0, 16))
+      .eq("user_id", user.id);
+    if (body.type) q = q.eq("type", body.type);
+    if (body.level) q = q.eq("jlpt_level", body.level);
+    const { data } = await q.limit(12);
+    rows = (data ?? []) as ItemRow[];
+    if (rows.length === 0) {
+      return new Response("No matching items found in selected tests.", {
+        status: 400,
+      });
+    }
+    scope = "remix";
+    titleBase = "Remix";
+  } else {
+    // --- Scope-based mode ---
+    let query = supabase
+      .from("knowledge_items")
+      .select(COLS)
+      .eq("user_id", user.id);
+
+    if (scope === "struggling") {
+      query = query
+        .or("srs_lapses.gte.2,srs_difficulty.gte.7")
+        .order("srs_reps", { ascending: false });
+      titleBase = "Struggling";
+    } else if (scope === "new") {
+      query = query
+        .eq("srs_reps", 0)
+        .order("created_at", { ascending: false });
+      titleBase = "New & unpracticed";
+    } else if (scope === "filter") {
+      if (body.level) query = query.eq("jlpt_level", body.level);
+      if (body.type) query = query.eq("type", body.type);
+      query = query.order("last_seen", { ascending: false });
+      titleBase =
+        [body.level, body.type].filter(Boolean).join(" ") || "Filtered";
+    } else {
+      query = query
+        .or(`srs_due.is.null,srs_due.lte.${nowIso}`)
+        .order("srs_due", { ascending: true, nullsFirst: true });
+      titleBase = "Due now";
+    }
+
+    const { data } = await query.limit(16);
+    rows = (data ?? []) as ItemRow[];
+    if (rows.length < 4) {
+      const { data: recent } = await supabase
+        .from("knowledge_items")
+        .select(COLS)
+        .eq("user_id", user.id)
+        .order("last_seen", { ascending: false })
+        .limit(16);
+      rows = (recent ?? []) as ItemRow[];
+    }
+    if (rows.length === 0) {
+      return new Response(
+        "Nothing to test yet — chat or make a lesson first.",
+        { status: 422 },
+      );
+    }
   }
 
   const items: ExerciseItemRef[] = rows.slice(0, 12).map((it, i) => ({
@@ -126,10 +160,6 @@ export async function POST(req: Request) {
     });
   }
 
-  const dateLabel = new Date().toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-  });
   const title = `${titleBase} · ${dateLabel}`;
   const meta = {
     level: body.level ?? null,

@@ -1,5 +1,7 @@
 /** Shared application types. */
 
+export type DiscussMessage = { role: "user" | "assistant"; content: string };
+
 export type KnowledgeType = "vocab" | "grammar" | "expression";
 
 export interface Profile {

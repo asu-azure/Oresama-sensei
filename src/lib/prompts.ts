@@ -1,4 +1,4 @@
-import type { Profile, RecalledItem } from "@/lib/types";
+import type { Profile, RecalledItem, Exercise } from "@/lib/types";
 
 /** OCR / page-reading instruction for Gemini vision. */
 export const OCR_PROMPT = `You are reading a photo of Japanese study material (a textbook page, manga panel, worksheet, or handwriting).
@@ -232,4 +232,53 @@ Then give 2–4 "focus_areas": each with "label" (short, e.g. "N2 grammar"), "wh
 /** System prompt for the study-coach note generator (personalized). */
 export function buildCoachPrompt(profile: Profile | null): string {
   return COACH_INSTRUCTION + LEARNER_CONTEXT + profileBlock(profile);
+}
+
+/** System prompt for the lightweight in-test discussion endpoint.
+ *  Includes the full exercise so Claude can answer questions about it. */
+export function buildDiscussSystemPrompt(exercise: Exercise): string {
+  let exBlock: string;
+
+  if (exercise.type === "mcq") {
+    const choiceLines = exercise.choices
+      .map((c, i) => `  ${String.fromCharCode(65 + i)}. ${c}${i === exercise.answer ? " ✓" : ""}`)
+      .join("\n");
+    exBlock = `Type: Multiple choice
+Question: ${exercise.prompt}
+Options:
+${choiceLines}
+Correct answer: ${exercise.choices[exercise.answer]} (option ${String.fromCharCode(65 + exercise.answer)})
+Explanation: ${exercise.explanation}`;
+  } else if (exercise.type === "arrange") {
+    const starMode = exercise.star_index != null && exercise.star_index >= 0;
+    if (starMode) {
+      const displayPrompt = exercise.prompt.replace("{{BLANKS}}", "[ ① ② ③ ④ ]");
+      exBlock = `Type: Sentence ordering — JLPT ★ style
+Context sentence: ${displayPrompt}
+Correct order of the four pieces: ${exercise.answer.join(" / ")}
+★ (graded) piece — position ${(exercise.star_index ?? 0) + 1}: ${exercise.answer[exercise.star_index ?? 0] ?? ""}
+Explanation: ${exercise.explanation}`;
+    } else {
+      exBlock = `Type: Sentence arrangement
+Scrambled pieces: ${exercise.tokens.join(" | ")}
+Correct order: ${exercise.answer.join(" ")}
+Explanation: ${exercise.explanation}`;
+    }
+  } else {
+    const choices = exercise.choices?.length
+      ? `\nOptions: ${exercise.choices.join(" / ")}`
+      : "";
+    exBlock = `Type: Fill in the blank
+Sentence (＿＿ marks the blank): ${exercise.prompt}
+Correct answer: ${exercise.answer}${choices}
+Explanation: ${exercise.explanation}`;
+  }
+
+  return `You are a concise Japanese practice tutor reviewing ONE exercise with a learner (JLPT N2–N1 level).
+
+<exercise>
+${exBlock}
+</exercise>
+
+The learner may ask: why their answer was wrong, whether the question itself is incorrect or ambiguous, or for more context on the grammar/vocabulary. Be direct and helpful. If the question is genuinely wrong or ambiguous, acknowledge it clearly. Use <ruby>漢字<rt>かんじ</rt></ruby> markup for Japanese kanji. Keep answers short (2–4 sentences unless they need more).`;
 }

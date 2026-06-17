@@ -8,6 +8,9 @@ import {
   Trash2,
   ArrowLeft,
   Sparkles,
+  Shuffle,
+  ChevronDown,
+  Check,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ExercisePlayer } from "@/components/exercises/exercise-player";
@@ -37,6 +40,15 @@ const SCOPES: { key: Scope; label: string; hint: string }[] = [
 
 const TYPES = ["vocab", "grammar", "expression"];
 
+function shuffle<T>(arr: T[]): T[] {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
 export function TestsClient({
   counts,
   levels,
@@ -57,6 +69,28 @@ export function TestsClient({
   const [playToken, setPlayToken] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Mix mode
+  const [mixMode, setMixMode] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [mixExpanded, setMixExpanded] = useState(false);
+  const [mixType, setMixType] = useState("");
+  const [mixLevel, setMixLevel] = useState("");
+
+  function toggleSelect(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function exitMixMode() {
+    setMixMode(false);
+    setSelected(new Set());
+    setMixExpanded(false);
+  }
 
   function gradeItem(itemId: string, correct: boolean) {
     fetch("/api/srs", {
@@ -121,6 +155,109 @@ export function TestsClient({
       setPlayingTestId(id);
       setPlayToken((t) => t + 1);
       setPhase("playing");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Something went wrong.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** Fetch exercises for a set of test IDs in parallel. */
+  async function fetchExercisesFor(ids: string[]): Promise<Exercise[]> {
+    const results = await Promise.all(
+      ids.map((id) =>
+        fetch(`/api/tests/${id}`)
+          .then((r) => r.json())
+          .then((d) => (d.test?.exercises ?? []) as Exercise[])
+          .catch(() => [] as Exercise[]),
+      ),
+    );
+    return results.flat();
+  }
+
+  /** Instantly shuffle + combine exercises from selected saved tests. No tokens. */
+  async function quickMix() {
+    if (selected.size === 0 || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const pool = await fetchExercisesFor([...selected]);
+      // Deduplicate by item_id so each knowledge item appears at most once.
+      const seen = new Set<string>();
+      const deduped = pool.filter((ex) => {
+        if (!ex.item_id) return true;
+        if (seen.has(ex.item_id)) return false;
+        seen.add(ex.item_id);
+        return true;
+      });
+      const mixed = shuffle(deduped).slice(0, 10);
+      if (mixed.length === 0) {
+        setError("No exercises found in the selected tests.");
+        return;
+      }
+      setExercises(mixed);
+      setPlayingTestId(null);
+      setPlayToken((t) => t + 1);
+      setPhase("playing");
+      exitMixMode();
+    } catch {
+      setError("Couldn't load exercises. Try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** Generate brand-new exercises targeting the items from selected saved tests. */
+  async function generateFromSelected() {
+    if (selected.size === 0 || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const pool = await fetchExercisesFor([...selected]);
+      const itemIds = [
+        ...new Set(
+          pool.map((ex) => ex.item_id).filter((id): id is string => !!id),
+        ),
+      ];
+      if (itemIds.length === 0) {
+        setError("No item links found in selected tests.");
+        setBusy(false);
+        return;
+      }
+      const res = await fetch("/api/tests", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          itemIds,
+          type: mixType || undefined,
+          level: mixLevel || undefined,
+        }),
+      });
+      if (!res.ok) {
+        throw new Error(
+          (await res.text().catch(() => "")) || "Failed to generate.",
+        );
+      }
+      const data = await res.json();
+      setExercises((data.exercises ?? []) as Exercise[]);
+      setPlayingTestId(data.id ?? null);
+      setPlayToken((t) => t + 1);
+      setPhase("playing");
+      if (data.id) {
+        setSavedList((prev) => [
+          {
+            id: data.id,
+            title: data.title,
+            scope: data.scope,
+            meta: data.meta,
+            created_at: new Date().toISOString(),
+            last_used_at: null,
+            used_count: 0,
+          },
+          ...prev,
+        ]);
+      }
+      exitMixMode();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong.");
     } finally {
@@ -253,9 +390,99 @@ export function TestsClient({
 
       {/* Saved tests */}
       <section>
-        <h2 className="mb-2 text-sm font-medium text-muted">
-          Saved tests {savedList.length > 0 && `(${savedList.length})`}
-        </h2>
+        <div className="mb-2 flex items-center justify-between">
+          <h2 className="text-sm font-medium text-muted">
+            Saved tests {savedList.length > 0 && `(${savedList.length})`}
+          </h2>
+          {savedList.length > 0 && (
+            <button
+              onClick={() => {
+                if (mixMode) exitMixMode();
+                else setMixMode(true);
+              }}
+              className={cn(
+                "flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs transition-colors hover:bg-surface-2",
+                mixMode
+                  ? "border-primary/50 bg-primary/10 text-primary"
+                  : "border-border text-muted",
+              )}
+            >
+              <Shuffle className="h-3 w-3" />
+              {mixMode ? "Cancel" : "Mix"}
+            </button>
+          )}
+        </div>
+
+        {/* Mix action bar */}
+        {mixMode && selected.size > 0 && (
+          <div className="mb-3 rounded-xl border border-primary/30 bg-primary/5 p-3">
+            <p className="mb-2 text-xs text-muted">
+              {selected.size} test{selected.size > 1 ? "s" : ""} selected
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" onClick={quickMix} disabled={busy}>
+                {busy ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Shuffle className="h-4 w-4" />
+                )}
+                Quick mix
+              </Button>
+              <button
+                onClick={() => setMixExpanded((x) => !x)}
+                disabled={busy}
+                className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-1.5 text-sm transition-colors hover:bg-surface-2 disabled:opacity-50"
+              >
+                <Sparkles className="h-4 w-4" />
+                Generate new
+                <ChevronDown
+                  className={cn(
+                    "h-3.5 w-3.5 transition-transform",
+                    mixExpanded && "rotate-180",
+                  )}
+                />
+              </button>
+            </div>
+
+            {mixExpanded && (
+              <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border/50 pt-3">
+                <select
+                  value={mixLevel}
+                  onChange={(e) => setMixLevel(e.target.value)}
+                  className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring"
+                >
+                  <option value="">Any level</option>
+                  {levels.map((l) => (
+                    <option key={l} value={l}>
+                      {l}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={mixType}
+                  onChange={(e) => setMixType(e.target.value)}
+                  className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm capitalize outline-none focus:ring-2 focus:ring-ring"
+                >
+                  <option value="">Any type</option>
+                  {TYPES.map((t) => (
+                    <option key={t} value={t}>
+                      {t}
+                    </option>
+                  ))}
+                </select>
+                <Button size="sm" onClick={generateFromSelected} disabled={busy}>
+                  {busy ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <GraduationCap className="h-4 w-4" />
+                  )}
+                  Generate
+                </Button>
+              </div>
+            )}
+          </div>
+        )}
+
         {savedList.length === 0 ? (
           <p className="rounded-2xl border border-dashed border-border bg-surface p-6 text-center text-sm text-muted">
             Tests you generate are saved here so you can retake them anytime —
@@ -263,36 +490,65 @@ export function TestsClient({
           </p>
         ) : (
           <ul className="space-y-2">
-            {savedList.map((t) => (
-              <li
-                key={t.id}
-                className="flex items-center gap-3 rounded-xl border border-border bg-surface px-3 py-2.5"
-              >
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium">{t.title}</p>
-                  <p className="text-xs text-muted">
-                    {formatDate(t.created_at)}
-                    {t.meta?.item_count ? ` · ${t.meta.item_count} items` : ""}
-                    {t.used_count > 0 ? ` · taken ${t.used_count}×` : ""}
-                  </p>
-                </div>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => replay(t.id)}
-                  disabled={busy}
+            {savedList.map((t) => {
+              const isSelected = selected.has(t.id);
+              return (
+                <li
+                  key={t.id}
+                  onClick={mixMode ? () => toggleSelect(t.id) : undefined}
+                  className={cn(
+                    "flex items-center gap-3 rounded-xl border bg-surface px-3 py-2.5 transition-colors",
+                    mixMode && "cursor-pointer",
+                    isSelected
+                      ? "border-primary/50 bg-primary/5"
+                      : "border-border",
+                    mixMode && !isSelected && "hover:bg-surface-2",
+                  )}
                 >
-                  <Play className="h-4 w-4" /> Play
-                </Button>
-                <button
-                  onClick={() => remove(t.id)}
-                  aria-label="Delete test"
-                  className="rounded-md p-1.5 text-muted transition-colors hover:bg-surface-2 hover:text-accent"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
-              </li>
-            ))}
+                  {mixMode && (
+                    <span
+                      className={cn(
+                        "flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors",
+                        isSelected
+                          ? "border-primary bg-primary text-white"
+                          : "border-border",
+                      )}
+                    >
+                      {isSelected && <Check className="h-3 w-3" />}
+                    </span>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium">{t.title}</p>
+                    <p className="text-xs text-muted">
+                      {formatDate(t.created_at)}
+                      {t.meta?.item_count
+                        ? ` · ${t.meta.item_count} items`
+                        : ""}
+                      {t.used_count > 0 ? ` · taken ${t.used_count}×` : ""}
+                    </p>
+                  </div>
+                  {!mixMode && (
+                    <>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => replay(t.id)}
+                        disabled={busy}
+                      >
+                        <Play className="h-4 w-4" /> Play
+                      </Button>
+                      <button
+                        onClick={() => remove(t.id)}
+                        aria-label="Delete test"
+                        className="rounded-md p-1.5 text-muted transition-colors hover:bg-surface-2 hover:text-accent"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         )}
       </section>

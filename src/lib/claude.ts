@@ -35,6 +35,17 @@ function anthropicClient(): Anthropic {
 
 export type ChatTurn = { role: "user" | "assistant"; content: string };
 
+/** Lightweight streaming call for the in-test discuss endpoint — no thinking,
+ *  low max_tokens, fast for back-and-forth Q&A. */
+export function streamDiscuss(system: string, messages: ChatTurn[]) {
+  return anthropicClient().messages.stream({
+    model: CHAT_MODEL,
+    max_tokens: 1024,
+    system,
+    messages,
+  });
+}
+
 /** Stream a tutor answer. Returns a MessageStream; the caller pipes
  *  `.on("text", ...)` deltas to the browser and awaits `.finalMessage()`. */
 export function streamChat(system: string, messages: ChatTurn[]) {

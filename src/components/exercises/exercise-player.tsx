@@ -12,10 +12,21 @@ import {
   useSensors,
   type DragEndEvent,
 } from "@dnd-kit/core";
-import { Check, X, ArrowRight, RotateCcw, Trophy, Wand2, Loader2 } from "lucide-react";
+import {
+  Check,
+  X,
+  ArrowRight,
+  ArrowLeft,
+  RotateCcw,
+  Trophy,
+  Wand2,
+  Loader2,
+  MessageCircle,
+} from "lucide-react";
 import { Markdown } from "@/components/markdown";
 import { RubyText } from "@/components/ruby-text";
 import { Button } from "@/components/ui/button";
+import { ExerciseDiscussPanel } from "@/components/exercises/exercise-discuss-panel";
 import { stripFurigana } from "@/lib/furigana";
 import { cn } from "@/lib/utils";
 import type {
@@ -23,7 +34,26 @@ import type {
   McqExercise,
   ArrangeExercise,
   ClozeExercise,
+  DiscussMessage,
 } from "@/lib/types";
+
+// --- Snapshot types for back-navigation state restoration ---
+
+type McqSnapshot = { type: "mcq"; picked: number };
+type ArrangeSnapshot = { type: "arrange"; builtTexts: string[] };
+type StarArrangeSnapshot = { type: "star"; slots: (string | null)[] };
+type ClozeSnapshot = { type: "cloze"; value: string; picked: string | null };
+export type ExerciseSnapshot =
+  | McqSnapshot
+  | ArrangeSnapshot
+  | StarArrangeSnapshot
+  | ClozeSnapshot;
+
+type HistoryEntry = {
+  answered: boolean;
+  correct: boolean | null;
+  snapshot: ExerciseSnapshot | null;
+};
 
 function shuffle<T>(arr: T[]): T[] {
   const a = [...arr];
@@ -47,19 +77,23 @@ export function ExercisePlayer({
   exercises: Exercise[];
   onGrade?: (itemId: string, correct: boolean) => void;
   onDone?: () => void;
-  /** When provided, shows a per-question "Check & fix" button that calls this
-   *  to verify/refine the exercise; return the corrected one (or null). */
   onRefine?: (index: number, ex: Exercise) => Promise<Exercise | null>;
 }) {
   const [index, setIndex] = useState(0);
-  const [correctCount, setCorrectCount] = useState(0);
   const [cardKey, setCardKey] = useState(0);
-  // Local copy so a question can be replaced in place (Check & fix). The parent
-  // remounts this component (via `key`) when it loads a different exercise set,
-  // which re-initializes this from the new prop.
   const [items, setItems] = useState<Exercise[]>(exercises);
   const [refining, setRefining] = useState(false);
   const [refineNote, setRefineNote] = useState<string | null>(null);
+  const [history, setHistory] = useState<HistoryEntry[]>(() =>
+    exercises.map(() => ({ answered: false, correct: null, snapshot: null })),
+  );
+  const [chatByIndex, setChatByIndex] = useState<
+    Record<number, DiscussMessage[]>
+  >({});
+  const [chatOpen, setChatOpen] = useState(false);
+
+  const correctCount = history.filter((h) => h.correct === true).length;
+  const answeredCount = history.filter((h) => h.answered).length;
 
   async function checkAndFix() {
     if (!onRefine || refining) return;
@@ -73,7 +107,12 @@ export function ExercisePlayer({
           next[index] = fixed;
           return next;
         });
-        setCardKey((k) => k + 1); // remount the question fresh
+        setHistory((prev) => {
+          const next = [...prev];
+          next[index] = { answered: false, correct: null, snapshot: null };
+          return next;
+        });
+        setCardKey((k) => k + 1);
         setRefineNote("Question checked & refined.");
       } else {
         setRefineNote("Couldn't refine this one.");
@@ -118,7 +157,15 @@ export function ExercisePlayer({
             variant="outline"
             onClick={() => {
               setIndex(0);
-              setCorrectCount(0);
+              setHistory(
+                items.map(() => ({
+                  answered: false,
+                  correct: null,
+                  snapshot: null,
+                })),
+              );
+              setChatByIndex({});
+              setChatOpen(false);
               setCardKey((k) => k + 1);
             }}
           >
@@ -131,23 +178,49 @@ export function ExercisePlayer({
   }
 
   const ex = items[index];
+  const currentHistory = history[index];
 
-  function handleAnswered(correct: boolean) {
-    if (correct) setCorrectCount((n) => n + 1);
+  function handleAnswered(correct: boolean, snapshot: ExerciseSnapshot) {
+    setHistory((prev) => {
+      const next = [...prev];
+      next[index] = { answered: true, correct, snapshot };
+      return next;
+    });
     if (ex.item_id && onGrade) onGrade(ex.item_id, correct);
   }
 
   function next() {
     setIndex((i) => i + 1);
     setCardKey((k) => k + 1);
+    setChatOpen(false);
+    setRefineNote(null);
+  }
+
+  function prev() {
+    if (index === 0) return;
+    setIndex((i) => i - 1);
+    setCardKey((k) => k + 1);
+    setChatOpen(false);
+    setRefineNote(null);
   }
 
   return (
     <div>
+      {/* Header row */}
       <div className="mb-3 flex items-center justify-between text-sm text-muted">
-        <span>
-          Exercise {index + 1} / {items.length}
-        </span>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={prev}
+            disabled={index === 0}
+            title="Previous question"
+            className="flex items-center justify-center rounded-full border border-border p-1 transition-colors hover:bg-surface-2 disabled:pointer-events-none disabled:opacity-30"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" />
+          </button>
+          <span>
+            Exercise {index + 1} / {items.length}
+          </span>
+        </div>
         <div className="flex items-center gap-2">
           {onRefine && (
             <button
@@ -164,6 +237,22 @@ export function ExercisePlayer({
               Check &amp; fix
             </button>
           )}
+          <button
+            onClick={() => setChatOpen((o) => !o)}
+            title="Ask AI about this question"
+            className={cn(
+              "flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs transition-colors hover:bg-surface-2",
+              chatOpen
+                ? "border-primary/50 bg-primary/10 text-primary"
+                : "border-border",
+              chatByIndex[index]?.length
+                ? "border-primary/40 text-primary"
+                : "",
+            )}
+          >
+            <MessageCircle className="h-3.5 w-3.5" />
+            Ask AI
+          </button>
           <span className="rounded-full bg-surface-2 px-2 py-0.5 text-xs uppercase tracking-wide">
             {ex.type === "mcq"
               ? "Multiple choice"
@@ -175,14 +264,17 @@ export function ExercisePlayer({
           </span>
         </div>
       </div>
+
       {refineNote && (
         <p className="mb-2 text-xs text-muted">{refineNote}</p>
       )}
+
+      {/* Progress bar */}
       <div className="mb-4 h-1.5 w-full overflow-hidden rounded-full bg-surface-2">
         <motion.div
           className="h-full bg-primary"
           initial={false}
-          animate={{ width: `${(index / items.length) * 100}%` }}
+          animate={{ width: `${(answeredCount / items.length) * 100}%` }}
           transition={{ duration: 0.3 }}
         />
       </div>
@@ -196,18 +288,68 @@ export function ExercisePlayer({
           transition={{ duration: 0.18 }}
         >
           {ex.type === "mcq" && (
-            <McqView ex={ex} onAnswered={handleAnswered} onNext={next} />
+            <McqView
+              ex={ex}
+              onAnswered={handleAnswered}
+              onNext={next}
+              initialSnapshot={
+                currentHistory?.snapshot?.type === "mcq"
+                  ? currentHistory.snapshot
+                  : null
+              }
+            />
           )}
           {ex.type === "arrange" &&
             (ex.star_index != null && ex.star_index >= 0 ? (
-              <StarArrangeView ex={ex} onAnswered={handleAnswered} onNext={next} />
+              <StarArrangeView
+                ex={ex}
+                onAnswered={handleAnswered}
+                onNext={next}
+                initialSnapshot={
+                  currentHistory?.snapshot?.type === "star"
+                    ? currentHistory.snapshot
+                    : null
+                }
+              />
             ) : (
-              <ArrangeView ex={ex} onAnswered={handleAnswered} onNext={next} />
+              <ArrangeView
+                ex={ex}
+                onAnswered={handleAnswered}
+                onNext={next}
+                initialSnapshot={
+                  currentHistory?.snapshot?.type === "arrange"
+                    ? currentHistory.snapshot
+                    : null
+                }
+              />
             ))}
           {ex.type === "cloze" && (
-            <ClozeView ex={ex} onAnswered={handleAnswered} onNext={next} />
+            <ClozeView
+              ex={ex}
+              onAnswered={handleAnswered}
+              onNext={next}
+              initialSnapshot={
+                currentHistory?.snapshot?.type === "cloze"
+                  ? currentHistory.snapshot
+                  : null
+              }
+            />
           )}
         </motion.div>
+      </AnimatePresence>
+
+      {/* In-test AI chat panel */}
+      <AnimatePresence>
+        {chatOpen && (
+          <ExerciseDiscussPanel
+            exercise={ex}
+            messages={chatByIndex[index] ?? []}
+            onMessages={(msgs) =>
+              setChatByIndex((prev) => ({ ...prev, [index]: msgs }))
+            }
+            onClose={() => setChatOpen(false)}
+          />
+        )}
       </AnimatePresence>
     </div>
   );
@@ -278,20 +420,24 @@ function McqView({
   ex,
   onAnswered,
   onNext,
+  initialSnapshot,
 }: {
   ex: McqExercise;
-  onAnswered: (correct: boolean) => void;
+  onAnswered: (correct: boolean, snapshot: ExerciseSnapshot) => void;
   onNext: () => void;
+  initialSnapshot: McqSnapshot | null;
 }) {
   const reduce = useReducedMotion();
-  const [picked, setPicked] = useState<number | null>(null);
+  const [picked, setPicked] = useState<number | null>(
+    initialSnapshot?.picked ?? null,
+  );
   const done = picked !== null;
   const correct = picked === ex.answer;
 
   function choose(i: number) {
     if (done) return;
     setPicked(i);
-    onAnswered(i === ex.answer);
+    onAnswered(i === ex.answer, { type: "mcq", picked: i });
   }
 
   return (
@@ -354,18 +500,26 @@ function ArrangeView({
   ex,
   onAnswered,
   onNext,
+  initialSnapshot,
 }: {
   ex: ArrangeExercise;
-  onAnswered: (correct: boolean) => void;
+  onAnswered: (correct: boolean, snapshot: ExerciseSnapshot) => void;
   onNext: () => void;
+  initialSnapshot: ArrangeSnapshot | null;
 }) {
   const reduce = useReducedMotion();
   const pool = useMemo(
     () => shuffle(ex.tokens.map((t, i) => ({ t, i }))),
     [ex],
   );
-  const [order, setOrder] = useState<number[]>([]);
-  const [checked, setChecked] = useState(false);
+
+  const [order, setOrder] = useState<number[]>(() => {
+    if (!initialSnapshot) return [];
+    return initialSnapshot.builtTexts
+      .map((t) => pool.findIndex((p) => p.t === t))
+      .filter((i) => i !== -1);
+  });
+  const [checked, setChecked] = useState(initialSnapshot !== null);
 
   const used = new Set(order);
   const built = order.map((i) => pool[i].t);
@@ -380,8 +534,10 @@ function ArrangeView({
     setOrder((o) => o.slice(0, -1));
   }
   function check() {
+    if (checked) return;
+    const builtTexts = order.map((i) => pool[i].t);
     setChecked(true);
-    onAnswered(correct);
+    onAnswered(correct, { type: "arrange", builtTexts });
   }
 
   return (
@@ -463,30 +619,26 @@ function ArrangeView({
   );
 }
 
-// JLPT 並べ替え "★" sentence-ordering: a context sentence with four blanks (one
-// marked ★). The learner places four shuffled tiles into the blanks by drag or
-// tap; only the tile on the ★ blank is graded (like the real exam).
 function StarArrangeView({
   ex,
   onAnswered,
   onNext,
+  initialSnapshot,
 }: {
   ex: ArrangeExercise;
-  onAnswered: (correct: boolean) => void;
+  onAnswered: (correct: boolean, snapshot: ExerciseSnapshot) => void;
   onNext: () => void;
+  initialSnapshot: StarArrangeSnapshot | null;
 }) {
   const starIndex = ex.star_index ?? 0;
   const tiles = useMemo(
     () => shuffle(ex.tokens.map((t, i) => ({ id: `t${i}`, t }))),
     [ex],
   );
-  const [slots, setSlots] = useState<(string | null)[]>([
-    null,
-    null,
-    null,
-    null,
-  ]);
-  const [checked, setChecked] = useState(false);
+  const [slots, setSlots] = useState<(string | null)[]>(
+    initialSnapshot?.slots ?? [null, null, null, null],
+  );
+  const [checked, setChecked] = useState(initialSnapshot !== null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -516,12 +668,10 @@ function StarArrangeView({
     if (checked) return;
     setSlots((prev) => {
       if (prev[slotIdx] === id) return prev;
-      const fromIdx = prev.indexOf(id); // -1 if dragged from the tray
+      const fromIdx = prev.indexOf(id);
       const occupant = prev[slotIdx];
       const next = [...prev];
       next[slotIdx] = id;
-      // slot→slot: swap (occupant, which may be null, moves to id's old slot).
-      // tray→slot: occupant just returns to the tray (no longer in slots).
       if (fromIdx !== -1) next[fromIdx] = occupant;
       return next;
     });
@@ -553,7 +703,7 @@ function StarArrangeView({
 
   function check() {
     setChecked(true);
-    onAnswered(correct);
+    onAnswered(correct, { type: "star", slots: [...slots] });
   }
 
   const [before, after] = ex.prompt.split("{{BLANKS}}");
@@ -724,15 +874,19 @@ function ClozeView({
   ex,
   onAnswered,
   onNext,
+  initialSnapshot,
 }: {
   ex: ClozeExercise;
-  onAnswered: (correct: boolean) => void;
+  onAnswered: (correct: boolean, snapshot: ExerciseSnapshot) => void;
   onNext: () => void;
+  initialSnapshot: ClozeSnapshot | null;
 }) {
   const reduce = useReducedMotion();
-  const [value, setValue] = useState("");
-  const [picked, setPicked] = useState<string | null>(null);
-  const [checked, setChecked] = useState(false);
+  const [value, setValue] = useState(initialSnapshot?.value ?? "");
+  const [picked, setPicked] = useState<string | null>(
+    initialSnapshot?.picked ?? null,
+  );
+  const [checked, setChecked] = useState(initialSnapshot !== null);
   const hasChoices = !!(ex.choices && ex.choices.length > 0);
   const correct = norm((hasChoices ? picked : value) ?? "") === norm(ex.answer);
 
@@ -740,12 +894,20 @@ function ClozeView({
     if (checked) return;
     setPicked(c);
     setChecked(true);
-    onAnswered(norm(c) === norm(ex.answer));
+    onAnswered(norm(c) === norm(ex.answer), {
+      type: "cloze",
+      value: "",
+      picked: c,
+    });
   }
   function check() {
     if (checked || !value.trim()) return;
     setChecked(true);
-    onAnswered(norm(value) === norm(ex.answer));
+    onAnswered(norm(value) === norm(ex.answer), {
+      type: "cloze",
+      value,
+      picked: null,
+    });
   }
 
   return (
