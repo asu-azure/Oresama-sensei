@@ -128,12 +128,12 @@ export function KanjiBrowser({
               href={`/kanji/${encodeURIComponent(ch)}`}
               title={ready?.[ch]?.meanings.slice(0, 3).join(", ")}
               className={cn(
-                "relative flex aspect-square items-center justify-center rounded-xl border font-jp text-2xl transition-colors",
+                "relative flex aspect-square items-center justify-center rounded-xl border-2 font-jp text-2xl text-foreground transition-colors",
                 isLearned
-                  ? "border-emerald-500 bg-emerald-500/15 text-emerald-800 hover:bg-emerald-500/25 dark:text-emerald-200"
+                  ? "border-emerald-500 bg-emerald-500/10 hover:bg-emerald-500/20 dark:bg-emerald-400/15"
                   : isSeen
-                    ? "border-primary/50 bg-surface hover:bg-surface-2"
-                    : "border-border bg-surface hover:bg-surface-2",
+                    ? "border border-primary/50 bg-surface hover:bg-surface-2"
+                    : "border border-border bg-surface hover:bg-surface-2",
               )}
             >
               {ch}
