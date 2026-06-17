@@ -42,11 +42,14 @@ type Burst = {
   bits: {
     dx: number;
     dy: number;
+    rot: number;
     color: string;
-    shape: "circle" | "square" | "diamond";
+    shape: Shape;
     size: number;
   }[];
 };
+
+type Shape = "circle" | "square" | "diamond" | "triangle" | "plus";
 
 const POP_COLORS = [
   "var(--pop-pink)",
@@ -56,19 +59,25 @@ const POP_COLORS = [
   "var(--pop-purple)",
   "var(--primary)",
 ];
-const SHAPES = ["circle", "square", "diamond"] as const;
+const SHAPES: Shape[] = ["circle", "square", "diamond", "triangle", "plus"];
+
+const CLIP: Partial<Record<Shape, string>> = {
+  triangle: "polygon(50% 0%, 100% 100%, 0% 100%)",
+  plus: "polygon(35% 0,65% 0,65% 35%,100% 35%,100% 65%,65% 65%,65% 100%,35% 100%,35% 65%,0 65%,0 35%,35% 35%)",
+};
 
 function makeBurst(id: number, x: number, y: number): Burst {
-  const n = 7;
+  const n = 11;
   const bits = Array.from({ length: n }, (_, i) => {
     const angle = (i / n) * Math.PI * 2 + Math.random() * 0.6;
-    const dist = 26 + Math.random() * 20;
+    const dist = 46 + Math.random() * 36;
     return {
       dx: Math.cos(angle) * dist,
       dy: Math.sin(angle) * dist,
+      rot: (Math.random() - 0.5) * 320,
       color: POP_COLORS[Math.floor(Math.random() * POP_COLORS.length)],
       shape: SHAPES[Math.floor(Math.random() * SHAPES.length)],
-      size: 5 + Math.round(Math.random() * 5),
+      size: 10 + Math.round(Math.random() * 8),
     };
   });
   return { id, x, y, bits };
@@ -110,22 +119,23 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
               burst.bits.map((bit, i) => (
                 <motion.span
                   key={`${burst.id}-${i}`}
-                  initial={{ x: burst.x, y: burst.y, scale: 1, opacity: 1 }}
+                  initial={{ x: burst.x, y: burst.y, scale: 1, opacity: 1, rotate: 0 }}
                   animate={{
                     x: burst.x + bit.dx,
                     y: burst.y + bit.dy,
                     scale: 0,
                     opacity: 0,
+                    rotate: bit.rot,
                   }}
                   exit={{ opacity: 0 }}
-                  transition={{ duration: 0.45, ease: "easeOut" }}
+                  transition={{ duration: 0.6, ease: "easeOut" }}
                   className="absolute left-0 top-0"
                   style={{
                     width: bit.size,
                     height: bit.size,
                     background: bit.color,
-                    borderRadius: bit.shape === "circle" ? "9999px" : "1px",
-                    rotate: bit.shape === "diamond" ? "45deg" : "0deg",
+                    borderRadius: bit.shape === "circle" ? "9999px" : "2px",
+                    clipPath: CLIP[bit.shape],
                   }}
                 />
               )),

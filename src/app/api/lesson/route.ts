@@ -1,16 +1,59 @@
 import { createClient } from "@/lib/supabase/server";
 import { ocrImage } from "@/lib/gemini";
-import { streamLesson, extractKnowledge, generateExercises } from "@/lib/claude";
+import {
+  streamLesson,
+  extractKnowledge,
+  generateExercises,
+  ocrImageWithClaude,
+} from "@/lib/claude";
 import { recallKnowledge, storeKnowledge } from "@/lib/memory";
 import { buildLessonSystemPrompt } from "@/lib/prompts";
 import type { Profile } from "@/lib/types";
 
-const MAX_BYTES = 12 * 1024 * 1024; // 12 MB
+const MAX_BYTES = 12 * 1024 * 1024; // 12 MB per image
+const MAX_IMAGES = 6;
 const EXT: Record<string, string> = {
   "image/png": "png",
   "image/jpeg": "jpg",
   "image/webp": "webp",
 };
+
+type OcrModel = "auto" | "gemini" | "claude";
+
+/** True when a Gemini error looks transient/overloaded — worth a Claude fallback. */
+function isBusy(e: unknown): boolean {
+  const msg = e instanceof Error ? e.message : String(e);
+  return /\b(503|429)\b|UNAVAILABLE|RESOURCE_EXHAUSTED|overloaded|high demand/i.test(
+    msg,
+  );
+}
+
+/** Read one image with the chosen provider. `auto`/`gemini` try Gemini first and
+ *  fall back to Claude when Gemini is overloaded; `claude` forces Claude (with a
+ *  Gemini fallback on error). */
+async function runOcr(
+  base64: string,
+  mime: string,
+  model: OcrModel,
+): Promise<string> {
+  if (model === "claude") {
+    try {
+      return await ocrImageWithClaude(base64, mime);
+    } catch (e) {
+      console.warn("Claude OCR failed, falling back to Gemini:", e);
+      return ocrImage(base64, mime);
+    }
+  }
+  try {
+    return await ocrImage(base64, mime);
+  } catch (e) {
+    if (model === "auto" && isBusy(e)) {
+      console.warn("Gemini busy — falling back to Claude OCR.");
+      return ocrImageWithClaude(base64, mime);
+    }
+    throw e;
+  }
+}
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -20,28 +63,50 @@ export async function POST(request: Request) {
   if (!user) return new Response("Unauthorized", { status: 401 });
 
   const form = await request.formData();
-  const file = form.get("image");
   const deep = form.get("deep") === "true";
+  const ocrModel = (form.get("ocrModel") as OcrModel) || "auto";
 
-  if (!(file instanceof File)) {
+  // Accept one or many images (`images` from the multi-picker; `image` legacy).
+  const raw = form.getAll("images");
+  const files = (raw.length ? raw : [form.get("image")]).filter(
+    (f): f is File => f instanceof File,
+  );
+
+  if (files.length === 0) {
     return new Response("No image provided", { status: 400 });
   }
-  if (!EXT[file.type]) {
-    return new Response("Unsupported image type (use PNG, JPG, or WebP)", {
-      status: 415,
-    });
+  if (files.length > MAX_IMAGES) {
+    return new Response(`Too many images (max ${MAX_IMAGES})`, { status: 413 });
   }
-  if (file.size > MAX_BYTES) {
-    return new Response("Image too large (max 12 MB)", { status: 413 });
+  for (const f of files) {
+    if (!EXT[f.type]) {
+      return new Response("Unsupported image type (use PNG, JPG, or WebP)", {
+        status: 415,
+      });
+    }
+    if (f.size > MAX_BYTES) {
+      return new Response("An image is too large (max 12 MB each)", {
+        status: 413,
+      });
+    }
   }
 
-  const buffer = Buffer.from(await file.arrayBuffer());
-  const base64 = buffer.toString("base64");
+  // Read every page, in order, and stitch them into one source text.
+  const buffers = await Promise.all(
+    files.map(async (f) => Buffer.from(await f.arrayBuffer())),
+  );
 
-  // 1. Read the page with Gemini vision.
   let pageText: string;
   try {
-    pageText = await ocrImage(base64, file.type);
+    const pages = await Promise.all(
+      buffers.map((buf, i) => runOcr(buf.toString("base64"), files[i].type, ocrModel)),
+    );
+    pageText = pages
+      .map((t, i) =>
+        files.length > 1 ? `--- Page ${i + 1} ---\n${t.trim()}` : t.trim(),
+      )
+      .join("\n\n")
+      .trim();
   } catch (e) {
     console.error("OCR failed:", e);
     return new Response(
@@ -56,14 +121,17 @@ export async function POST(request: Request) {
     );
   }
 
-  // 2. Store the original image (private, scoped to the user's folder).
-  const path = `${user.id}/${crypto.randomUUID()}.${EXT[file.type]}`;
+  // Store the first image (private, scoped to the user's folder).
+  const first = files[0];
+  const path = `${user.id}/${crypto.randomUUID()}.${EXT[first.type]}`;
   const { error: uploadError } = await supabase.storage
     .from("lesson-images")
-    .upload(path, buffer, { contentType: file.type, upsert: false });
+    .upload(path, buffers[0], { contentType: first.type, upsert: false });
   if (uploadError) console.error("image upload failed:", uploadError.message);
 
-  const title = pageText.split("\n")[0].slice(0, 60) || "Untitled lesson";
+  const title =
+    pageText.replace(/^--- Page \d+ ---\n/, "").split("\n")[0].slice(0, 60) ||
+    "Untitled lesson";
 
   // 3. Create the lesson row up front so we have an id to return.
   const { data: lesson, error: lessonError } = await supabase

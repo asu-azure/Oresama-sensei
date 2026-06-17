@@ -164,13 +164,48 @@ rt {
   100% { transform: translate(0, 0)      rotate(180deg); }
 }
 
-/* One-shot flash-wipe for page transitions. Fades fully out at the end so the
-   skewed full-height panel never lingers as a stuck line on tall screens. */
+/* One-shot flash-wipe for page transitions — now a slim bright bar. Fades fully
+   out at the end so it never lingers as a stuck line on tall screens. */
 @keyframes pop-wipe {
-  0%   { transform: translateX(-120%) skewX(-12deg); opacity: 0; }
-  15%  { opacity: 0.85; }
-  85%  { opacity: 0.85; }
-  100% { transform: translateX(130%)  skewX(-12deg); opacity: 0; }
+  0%   { transform: translateX(-10vw) skewX(-12deg); opacity: 0; }
+  12%  { opacity: 0.9; }
+  80%  { opacity: 0.9; }
+  100% { transform: translateX(108vw)  skewX(-12deg); opacity: 0; }
+}
+
+/* Small geometric shapes trailing behind the wipe bar. */
+@keyframes pop-wipe-trail {
+  0%   { transform: translateX(-12vw) scale(0.5) rotate(0deg); opacity: 0; }
+  20%  { opacity: 0.9; }
+  100% { transform: translateX(106vw) scale(1) rotate(220deg); opacity: 0; }
+}
+
+/* ---------------------------------------------------------------------------
+   Pixel "buddies" — tiny characters that amble / sit / sleep along the bottom
+--------------------------------------------------------------------------- */
+@keyframes buddy-walk {
+  0%   { transform: translateX(0) scaleX(1); }
+  48%  { transform: translateX(72vw) scaleX(1); }
+  50%  { transform: translateX(72vw) scaleX(-1); }
+  98%  { transform: translateX(0) scaleX(-1); }
+  100% { transform: translateX(0) scaleX(1); }
+}
+/* Snap between the two walk frames (no fade). */
+@keyframes buddy-step {
+  0%, 49.9% { opacity: 0; }
+  50%, 100% { opacity: 1; }
+}
+/* Cross-fade a resting buddy between its "sit" and "sleep" poses. */
+@keyframes buddy-rest {
+  0%, 40% { opacity: 0; }
+  50%, 90% { opacity: 1; }
+  100% { opacity: 0; }
+}
+@keyframes buddy-zzz {
+  0%, 45% { opacity: 0; transform: translateY(0) scale(0.7); }
+  60% { opacity: 1; }
+  90% { opacity: 0.6; transform: translateY(-12px) scale(1); }
+  100% { opacity: 0; transform: translateY(-16px) scale(1); }
 }
 
 /* ---------------------------------------------------------------------------

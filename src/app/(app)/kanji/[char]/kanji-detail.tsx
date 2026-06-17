@@ -2,11 +2,12 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Sparkles, Loader2, Check, Lightbulb } from "lucide-react";
+import { ArrowLeft, Sparkles, Check, Lightbulb } from "lucide-react";
 import { StrokeOrder } from "@/components/kanji/stroke-order";
 import { SpeakButton } from "@/components/speak-button";
 import { Markdown } from "@/components/markdown";
 import { Button } from "@/components/ui/button";
+import { GeometricLoader } from "@/components/geometric-loader";
 import { cn } from "@/lib/utils";
 import { levelOf, isKanji, type KanjiInfo, type KanjiStrokes } from "@/lib/kanji";
 import { getOrGenerateMnemonic, setLearned } from "../actions";
@@ -25,6 +26,7 @@ export function KanjiDetail({
   examples,
   initialMnemonic,
   initialLearned,
+  autoLearned = false,
 }: {
   char: string;
   info: KanjiInfo | null;
@@ -32,6 +34,7 @@ export function KanjiDetail({
   examples: ExampleWord[];
   initialMnemonic: string | null;
   initialLearned: boolean;
+  autoLearned?: boolean;
 }) {
   // Best reading to speak: a kun (okurigana dots stripped), else on, else the kanji.
   const speakText =
@@ -41,6 +44,8 @@ export function KanjiDetail({
   const [generating, setGenerating] = useState(false);
   const [mnemonicError, setMnemonicError] = useState<string | null>(null);
   const [learned, setLearnedState] = useState(initialLearned);
+  // Effective state shown on the card: an explicit mark OR auto (a word mastered).
+  const effectiveLearned = learned || autoLearned;
 
   async function generate() {
     setGenerating(true);
@@ -66,17 +71,25 @@ export function KanjiDetail({
         >
           <ArrowLeft className="h-4 w-4" /> All kanji
         </Link>
-        <button
-          onClick={toggleLearned}
-          className={cn(
-            "flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm font-medium transition-colors",
-            learned
-              ? "border-emerald-600/40 bg-emerald-600/10 text-emerald-700"
-              : "border-border bg-surface text-muted hover:bg-surface-2",
+        <div className="flex flex-col items-end gap-1">
+          <button
+            onClick={toggleLearned}
+            className={cn(
+              "flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm font-medium transition-colors",
+              effectiveLearned
+                ? "border-emerald-600/40 bg-emerald-600/10 text-emerald-700"
+                : "border-border bg-surface text-muted hover:bg-surface-2",
+            )}
+          >
+            <Check className="h-4 w-4" />{" "}
+            {effectiveLearned ? "Learned" : "Mark learned"}
+          </button>
+          {autoLearned && !learned && (
+            <span className="text-[11px] text-muted">
+              auto · a word reached mastery
+            </span>
           )}
-        >
-          <Check className="h-4 w-4" /> {learned ? "Learned" : "Mark learned"}
-        </button>
+        </div>
       </div>
 
       <div className="grid gap-5 sm:grid-cols-[200px_1fr]">
@@ -214,7 +227,7 @@ export function KanjiDetail({
             <Button size="sm" onClick={generate} disabled={generating}>
               {generating ? (
                 <>
-                  <Loader2 className="h-4 w-4 animate-spin" /> Generating…
+                  <GeometricLoader size={16} /> Generating…
                 </>
               ) : (
                 <>

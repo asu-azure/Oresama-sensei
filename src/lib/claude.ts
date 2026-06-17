@@ -7,6 +7,7 @@ import {
   EXERCISE_REFINE_INSTRUCTION,
   buildDeepDivePrompt,
   buildCoachPrompt,
+  OCR_PROMPT,
 } from "@/lib/prompts";
 import type {
   Exercise,
@@ -34,6 +35,39 @@ function anthropicClient(): Anthropic {
 }
 
 export type ChatTurn = { role: "user" | "assistant"; content: string };
+
+/** OCR a page with Claude vision — the fallback/alternative to Gemini. Claude is
+ *  pricier and slower for OCR, so this is used when Gemini is overloaded or when
+ *  the user explicitly picks it. Reuses the same OCR prompt as Gemini. */
+export async function ocrImageWithClaude(
+  base64Data: string,
+  mimeType: string,
+): Promise<string> {
+  const media = (
+    ["image/jpeg", "image/png", "image/gif", "image/webp"].includes(mimeType)
+      ? mimeType
+      : "image/jpeg"
+  ) as "image/jpeg" | "image/png" | "image/gif" | "image/webp";
+
+  const res = await anthropicClient().messages.create({
+    model: CHAT_MODEL,
+    max_tokens: 2048,
+    messages: [
+      {
+        role: "user",
+        content: [
+          {
+            type: "image",
+            source: { type: "base64", media_type: media, data: base64Data },
+          },
+          { type: "text", text: OCR_PROMPT },
+        ],
+      },
+    ],
+  });
+  const text = res.content.find((b) => b.type === "text");
+  return (text && "text" in text ? text.text : "").trim();
+}
 
 /** Lightweight streaming call for the in-test discuss endpoint — no thinking,
  *  low max_tokens, fast for back-and-forth Q&A. */

@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { Nav } from "@/components/nav";
 import { SplashScreen } from "@/components/splash-screen";
 import { BackgroundParticles } from "@/components/background-particles";
+import { PixelBuddies } from "@/components/pixel-buddies";
 import { PageTransition } from "@/components/page-transition";
 
 export default async function AppLayout({
@@ -27,6 +28,7 @@ export default async function AppLayout({
   return (
     <div className="relative flex min-h-dvh flex-col">
       <BackgroundParticles />
+      <PixelBuddies />
       <SplashScreen />
       <Nav reviewDue={count ?? 0} />
       <div className="relative z-10 mx-auto w-full max-w-4xl flex-1 px-4 pb-[env(safe-area-inset-bottom)]">

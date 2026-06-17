@@ -41,6 +41,15 @@ export function BackgroundParticles() {
       <Shape kind="ring" color="var(--pop-orange)" size={40} pos={{ bottom: "12%", left: "40%" }} opacity={0.26} anim="pop-float 7s ease-in-out infinite" delay="1.3s" className="hidden md:block" />
       <Shape kind="square" color="var(--pop-green)" size={16} pos={{ top: "48%", right: "14%" }} opacity={0.3} anim="pop-spin 7s linear infinite" delay="3.4s" className="hidden md:block" />
       <Shape kind="triangle" color="var(--pop-yellow)" size={22} pos={{ bottom: "40%", left: "12%" }} opacity={0.3} anim="pop-drift 11s ease-in-out infinite" delay="0.6s" className="hidden md:block" />
+
+      {/* ---- extra accents to keep the field lively/varied ---- */}
+      <Shape kind="ring" color="var(--pop-pink)" size={28} pos={{ top: "78%", right: "12%" }} opacity={0.28} anim="pop-spin 10s linear infinite" delay="0.2s" className="hidden sm:block" />
+      <Shape kind="plus" color="var(--pop-purple)" size={22} pos={{ top: "34%", left: "9%" }} opacity={0.26} anim="pop-float 6.5s ease-in-out infinite" delay="2.2s" className="hidden md:block" />
+      <Shape kind="circle" color="var(--pop-cyan)" size={11} pos={{ top: "16%", right: "30%" }} opacity={0.32} anim="pop-pulse 3.5s ease-in-out infinite" delay="1.6s" className="hidden sm:block" />
+      <Shape kind="diamond" color="var(--pop-green)" size={18} pos={{ bottom: "26%", left: "26%" }} opacity={0.26} anim="pop-float-x 7.5s ease-in-out infinite" delay="0.5s" className="hidden md:block" />
+      <Shape kind="line" color="var(--pop-orange)" size={52} pos={{ top: "60%", left: "8%" }} opacity={0.26} anim="pop-float 6s ease-in-out infinite" delay="3.2s" className="hidden md:block" />
+      <Shape kind="square" color="var(--pop-yellow)" size={14} pos={{ top: "84%", left: "44%" }} opacity={0.3} anim="pop-spin-rev 8s linear infinite" delay="1.1s" className="hidden sm:block" />
+      <Shape kind="triangle" color="var(--pop-pink)" size={24} pos={{ top: "44%", right: "8%" }} opacity={0.24} anim="pop-drift 13s ease-in-out infinite" delay="2.8s" className="hidden md:block" />
     </div>
   );
 }

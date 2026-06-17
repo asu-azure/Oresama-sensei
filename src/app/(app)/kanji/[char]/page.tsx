@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { getInfo, getStrokes } from "@/lib/kanji";
+import { masteryLevel, type SrsLike } from "@/lib/mastery";
 import { KanjiDetail, type ExampleWord } from "./kanji-detail";
 
 export default async function KanjiCharPage({
@@ -20,11 +21,14 @@ export default async function KanjiCharPage({
   let examples: ExampleWord[] = [];
   let mnemonic: string | null = null;
   let learned = false;
+  let autoLearned = false;
   if (user && char) {
     const [{ data: words }, { data: row }] = await Promise.all([
       supabase
         .from("knowledge_items")
-        .select("id,term,reading,meaning")
+        .select(
+          "id,term,reading,meaning,srs_reps,srs_lapses,srs_stability,srs_difficulty,srs_interval",
+        )
         .eq("user_id", user.id)
         .ilike("term", `%${char}%`)
         .limit(30),
@@ -37,6 +41,10 @@ export default async function KanjiCharPage({
         .maybeSingle(),
     ]);
     examples = (words ?? []) as ExampleWord[];
+    // Any one saved word containing this kanji reaching mastery → auto-learned.
+    autoLearned = ((words ?? []) as SrsLike[]).some(
+      (w) => masteryLevel(w).level === "mastered",
+    );
     mnemonic = row?.mnemonic ?? null;
     learned = row?.learned ?? false;
   }
@@ -49,6 +57,7 @@ export default async function KanjiCharPage({
       examples={examples}
       initialMnemonic={mnemonic}
       initialLearned={learned}
+      autoLearned={autoLearned}
     />
   );
 }

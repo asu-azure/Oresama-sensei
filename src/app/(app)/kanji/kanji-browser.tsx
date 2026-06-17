@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Search } from "lucide-react";
+import { Search, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   LEVELS,
@@ -14,8 +14,15 @@ import {
   type KanjiInfo,
 } from "@/lib/kanji";
 
-export function KanjiBrowser({ seen }: { seen: string[] }) {
+export function KanjiBrowser({
+  seen,
+  learned = [],
+}: {
+  seen: string[];
+  learned?: string[];
+}) {
   const seenSet = useMemo(() => new Set(seen), [seen]);
+  const learnedSet = useMemo(() => new Set(learned), [learned]);
   const [level, setLevel] = useState<Level>("N5");
   const [q, setQ] = useState("");
   // Info for the active level (lazy) — used for English/reading search + tooltips.
@@ -97,28 +104,57 @@ export function KanjiBrowser({ seen }: { seen: string[] }) {
         />
       </div>
 
-      <p className="text-xs text-muted">{list.length} kanji</p>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted">
+        <span>{list.length} kanji</span>
+        <span className="flex items-center gap-1">
+          <span className="inline-block h-2.5 w-2.5 rounded-full bg-primary" /> in
+          your words
+        </span>
+        <span className="flex items-center gap-1">
+          <span className="inline-flex h-3.5 w-3.5 items-center justify-center rounded-full bg-emerald-500 text-white">
+            <Check className="h-2.5 w-2.5" />
+          </span>
+          learned
+        </span>
+      </div>
 
       <div className="grid grid-cols-6 gap-2 sm:grid-cols-8">
-        {list.map((ch) => (
-          <Link
-            key={ch}
-            href={`/kanji/${encodeURIComponent(ch)}`}
-            title={ready?.[ch]?.meanings.slice(0, 3).join(", ")}
-            className={cn(
-              "relative flex aspect-square items-center justify-center rounded-xl border bg-surface font-jp text-2xl transition-colors hover:bg-surface-2",
-              seenSet.has(ch) ? "border-primary/50" : "border-border",
-            )}
-          >
-            {ch}
-            {seenSet.has(ch) && (
-              <span
-                className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-primary"
-                title="In your saved words"
-              />
-            )}
-          </Link>
-        ))}
+        {list.map((ch) => {
+          const isLearned = learnedSet.has(ch);
+          const isSeen = seenSet.has(ch);
+          return (
+            <Link
+              key={ch}
+              href={`/kanji/${encodeURIComponent(ch)}`}
+              title={ready?.[ch]?.meanings.slice(0, 3).join(", ")}
+              className={cn(
+                "relative flex aspect-square items-center justify-center rounded-xl border font-jp text-2xl transition-colors",
+                isLearned
+                  ? "border-emerald-500 bg-emerald-500/15 text-emerald-800 hover:bg-emerald-500/25 dark:text-emerald-200"
+                  : isSeen
+                    ? "border-primary/50 bg-surface hover:bg-surface-2"
+                    : "border-border bg-surface hover:bg-surface-2",
+              )}
+            >
+              {ch}
+              {isLearned ? (
+                <span
+                  className="absolute right-0.5 top-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-emerald-500 text-white"
+                  title="Learned"
+                >
+                  <Check className="h-2.5 w-2.5" />
+                </span>
+              ) : (
+                isSeen && (
+                  <span
+                    className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-primary"
+                    title="In your saved words"
+                  />
+                )
+              )}
+            </Link>
+          );
+        })}
       </div>
 
       {list.length === 0 && (
