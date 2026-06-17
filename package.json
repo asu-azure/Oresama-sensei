@@ -10,7 +10,8 @@
     "pull": "git pull --rebase --autostash",
     "save": "node scripts/sync.mjs --no-pull",
     "sync": "node scripts/sync.mjs",
-    "kanji:build": "node scripts/build-kanji-data.mjs"
+    "kanji:build": "node scripts/build-kanji-data.mjs",
+    "pitch:build": "node scripts/build-pitch-data.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.104.1",

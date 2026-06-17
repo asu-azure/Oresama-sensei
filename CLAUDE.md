@@ -125,6 +125,10 @@ The **data lives in Supabase (cloud)**, so chats/vocab/lessons sync automaticall
   persists to whichever of `review_tests`/`lessons` the caller names by `index`. Deep-dive + chat→lesson
   degrade gracefully without their migrations (`0008`; chat reuses the existing text-lesson route with
   an optional `kind:"chat"`).
+- Pitch accent: `src/lib/pitch.ts` is client-safe (`pitchPattern` pure; `lookupAccent` lazy-imports the
+  4.4 MB `src/data/pitch/accents.json` only on first use). The toggle uses `useSyncExternalStore`
+  (no effects → lint-clean). Accent = downstep mora (0 heiban). Show the **kanjium CC BY-SA 4.0** credit
+  if surfacing attribution. `npm run pitch:build` regenerates the data (raw cached in `scripts/.cache`).
 - SRS is **FSRS** via `ts-fsrs` (`src/lib/srs.ts`). It's **server-only** (imports ts-fsrs); client code
   imports only the `Rating`/`IntervalPreview` **types** (`import type`, erased). `schedule(row,rating)`
   returns the column bag written by `api/srs`; `previewIntervals(row)` (used by `review/page.tsx`) powers
@@ -151,6 +155,23 @@ The **data lives in Supabase (cloud)**, so chats/vocab/lessons sync automaticall
   labels derive from **stability** (`src/lib/mastery.ts`), the Tests "Struggling" scope uses
   `srs_difficulty>=7`, and flashcards now show the **predicted next interval under each rating
   button** (Again/Hard/Good/Easy).
+- ✅ v2.8 shipped (pitch accent): optional **pitch-accent marks** on vocab readings — a global
+  **Pitch** toggle (`PitchToggle`/`use-pitch.ts`, localStorage, per-device) in Library/Search/Review;
+  when on, readings render the classic **overline + downstep** notation (`PitchAccent` +
+  `src/lib/pitch.ts` `splitMora`/`pitchPattern`). Data is the **kanjium** dictionary (CC BY-SA 4.0),
+  built into `src/data/pitch/accents.json` by `scripts/build-pitch-data.mjs` (`npm run pitch:build`)
+  and **lazy-loaded** only when pitch is enabled. Word-level only (sentence intonation isn't in free
+  offline data). No DB change.
+- ✅ v2.9 shipped (pitch colors + study coach): **(a)** pitch marks are now **colored by accent type**
+  (平板/頭高/中高/尾高 → blue/rose/amber/emerald) with a small JP type tag + a `PitchLegend` shown by the
+  toggle (`accentType`/`ACCENT_TYPE_META` in `src/lib/pitch.ts`). **(b)** a personalized **study coach**:
+  `src/lib/insights.ts` derives strengths/weaknesses **live from FSRS state** (`computeInsights` reuses
+  `masteryLevel`; zero LLM/DB cost — a struggling item self-resolves as it stabilizes). A **Study-next**
+  widget + **Coach's note** sit on `/dashboard`; the chat tutor's system prompt now carries a compact
+  `statsDigest` (`<learner_progress>` in `prompts.ts`) so Sensei adapts emphasis each turn. The coach
+  note is the only paid call: `generateCoachNote` (**Haiku**, `COACH_MODEL`) via `/api/insights/coach`,
+  **cached in `learner_insights`** (migration **0010**, owner runs it) keyed by a stats **signature** so
+  it regenerates only when weaknesses shift or after 24h.
 - ⏳ Next ideas (not built): a standalone personalized-lesson generator; Anki export; paginate
   `/dashboard` and `/map` (still fetch all items — covered for now by `loading.tsx`); real
   brand icon to replace the placeholder seal in `src/lib/icon-art.tsx`; a true `lesson_id` link on
@@ -166,6 +187,11 @@ The **data lives in Supabase (cloud)**, so chats/vocab/lessons sync automaticall
 - "Mastery" coloring is derived purely from existing `srs_*` fields (`src/lib/mastery.ts`); no new
   data is stored. New helpers: `src/components/exercises/exercise-player.tsx`, `src/app/(app)/library/*`,
   chat drawer + windowing in `src/app/(app)/chat/*`.
+- Learner strengths/weaknesses are **derived live** from the FSRS `srs_*` columns (`src/lib/insights.ts`),
+  NOT stored in a separate maintained table — the SRS state already IS a self-updating capability model,
+  so a derived view can't drift and costs nothing. The only persisted thing is the AI **coach narrative**
+  (`learner_insights`), cached by a weakness **signature** + 24h TTL so the Haiku call rarely fires.
+  Chat awareness is the same digest injected into the prompt (no per-message LLM analysis).
 - TTS uses the browser Web Speech API (ja-JP) — free, no API cost; `SpeakButton` no-ops where unsupported.
 - Furigana in short fields (exercise options/tokens) renders via `RubyText` (`src/components/ruby-text.tsx`);
   `showReading()`/`stripFurigana()` in `src/lib/furigana.ts` hide redundant kana and normalize answer checks.

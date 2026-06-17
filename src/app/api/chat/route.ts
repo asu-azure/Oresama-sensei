@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { streamChat, extractKnowledge, type ChatTurn } from "@/lib/claude";
 import { recallKnowledge, storeKnowledge, storeMessage } from "@/lib/memory";
 import { buildChatSystemPrompt } from "@/lib/prompts";
+import { computeInsights, statsDigest, type InsightItem } from "@/lib/insights";
 import type { Profile } from "@/lib/types";
 
 export async function POST(request: Request) {
@@ -53,19 +54,35 @@ export async function POST(request: Request) {
     content: message,
   });
 
-  // Load context: profile, recalled knowledge, recent conversation turns.
-  const [{ data: profile }, recalled, { data: history }] = await Promise.all([
-    supabase.from("profiles").select("*").eq("id", user.id).maybeSingle(),
-    recallKnowledge(supabase, message, 8),
-    supabase
-      .from("messages")
-      .select("role,content")
-      .eq("conversation_id", conversationId)
-      .order("created_at", { ascending: true })
-      .limit(20),
-  ]);
+  // Load context: profile, recalled knowledge, recent turns, and a live
+  // progress snapshot (plain SQL — no embeddings, no LLM) so Sensei knows the
+  // learner's current strengths/weaknesses.
+  const [{ data: profile }, recalled, { data: history }, { data: allItems }] =
+    await Promise.all([
+      supabase.from("profiles").select("*").eq("id", user.id).maybeSingle(),
+      recallKnowledge(supabase, message, 8),
+      supabase
+        .from("messages")
+        .select("role,content")
+        .eq("conversation_id", conversationId)
+        .order("created_at", { ascending: true })
+        .limit(20),
+      supabase
+        .from("knowledge_items")
+        .select(
+          "type,jlpt_level,term,srs_reps,srs_lapses,srs_stability,srs_difficulty,srs_interval,srs_due,created_at",
+        )
+        .eq("user_id", user.id),
+    ]);
 
-  const system = buildChatSystemPrompt(profile as Profile | null, recalled);
+  const digest = statsDigest(
+    computeInsights((allItems ?? []) as InsightItem[]),
+  );
+  const system = buildChatSystemPrompt(
+    profile as Profile | null,
+    recalled,
+    digest,
+  );
   const turns: ChatTurn[] = (history ?? []).map((m) => ({
     role: m.role as "user" | "assistant",
     content: m.content,

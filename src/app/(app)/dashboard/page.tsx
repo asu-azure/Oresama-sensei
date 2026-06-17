@@ -1,6 +1,12 @@
 import Link from "next/link";
 import { BookOpen, Brain, MessageCircle, Layers } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { computeInsights, type InsightItem } from "@/lib/insights";
+import { StudyNext } from "@/components/insights/study-next";
+import {
+  CoachNote,
+  type CoachNoteData,
+} from "@/components/insights/coach-note";
 
 type Item = {
   type: string;
@@ -9,6 +15,10 @@ type Item = {
   times_seen: number;
   srs_due: string | null;
   srs_reps: number;
+  srs_lapses: number | null;
+  srs_stability: number | null;
+  srs_difficulty: number | null;
+  srs_interval: number | null;
   term: string;
   reading: string | null;
 };
@@ -84,22 +94,35 @@ export default async function DashboardPage() {
   } = await supabase.auth.getUser();
 
   const nowMs = Date.now();
-  const [{ data: itemsRaw }, { data: lessonsRaw }, { count: questionCount }] =
-    await Promise.all([
-      supabase
-        .from("knowledge_items")
-        .select("type,jlpt_level,created_at,times_seen,srs_due,srs_reps,term,reading")
-        .eq("user_id", user!.id),
-      supabase.from("lessons").select("kind").eq("user_id", user!.id),
-      supabase
-        .from("messages")
-        .select("id", { count: "exact", head: true })
-        .eq("user_id", user!.id)
-        .eq("role", "user"),
-    ]);
+  const [
+    { data: itemsRaw },
+    { data: lessonsRaw },
+    { count: questionCount },
+    { data: coachRow },
+  ] = await Promise.all([
+    supabase
+      .from("knowledge_items")
+      .select(
+        "type,jlpt_level,created_at,times_seen,srs_due,srs_reps,srs_lapses,srs_stability,srs_difficulty,srs_interval,term,reading",
+      )
+      .eq("user_id", user!.id),
+    supabase.from("lessons").select("kind").eq("user_id", user!.id),
+    supabase
+      .from("messages")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", user!.id)
+      .eq("role", "user"),
+    supabase
+      .from("learner_insights")
+      .select("summary_md,focus_areas,generated_at")
+      .eq("user_id", user!.id)
+      .maybeSingle(),
+  ]);
 
   const items = (itemsRaw ?? []) as Item[];
   const lessons = (lessonsRaw ?? []) as { kind: string }[];
+  const insights = computeInsights(items as InsightItem[], new Date(nowMs));
+  const coachInitial = (coachRow as CoachNoteData | null) ?? null;
 
   const dueNow = items.filter(
     (i) => !i.srs_due || new Date(i.srs_due).getTime() <= nowMs,
@@ -180,6 +203,11 @@ export default async function DashboardPage() {
         </div>
       ) : (
         <>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <StudyNext insights={insights} />
+            <CoachNote initial={coachInitial} />
+          </div>
+
           <div className="grid gap-4 sm:grid-cols-2">
             <section className="rounded-2xl border border-border bg-surface p-5">
               <h2 className="mb-3 text-sm font-medium text-muted">By type</h2>

@@ -18,6 +18,10 @@ import { showReading } from "@/lib/furigana";
 import { SpeakButton } from "@/components/speak-button";
 import { KanjiChips } from "@/components/kanji/kanji-chips";
 import { DeepDiveSection } from "@/components/knowledge/deep-dive-section";
+import { PitchAccent } from "@/components/pitch-accent";
+import { PitchToggle } from "@/components/pitch-toggle";
+import { PitchLegend } from "@/components/pitch-legend";
+import { usePitch } from "@/lib/use-pitch";
 import type { ExplanationMap } from "../library/explanations";
 import { searchLessons, type LessonHit } from "./actions";
 
@@ -41,6 +45,7 @@ export function SearchClient({
   explainedIds: string[];
 }) {
   const reduce = useReducedMotion();
+  const pitchOn = usePitch();
   const explainedSet = useMemo(() => new Set(explainedIds), [explainedIds]);
   const [q, setQ] = useState("");
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -135,13 +140,18 @@ export function SearchClient({
 
   return (
     <div className="space-y-5 py-4">
-      <div>
-        <h1 className="text-2xl font-bold">Search</h1>
-        <p className="mt-1 text-sm text-muted">
-          Look up anything you&apos;ve saved — by kanji, kana, rōmaji, or English
-          meaning. Results appear as you type.
-        </p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold">Search</h1>
+          <p className="mt-1 text-sm text-muted">
+            Look up anything you&apos;ve saved — by kanji, kana, rōmaji, or
+            English meaning. Results appear as you type.
+          </p>
+        </div>
+        <PitchToggle />
       </div>
+
+      <PitchLegend />
 
       <div className="sticky top-16 z-10 -mx-1 px-1">
         <div className="relative">
@@ -212,11 +222,18 @@ export function SearchClient({
                         <div className="border-t border-border px-3 pb-3 pt-2.5">
                           <div className="flex items-start justify-between gap-2">
                             <div className="min-w-0">
-                              {showReading(it.term, it.reading) && (
-                                <p className="font-jp text-sm text-muted">
-                                  {it.reading}
-                                </p>
-                              )}
+                              {showReading(it.term, it.reading) &&
+                                (pitchOn ? (
+                                  <PitchAccent
+                                    term={it.term}
+                                    reading={it.reading!}
+                                    className="text-sm text-muted"
+                                  />
+                                ) : (
+                                  <p className="font-jp text-sm text-muted">
+                                    {it.reading}
+                                  </p>
+                                ))}
                               {it.meaning && (
                                 <p className="mt-1 text-sm">{it.meaning}</p>
                               )}

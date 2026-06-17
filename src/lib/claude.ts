@@ -6,6 +6,7 @@ import {
   buildKanjiMnemonicPrompt,
   EXERCISE_REFINE_INSTRUCTION,
   buildDeepDivePrompt,
+  buildCoachPrompt,
 } from "@/lib/prompts";
 import type {
   Exercise,
@@ -20,6 +21,9 @@ import type { KanjiInfo, KanjiComponent } from "@/lib/kanji";
 export const CHAT_MODEL = "claude-sonnet-4-6";
 export const LESSON_MODEL = "claude-sonnet-4-6";
 export const DEEP_LESSON_MODEL = "claude-opus-4-8";
+// The coach note only summarizes an already-digested stats snapshot, so the
+// cheapest model is plenty — and it's cached, so it rarely runs.
+export const COACH_MODEL = "claude-haiku-4-5";
 
 let _client: Anthropic | null = null;
 function anthropicClient(): Anthropic {
@@ -639,4 +643,64 @@ export async function generateKanjiMnemonic(input: {
 
   const text = res.content.find((b) => b.type === "text");
   return text && text.type === "text" ? text.text.trim() : "";
+}
+
+// --- Personalized study-coach note (from a deterministic stats digest) ---
+
+const COACH_SCHEMA = {
+  type: "object",
+  properties: {
+    summary_md: { type: "string" },
+    focus_areas: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          label: { type: "string" },
+          why: { type: "string" },
+          action: { type: "string" },
+        },
+        required: ["label", "why", "action"],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ["summary_md", "focus_areas"],
+  additionalProperties: false,
+} as const;
+
+export type CoachFocus = { label: string; why: string; action: string };
+export type CoachNote = { summary_md: string; focus_areas: CoachFocus[] };
+
+/** Turn a deterministic strengths/weaknesses digest into a short coaching note
+ *  with named focus areas. Cheap model + structured output; callers cache it. */
+export async function generateCoachNote(input: {
+  digest: string;
+  profile: Profile | null;
+}): Promise<CoachNote> {
+  const res = await anthropicClient().messages.create({
+    model: COACH_MODEL,
+    max_tokens: 1200,
+    output_config: { format: { type: "json_schema", schema: COACH_SCHEMA } },
+    system: buildCoachPrompt(input.profile),
+    messages: [
+      {
+        role: "user",
+        content: `Here is the learner's current progress snapshot. Coach me.\n\n<snapshot>\n${input.digest}\n</snapshot>`,
+      },
+    ],
+  });
+
+  const text = res.content.find((b) => b.type === "text");
+  if (!text || text.type !== "text")
+    return { summary_md: "", focus_areas: [] };
+  try {
+    const parsed = JSON.parse(text.text) as Partial<CoachNote>;
+    return {
+      summary_md: (parsed.summary_md ?? "").trim(),
+      focus_areas: (parsed.focus_areas ?? []).slice(0, 4),
+    };
+  } catch {
+    return { summary_md: "", focus_areas: [] };
+  }
 }

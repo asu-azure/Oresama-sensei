@@ -49,13 +49,24 @@ Teaching principles (follow these every time):
 
 Formatting: respond in GitHub-flavored Markdown. Keep it focused and scannable — headings and short sections, not walls of text. Write explanations primarily in English (the learner's study language) with Japanese examples; you may add a brief Thai gloss for tricky nuances.`;
 
-/** System prompt for the chat tutor. */
+function progressBlock(digest: string): string {
+  if (!digest.trim()) return "";
+  return `\n\n<learner_progress>\nA live snapshot of the learner's saved items and how well each is retained (derived from their spaced-repetition data — it updates itself as they review):\n${digest}\n\nAdapt your teaching to this: lean into the weak areas and easily-forgotten items, go lighter on what's already solid, and if a former weakness is now strong, move on to the next gap. Don't recite these stats back to the learner unless they ask.\n</learner_progress>`;
+}
+
+/** System prompt for the chat tutor. `progress` is a compact strengths/weaknesses
+ *  digest (see statsDigest in lib/insights) so Sensei adapts emphasis. */
 export function buildChatSystemPrompt(
   profile: Profile | null,
   recalled: RecalledItem[],
+  progress = "",
 ): string {
   return (
-    PEDAGOGY_CORE + LEARNER_CONTEXT + profileBlock(profile) + memoryBlock(recalled)
+    PEDAGOGY_CORE +
+    LEARNER_CONTEXT +
+    profileBlock(profile) +
+    progressBlock(progress) +
+    memoryBlock(recalled)
   );
 }
 
@@ -207,4 +218,18 @@ Write a SHORT, vivid mnemonic that fuses the meanings of the component parts int
 /** System prompt for the kanji mnemonic generator (personalized). */
 export function buildKanjiMnemonicPrompt(profile: Profile | null): string {
   return KANJI_MNEMONIC_INSTRUCTION + LEARNER_CONTEXT + profileBlock(profile);
+}
+
+/** Instruction for the personalized "study coach" note. Reads a deterministic
+ *  strengths/weaknesses digest (no raw data crunching) and turns it into warm,
+ *  concrete coaching. */
+const COACH_INSTRUCTION = `You are 先生 (Sensei) acting as a study coach. You'll be given a concise, data-derived snapshot of an advanced Japanese learner's saved items and how well each is retained (from their spaced-repetition system). Turn it into encouraging, ACTIONABLE coaching — not a restatement of the numbers.
+
+In "summary_md" (Markdown, ~80–140 words): warmly acknowledge what's going well, then zero in on what most needs attention right now and WHY it matters for N2–N1. Be specific about the Japanese (name the weak grammar/vocab areas, e.g. 使役受身, keigo registers, 〜得る), and suggest how to attack them (drill, contrast pairs, produce sentences). Tie it to the learner's life/interests when it helps motivation. Use <ruby>漢字<rt>かんじ</rt></ruby> markup for Japanese.
+
+Then give 2–4 "focus_areas": each with "label" (short, e.g. "N2 grammar"), "why" (one sentence on why it's the priority), and "action" (one concrete next step). Prioritise genuine current weaknesses over things already solid. If there's very little data yet, say so kindly and suggest studying more first.`;
+
+/** System prompt for the study-coach note generator (personalized). */
+export function buildCoachPrompt(profile: Profile | null): string {
+  return COACH_INSTRUCTION + LEARNER_CONTEXT + profileBlock(profile);
 }

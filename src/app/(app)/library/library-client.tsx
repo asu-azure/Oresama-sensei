@@ -25,6 +25,10 @@ import { showReading } from "@/lib/furigana";
 import { SpeakButton } from "@/components/speak-button";
 import { KanjiChips } from "@/components/kanji/kanji-chips";
 import { DeepDiveSection } from "@/components/knowledge/deep-dive-section";
+import { PitchAccent } from "@/components/pitch-accent";
+import { PitchToggle } from "@/components/pitch-toggle";
+import { PitchLegend } from "@/components/pitch-legend";
+import { usePitch } from "@/lib/use-pitch";
 import type { ExplanationMap } from "./explanations";
 import { cn, formatDate } from "@/lib/utils";
 import { LibraryCalendar } from "./library-calendar";
@@ -67,6 +71,7 @@ export function LibraryClient({
   explainedIds: string[];
 }) {
   const reduce = useReducedMotion();
+  const pitchOn = usePitch();
   const explainedSet = useMemo(() => new Set(explainedIds), [explainedIds]);
 
   // Filters
@@ -194,13 +199,18 @@ export function LibraryClient({
 
   return (
     <div className="space-y-5 py-4">
-      <div>
-        <h1 className="text-2xl font-bold">Vocab &amp; grammar</h1>
-        <p className="mt-1 text-sm text-muted">
-          {total} saved {total === 1 ? "item" : "items"} · tap a day to see what
-          you added, tap any item to expand it.
-        </p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold">Vocab &amp; grammar</h1>
+          <p className="mt-1 text-sm text-muted">
+            {total} saved {total === 1 ? "item" : "items"} · tap a day to see what
+            you added, tap any item to expand it.
+          </p>
+        </div>
+        <PitchToggle />
       </div>
+
+      <PitchLegend />
 
       <LibraryCalendar
         dayCounts={dayCounts}
@@ -369,11 +379,18 @@ export function LibraryClient({
                     <div className="border-t border-border px-3 pb-3 pt-2.5">
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
-                          {showReading(it.term, it.reading) && (
-                            <p className="font-jp text-sm text-muted">
-                              {it.reading}
-                            </p>
-                          )}
+                          {showReading(it.term, it.reading) &&
+                            (pitchOn ? (
+                              <PitchAccent
+                                term={it.term}
+                                reading={it.reading!}
+                                className="text-sm text-muted"
+                              />
+                            ) : (
+                              <p className="font-jp text-sm text-muted">
+                                {it.reading}
+                              </p>
+                            ))}
                           {it.meaning && (
                             <p className="mt-1 text-sm">{it.meaning}</p>
                           )}
@@ -447,6 +464,21 @@ export function LibraryClient({
         >
           {loadingMore && <Loader2 className="h-4 w-4 animate-spin" />}
         </div>
+      )}
+
+      {pitchOn && (
+        <p className="pt-2 text-center text-[11px] text-muted">
+          Pitch-accent data:{" "}
+          <a
+            href="https://github.com/mifunetoshiro/kanjium"
+            className="underline"
+            target="_blank"
+            rel="noreferrer"
+          >
+            kanjium
+          </a>{" "}
+          (CC BY-SA 4.0).
+        </p>
       )}
     </div>
   );

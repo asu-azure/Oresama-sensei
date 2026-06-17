@@ -7,6 +7,10 @@ import { Check, RotateCcw, Brain, GraduationCap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { showReading } from "@/lib/furigana";
 import { SpeakButton } from "@/components/speak-button";
+import { PitchAccent } from "@/components/pitch-accent";
+import { PitchToggle } from "@/components/pitch-toggle";
+import { PitchLegend } from "@/components/pitch-legend";
+import { usePitch } from "@/lib/use-pitch";
 import type { Rating, IntervalPreview } from "@/lib/srs";
 
 export type ReviewCard = {
@@ -39,13 +43,17 @@ export function ReviewClient({
         <h1 className="flex items-center gap-2 text-lg font-semibold">
           <Brain className="h-5 w-5 text-primary" /> Review
         </h1>
-        <Link
-          href="/tests"
-          className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-muted transition-colors hover:bg-surface-2 hover:text-foreground"
-        >
-          <GraduationCap className="h-4 w-4" /> Practice tests
-        </Link>
+        <div className="flex items-center gap-2">
+          <PitchToggle />
+          <Link
+            href="/tests"
+            className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-muted transition-colors hover:bg-surface-2 hover:text-foreground"
+          >
+            <GraduationCap className="h-4 w-4" /> Practice tests
+          </Link>
+        </div>
       </div>
+      <PitchLegend className="mb-4" />
       <Flashcards cards={cards} previews={previews} />
     </div>
   );
@@ -58,6 +66,7 @@ function Flashcards({
   cards: ReviewCard[];
   previews: Record<string, IntervalPreview>;
 }) {
+  const pitchOn = usePitch();
   const [index, setIndex] = useState(0);
   const [revealed, setRevealed] = useState(false);
   const [reviewed, setReviewed] = useState(0);
@@ -162,9 +171,16 @@ function Flashcards({
 
           {revealed ? (
             <div className="mt-5 space-y-2 text-left">
-              {showReading(card.term, card.reading) && (
-                <p className="font-jp text-lg text-muted">{card.reading}</p>
-              )}
+              {showReading(card.term, card.reading) &&
+                (pitchOn ? (
+                  <PitchAccent
+                    term={card.term}
+                    reading={card.reading!}
+                    className="text-lg text-muted"
+                  />
+                ) : (
+                  <p className="font-jp text-lg text-muted">{card.reading}</p>
+                ))}
               {card.meaning && <p className="text-base">{card.meaning}</p>}
               {card.example && (
                 <p className="font-jp text-sm text-muted">{card.example}</p>
