@@ -1,34 +1,42 @@
 @import "tailwindcss";
 
 /* ---------------------------------------------------------------------------
-   Design tokens — calm "study" aesthetic: warm paper + ink, indigo, sakura
+   Design tokens — Japanese pop-art: white + bright green, vivid accents
 --------------------------------------------------------------------------- */
 :root {
-  --background: #faf8f4;
+  --background: #ffffff;
   --surface: #ffffff;
-  --surface-2: #f3efe8;
-  --foreground: #1c1917;
-  --muted: #78716c;
-  --border: #e7e1d6;
-  --primary: #4f46e5;
+  --surface-2: #f0fdf4;
+  --foreground: #0f172a;
+  --muted: #64748b;
+  --border: #dcfce7;
+  --primary: #16a34a;
   --primary-foreground: #ffffff;
-  --accent: #e11d48;
-  --ring: #6366f1;
-  --radius: 1rem;
+  --accent: #f43f5e;
+  --ring: #22c55e;
+  --radius: 0.875rem;
+
+  /* Decorative pop colors — used only by particles */
+  --pop-pink: #ff3366;
+  --pop-yellow: #ffd600;
+  --pop-cyan: #00bcd4;
+  --pop-orange: #ff6b35;
+  --pop-purple: #a855f7;
+  --pop-green: #16a34a;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0b0b10;
-    --surface: #15151d;
-    --surface-2: #1d1d27;
-    --foreground: #ededed;
-    --muted: #9b9ba6;
-    --border: #2a2a35;
-    --primary: #818cf8;
-    --primary-foreground: #0b0b10;
+    --background: #052e16;
+    --surface: #0d3321;
+    --surface-2: #14532d;
+    --foreground: #f0fdf4;
+    --muted: #86efac;
+    --border: #166534;
+    --primary: #4ade80;
+    --primary-foreground: #052e16;
     --accent: #fb7185;
-    --ring: #818cf8;
+    --ring: #4ade80;
   }
 }
 
@@ -114,4 +122,38 @@ rt {
 }
 .animate-fade-in-up {
   animation: fade-in-up 0.35s ease-out both;
+}
+
+/* ---------------------------------------------------------------------------
+   Pop-art particle animations — GPU-safe (transform + opacity only)
+--------------------------------------------------------------------------- */
+@keyframes pop-float {
+  0%, 100% { transform: translateY(0px) rotate(0deg); }
+  50%       { transform: translateY(-18px) rotate(6deg); }
+}
+@keyframes pop-float-x {
+  0%, 100% { transform: translateX(0px) rotate(0deg); }
+  50%       { transform: translateX(14px) rotate(-8deg); }
+}
+@keyframes pop-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+@keyframes pop-spin-rev {
+  from { transform: rotate(0deg) scale(1); }
+  to   { transform: rotate(-360deg) scale(1); }
+}
+@keyframes pop-pulse {
+  0%, 100% { transform: scale(1);    opacity: var(--particle-opacity, 0.10); }
+  50%       { transform: scale(1.18); opacity: calc(var(--particle-opacity, 0.10) * 1.6); }
+}
+@keyframes pop-drift {
+  0%   { transform: translate(0, 0)      rotate(0deg);   }
+  33%  { transform: translate(12px, -16px) rotate(60deg);  }
+  66%  { transform: translate(-8px, -22px) rotate(120deg); }
+  100% { transform: translate(0, 0)      rotate(180deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pop-particle { animation: none !important; }
 }
