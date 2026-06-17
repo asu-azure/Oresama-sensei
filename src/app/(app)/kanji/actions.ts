@@ -79,3 +79,27 @@ export async function setLearned(char: string, learned: boolean): Promise<void> 
     { onConflict: "user_id,character" },
   );
 }
+
+/** Mark several kanji learned/unlearned at once (batch select on the list page). */
+export async function setManyLearned(
+  chars: string[],
+  learned: boolean,
+): Promise<void> {
+  if (chars.length === 0) return;
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return;
+
+  const now = new Date().toISOString();
+  const rows = chars.slice(0, 500).map((character) => ({
+    user_id: user.id,
+    character,
+    learned,
+    updated_at: now,
+  }));
+  await supabase
+    .from("kanji")
+    .upsert(rows, { onConflict: "user_id,character" });
+}

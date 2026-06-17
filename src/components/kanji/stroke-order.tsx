@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useReducedMotion } from "framer-motion";
 import { RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -15,24 +14,16 @@ export function StrokeOrder({
   strokes: string[];
   className?: string;
 }) {
-  const reduce = useReducedMotion();
   const refs = useRef<(SVGPathElement | null)[]>([]);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const [playId, setPlayId] = useState(0);
 
+  // The stroke-drawing is a core learning feature, so it always animates — even
+  // when the OS "reduce motion" setting is on (which would otherwise freeze it).
   useEffect(() => {
     for (const t of timers.current) clearTimeout(t);
     timers.current = [];
     const paths = refs.current.slice(0, strokes.length).filter(Boolean) as SVGPathElement[];
-
-    if (reduce) {
-      for (const p of paths) {
-        p.style.transition = "none";
-        p.style.strokeDasharray = "none";
-        p.style.strokeDashoffset = "0";
-      }
-      return;
-    }
 
     // Prime: hide every stroke (dashoffset = full length).
     for (const p of paths) {
@@ -60,7 +51,7 @@ export function StrokeOrder({
       for (const t of timers.current) clearTimeout(t);
       timers.current = [];
     };
-  }, [playId, strokes, reduce]);
+  }, [playId, strokes]);
 
   return (
     <div className={cn("relative aspect-square", className)}>

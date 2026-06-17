@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Search, Check } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Search, Check, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   LEVELS,
@@ -13,6 +14,7 @@ import {
   type Level,
   type KanjiInfo,
 } from "@/lib/kanji";
+import { setManyLearned } from "./actions";
 
 export function KanjiBrowser({
   seen,
@@ -21,6 +23,7 @@ export function KanjiBrowser({
   seen: string[];
   learned?: string[];
 }) {
+  const router = useRouter();
   const seenSet = useMemo(() => new Set(seen), [seen]);
   const learnedSet = useMemo(() => new Set(learned), [learned]);
   const [level, setLevel] = useState<Level>("N5");
@@ -29,6 +32,12 @@ export function KanjiBrowser({
   const [info, setInfo] = useState<{ level: Level; data: Record<string, KanjiInfo> } | null>(
     null,
   );
+
+  // Batch selection
+  const [selectMode, setSelectMode] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [overrides, setOverrides] = useState<Record<string, boolean>>({});
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -62,14 +71,69 @@ export function KanjiBrowser({
     });
   }, [q, level, ready]);
 
+  const isLearned = (ch: string) =>
+    ch in overrides ? overrides[ch] : learnedSet.has(ch);
+
+  function toggleSelect(ch: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(ch)) next.delete(ch);
+      else next.add(ch);
+      return next;
+    });
+  }
+
+  function exitSelect() {
+    setSelectMode(false);
+    setSelected(new Set());
+  }
+
+  function selectAllShown() {
+    setSelected(new Set(list));
+  }
+
+  async function applyLearned(value: boolean) {
+    const chars = [...selected];
+    if (chars.length === 0) return;
+    setBusy(true);
+    // Optimistic
+    setOverrides((prev) => {
+      const next = { ...prev };
+      for (const ch of chars) next[ch] = value;
+      return next;
+    });
+    try {
+      await setManyLearned(chars, value);
+      router.refresh();
+    } catch {
+      // leave the optimistic state; a refresh will reconcile next visit
+    } finally {
+      setBusy(false);
+      setSelected(new Set());
+    }
+  }
+
   return (
     <div className="space-y-5 py-4">
-      <div>
-        <h1 className="text-2xl font-bold">Kanji</h1>
-        <p className="mt-1 text-sm text-muted">
-          Stroke order, readings, and the parts each kanji is built from. Ones
-          you&apos;ve already met are marked.
-        </p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold">Kanji</h1>
+          <p className="mt-1 text-sm text-muted">
+            Stroke order, readings, and the parts each kanji is built from. Ones
+            you&apos;ve already met are marked.
+          </p>
+        </div>
+        <button
+          onClick={() => (selectMode ? exitSelect() : setSelectMode(true))}
+          className={cn(
+            "shrink-0 rounded-full border px-3 py-1.5 text-sm font-medium transition-colors",
+            selectMode
+              ? "border-primary bg-primary/10 text-primary"
+              : "border-border bg-surface text-muted hover:bg-surface-2",
+          )}
+        >
+          {selectMode ? "Done" : "Select"}
+        </button>
       </div>
 
       {/* Level tabs */}
@@ -116,42 +180,75 @@ export function KanjiBrowser({
           </span>
           learned
         </span>
+        {selectMode && (
+          <button
+            onClick={selectAllShown}
+            className="text-primary underline hover:no-underline"
+          >
+            Select all shown
+          </button>
+        )}
       </div>
 
-      <div className="grid grid-cols-6 gap-2 sm:grid-cols-8">
+      <div
+        className={cn(
+          "grid grid-cols-6 gap-2 sm:grid-cols-8",
+          selectMode && selected.size > 0 && "pb-20",
+        )}
+      >
         {list.map((ch) => {
-          const isLearned = learnedSet.has(ch);
+          const learnedNow = isLearned(ch);
           const isSeen = seenSet.has(ch);
+          const isSel = selected.has(ch);
+          const cls = cn(
+            "relative flex aspect-square items-center justify-center rounded-xl border-2 font-jp text-2xl text-foreground transition-colors",
+            isSel
+              ? "border-primary ring-2 ring-primary bg-primary/10"
+              : learnedNow
+                ? "border-emerald-500 bg-emerald-500/10 hover:bg-emerald-500/20 dark:bg-emerald-400/15"
+                : isSeen
+                  ? "border border-primary/50 bg-surface hover:bg-surface-2"
+                  : "border border-border bg-surface hover:bg-surface-2",
+          );
+          const badge = learnedNow ? (
+            <span
+              className="absolute right-0.5 top-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-emerald-500 text-white"
+              title="Learned"
+            >
+              <Check className="h-2.5 w-2.5" />
+            </span>
+          ) : (
+            isSeen && (
+              <span
+                className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-primary"
+                title="In your saved words"
+              />
+            )
+          );
+
+          if (selectMode) {
+            return (
+              <button key={ch} onClick={() => toggleSelect(ch)} className={cls}>
+                {ch}
+                {isSel ? (
+                  <span className="absolute left-0.5 top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                    <Check className="h-3 w-3" />
+                  </span>
+                ) : (
+                  badge
+                )}
+              </button>
+            );
+          }
           return (
             <Link
               key={ch}
               href={`/kanji/${encodeURIComponent(ch)}`}
               title={ready?.[ch]?.meanings.slice(0, 3).join(", ")}
-              className={cn(
-                "relative flex aspect-square items-center justify-center rounded-xl border-2 font-jp text-2xl text-foreground transition-colors",
-                isLearned
-                  ? "border-emerald-500 bg-emerald-500/10 hover:bg-emerald-500/20 dark:bg-emerald-400/15"
-                  : isSeen
-                    ? "border border-primary/50 bg-surface hover:bg-surface-2"
-                    : "border border-border bg-surface hover:bg-surface-2",
-              )}
+              className={cls}
             >
               {ch}
-              {isLearned ? (
-                <span
-                  className="absolute right-0.5 top-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-emerald-500 text-white"
-                  title="Learned"
-                >
-                  <Check className="h-2.5 w-2.5" />
-                </span>
-              ) : (
-                isSeen && (
-                  <span
-                    className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-primary"
-                    title="In your saved words"
-                  />
-                )
-              )}
+              {badge}
             </Link>
           );
         })}
@@ -182,6 +279,38 @@ export function KanjiBrowser({
         </a>{" "}
         (MIT).
       </p>
+
+      {/* Batch action bar */}
+      {selectMode && selected.size > 0 && (
+        <div className="fixed inset-x-0 bottom-4 z-40 flex justify-center px-4">
+          <div className="flex items-center gap-2 rounded-full border border-border bg-surface/95 px-3 py-2 shadow-lg backdrop-blur">
+            <span className="px-1 text-sm font-medium">
+              {selected.size} selected
+            </span>
+            <button
+              onClick={() => applyLearned(true)}
+              disabled={busy}
+              className="flex items-center gap-1.5 rounded-full bg-emerald-500 px-3 py-1.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+            >
+              <Check className="h-4 w-4" /> Mark learned
+            </button>
+            <button
+              onClick={() => applyLearned(false)}
+              disabled={busy}
+              className="rounded-full border border-border px-3 py-1.5 text-sm font-medium text-muted transition-colors hover:bg-surface-2 disabled:opacity-50"
+            >
+              Unmark
+            </button>
+            <button
+              onClick={() => setSelected(new Set())}
+              className="rounded-full p-1.5 text-muted transition-colors hover:bg-surface-2"
+              aria-label="Clear selection"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
