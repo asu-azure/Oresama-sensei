@@ -4,7 +4,7 @@
    Design tokens — Japanese pop-art: white + bright green, vivid accents
 --------------------------------------------------------------------------- */
 :root {
-  --background: #ffffff;
+  --background: #f3f5f2;
   --surface: #ffffff;
   --surface-2: #f0fdf4;
   --foreground: #0f172a;
@@ -15,6 +15,9 @@
   --accent: #f43f5e;
   --ring: #22c55e;
   --radius: 0.875rem;
+
+  /* Faint classroom graph-paper grid line */
+  --grid-line: rgba(22, 101, 52, 0.06);
 
   /* Decorative pop colors — used only by particles */
   --pop-pink: #ff3366;
@@ -39,6 +42,7 @@
   --primary-foreground: #052e16;
   --accent: #fb7185;
   --ring: #4ade80;
+  --grid-line: rgba(134, 239, 172, 0.06);
 }
 
 @theme inline {
@@ -72,7 +76,12 @@ html {
 }
 
 body {
-  background: var(--background);
+  background-color: var(--background);
+  /* Faint graph-paper grid (classroom manuscript feel). Static, GPU-free,
+     sits behind the z-0 particle layer and z-10 content. */
+  background-image: linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+  background-size: 26px 26px;
   color: var(--foreground);
   font-family: var(--font-sans);
 }
@@ -145,8 +154,8 @@ rt {
   to   { transform: rotate(-360deg) scale(1); }
 }
 @keyframes pop-pulse {
-  0%, 100% { transform: scale(1);    opacity: var(--particle-opacity, 0.10); }
-  50%       { transform: scale(1.18); opacity: calc(var(--particle-opacity, 0.10) * 1.6); }
+  0%, 100% { transform: scale(1); }
+  50%       { transform: scale(1.18); }
 }
 @keyframes pop-drift {
   0%   { transform: translate(0, 0)      rotate(0deg);   }
@@ -155,10 +164,13 @@ rt {
   100% { transform: translate(0, 0)      rotate(180deg); }
 }
 
+/* One-shot flash-wipe for page transitions. Fades fully out at the end so the
+   skewed full-height panel never lingers as a stuck line on tall screens. */
 @keyframes pop-wipe {
-  0%   { transform: translateX(-100%) skewX(-12deg); }
-  55%  { transform: translateX(0%)    skewX(-12deg); }
-  100% { transform: translateX(110%)  skewX(-12deg); }
+  0%   { transform: translateX(-120%) skewX(-12deg); opacity: 0; }
+  15%  { opacity: 0.85; }
+  85%  { opacity: 0.85; }
+  100% { transform: translateX(130%)  skewX(-12deg); opacity: 0; }
 }
 
 /* ---------------------------------------------------------------------------
@@ -208,7 +220,10 @@ rt {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .pop-particle { animation: none !important; }
+  /* The ambient background particles intentionally keep their gentle motion
+     even under reduced-motion (owner's choice — purely decorative, behind
+     content). Intrusive motion (page-wipe, splash) is gated in JS via
+     useReducedMotion() and still falls back to a plain fade. */
   .pop-card {
     transition: none;
   }

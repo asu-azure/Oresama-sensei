@@ -1,9 +1,12 @@
+"use client";
+
 import * as React from "react";
 import { cva, type VariantProps } from "class-variance-authority";
+import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-all disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background active:scale-[0.98] [&_svg]:size-4 [&_svg]:shrink-0",
+  "relative inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-all disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background active:scale-[0.98] [&_svg]:size-4 [&_svg]:shrink-0",
   {
     variants: {
       variant: {
@@ -31,14 +34,107 @@ export interface ButtonProps
   extends React.ButtonHTMLAttributes<HTMLButtonElement>,
     VariantProps<typeof buttonVariants> {}
 
+/** A single click-burst: shapes flying outward from the click point. */
+type Burst = {
+  id: number;
+  x: number;
+  y: number;
+  bits: {
+    dx: number;
+    dy: number;
+    color: string;
+    shape: "circle" | "square" | "diamond";
+    size: number;
+  }[];
+};
+
+const POP_COLORS = [
+  "var(--pop-pink)",
+  "var(--pop-yellow)",
+  "var(--pop-cyan)",
+  "var(--pop-orange)",
+  "var(--pop-purple)",
+  "var(--primary)",
+];
+const SHAPES = ["circle", "square", "diamond"] as const;
+
+function makeBurst(id: number, x: number, y: number): Burst {
+  const n = 7;
+  const bits = Array.from({ length: n }, (_, i) => {
+    const angle = (i / n) * Math.PI * 2 + Math.random() * 0.6;
+    const dist = 26 + Math.random() * 20;
+    return {
+      dx: Math.cos(angle) * dist,
+      dy: Math.sin(angle) * dist,
+      color: POP_COLORS[Math.floor(Math.random() * POP_COLORS.length)],
+      shape: SHAPES[Math.floor(Math.random() * SHAPES.length)],
+      size: 5 + Math.round(Math.random() * 5),
+    };
+  });
+  return { id, x, y, bits };
+}
+
 export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant, size, ...props }, ref) => (
-    <button
-      ref={ref}
-      className={cn(buttonVariants({ variant, size }), className)}
-      {...props}
-    />
-  ),
+  ({ className, variant, size, onClick, children, ...props }, ref) => {
+    const [bursts, setBursts] = React.useState<Burst[]>([]);
+    const nextId = React.useRef(0);
+
+    function handleClick(e: React.MouseEvent<HTMLButtonElement>) {
+      if (!props.disabled) {
+        const rect = e.currentTarget.getBoundingClientRect();
+        // Keyboard activation reports no coordinates — burst from the center.
+        const x = e.clientX > 0 ? e.clientX - rect.left : rect.width / 2;
+        const y = e.clientY > 0 ? e.clientY - rect.top : rect.height / 2;
+        const id = nextId.current++;
+        setBursts((b) => [...b, makeBurst(id, x, y)]);
+        window.setTimeout(
+          () => setBursts((b) => b.filter((bu) => bu.id !== id)),
+          550,
+        );
+      }
+      onClick?.(e);
+    }
+
+    return (
+      <button
+        ref={ref}
+        className={cn(buttonVariants({ variant, size }), className)}
+        onClick={handleClick}
+        {...props}
+      >
+        {children}
+        {/* Click-burst overlay — decorative, never blocks pointer/layout. */}
+        <span className="pointer-events-none absolute inset-0 overflow-visible">
+          <AnimatePresence>
+            {bursts.map((burst) =>
+              burst.bits.map((bit, i) => (
+                <motion.span
+                  key={`${burst.id}-${i}`}
+                  initial={{ x: burst.x, y: burst.y, scale: 1, opacity: 1 }}
+                  animate={{
+                    x: burst.x + bit.dx,
+                    y: burst.y + bit.dy,
+                    scale: 0,
+                    opacity: 0,
+                  }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.45, ease: "easeOut" }}
+                  className="absolute left-0 top-0"
+                  style={{
+                    width: bit.size,
+                    height: bit.size,
+                    background: bit.color,
+                    borderRadius: bit.shape === "circle" ? "9999px" : "1px",
+                    rotate: bit.shape === "diamond" ? "45deg" : "0deg",
+                  }}
+                />
+              )),
+            )}
+          </AnimatePresence>
+        </span>
+      </button>
+    );
+  },
 );
 Button.displayName = "Button";
 

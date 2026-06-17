@@ -48,15 +48,17 @@ export function PitchAccent({
       className={cn("inline-flex items-start font-jp", className)}
       title={`pitch accent: ${accent} (${meta.en})`}
     >
-      <span className="inline-flex items-start">
+      {/* Force dark kana (not the inherited muted gray) so the colored
+          overline/downstep clearly stands out. */}
+      <span className="inline-flex items-start text-foreground">
         {pattern.map((p, i) => (
           <span
             key={i}
             className={cn(
               "leading-snug",
               meta.border,
-              p.high && "border-t-2 border-solid",
-              p.drop && "border-r-2 border-solid",
+              p.high && "border-t-[3px] border-solid",
+              p.drop && "border-r-[3px] border-solid",
             )}
           >
             {p.mora}
