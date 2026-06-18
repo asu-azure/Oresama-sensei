@@ -70,11 +70,23 @@ export function buildChatSystemPrompt(
   );
 }
 
-/** System prompt for turning OCR'd page text into a personalized lesson. */
+/** System prompt for turning OCR'd page text into a personalized lesson.
+ *  `pageCount` scales the lesson's depth: a single page stays tight, while a
+ *  multi-page upload produces a proportionally longer lesson that covers EVERY
+ *  page (fixing the old behaviour where only the first page got attention). */
 export function buildLessonSystemPrompt(
   profile: Profile | null,
   recalled: RecalledItem[],
+  pageCount = 1,
 ): string {
+  const multi = pageCount > 1;
+  // Scale the budget with the number of pages so depth grows with the material.
+  const wordTarget = 600 + (pageCount - 1) * 450;
+  const vocabTarget = 4 * pageCount;
+  const grammarTarget = 2 * pageCount + 1;
+  const lengthGuidance = multi
+    ? `IMPORTANT: This upload has ${pageCount} pages, wrapped in <page n="…"> tags. Cover the meaningful new vocabulary and grammar from EVERY page — give later pages the SAME attention as the first; do not stop at page 1. If the pages cover different topics, give each its own clearly-labelled subsection under the relevant headings. The lesson should grow with the material: aim for roughly ${wordTarget} words total, surfacing around ${vocabTarget} key vocab and ${grammarTarget} grammar points across all pages. Be thorough but finish every section cleanly rather than getting cut off.`
+    : `IMPORTANT: Keep the WHOLE lesson concise and focused — aim for roughly 500–750 words total. Prioritise the most valuable 4–6 vocab and 2–3 grammar points over covering everything, and make sure you finish all sections (don't run long and get cut off).`;
   return (
     PEDAGOGY_CORE +
     `
@@ -101,7 +113,7 @@ Connect the content to the learner's life and broad interests (art and the JP ar
 
 Keep it engaging and genuinely useful — the goal is that the learner will never forget this.
 
-IMPORTANT: Keep the WHOLE lesson concise and focused — aim for roughly 500–750 words total. Prioritise the most valuable 4–6 vocab and 2–3 grammar points over covering everything, and make sure you finish all sections (don't run long and get cut off).` +
+${lengthGuidance}` +
     LEARNER_CONTEXT +
     profileBlock(profile) +
     memoryBlock(recalled)
@@ -134,6 +146,21 @@ IMPORTANT: Keep the whole summary concise — aim for roughly 500–750 words to
     LEARNER_CONTEXT +
     profileBlock(profile)
   );
+}
+
+/** Instruction for a brief, on-demand AI summary of a whole collection
+ *  (a book / game / series), built from its lessons + saved knowledge. */
+const COLLECTION_SUMMARY_INSTRUCTION = `You are writing a SHORT overview of a study source (a book, game, or series) for an advanced Japanese learner (JLPT N2–N1), based on the lessons and saved vocabulary/grammar the learner has collected from it so far.
+
+In Markdown, concise (~120–180 words):
+- One or two sentences on what this source is and what kind of Japanese it features (genre, register, difficulty).
+- The main themes/topics covered, and the most useful language to take away from it (name a few standout vocab/grammar items with <ruby>漢字<rt>かんじ</rt></ruby> furigana).
+- A short, encouraging note on what to focus on next.
+Base it ONLY on what's provided — do not invent plot or content you weren't given. No headings; just a tight couple of paragraphs.`;
+
+/** System prompt for the collection-summary generator (personalized). */
+export function buildCollectionSummaryPrompt(profile: Profile | null): string {
+  return COLLECTION_SUMMARY_INSTRUCTION + LEARNER_CONTEXT + profileBlock(profile);
 }
 
 /** Instruction for the structured knowledge-extraction pass. */

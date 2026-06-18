@@ -23,6 +23,19 @@ export interface ChatMessage {
   created_at: string;
 }
 
+export interface Collection {
+  id: string;
+  user_id: string;
+  kind: string; // 'book' | 'game' | 'series' | 'other'
+  title: string;
+  author: string | null;
+  cover_path: string | null;
+  total_pages: number | null;
+  summary_md: string | null;
+  summary_generated_at: string | null;
+  created_at: string;
+}
+
 export interface KnowledgeItem {
   id: string;
   user_id: string;
@@ -34,6 +47,12 @@ export interface KnowledgeItem {
   jlpt_level: string | null;
   notes: string | null;
   source: string | null;
+  /** Coarse attribution ('book' | 'game' | 'series' | 'internet' | 'real_world' | 'chat'). */
+  source_type: string | null;
+  /** Links to the collection (book/game/series) this came from, if any. */
+  collection_id: string | null;
+  /** The lesson this item was extracted from (real FK, replaces text-match). */
+  lesson_id: string | null;
   times_seen: number;
   last_seen: string;
   created_at: string;
@@ -54,10 +73,19 @@ export interface Lesson {
   user_id: string;
   title: string | null;
   image_path: string | null;
+  /** All uploaded page images, in order. `image_path` is the first (back-compat). */
+  image_paths: string[] | null;
   source_text: string | null;
   article_md: string | null;
   tags: string[] | null;
-  kind: string; // 'photo' | 'summary'
+  kind: string; // 'photo' | 'text' | 'chat' | 'summary'
+  /** Where the material came from (see MaterialType in lib/source). */
+  material_type: string;
+  /** Collection (book/game/series) this lesson belongs to, if any. */
+  collection_id: string | null;
+  /** Page range covered, for collection material. */
+  page_start: number | null;
+  page_end: number | null;
   exercises: Exercise[] | null;
   created_at: string;
 }

@@ -208,6 +208,18 @@ rt {
   100% { opacity: 0; transform: translateY(-16px) scale(1); }
 }
 
+/* IMPORTANT: these @keyframes are applied via INLINE styles in JS
+   (BackgroundParticles, PixelBuddies, PageTransition), which Tailwind v4's CSS
+   optimizer (Lightning CSS) can't see — so it tree-shakes them out and the
+   animations silently die. Referencing every name here (in a rule that's never
+   actually rendered) marks them as "used" so they survive the build. Keep this
+   list in sync when adding a new decorative keyframe. */
+.keep-keyframes-alive {
+  animation-name: pop-float, pop-float-x, pop-spin, pop-spin-rev, pop-pulse,
+    pop-drift, pop-wipe, pop-wipe-trail, buddy-walk, buddy-step, buddy-rest,
+    buddy-zzz;
+}
+
 /* ---------------------------------------------------------------------------
    Pop-art UI utilities — bright accents + geometry on a plain surface
 --------------------------------------------------------------------------- */

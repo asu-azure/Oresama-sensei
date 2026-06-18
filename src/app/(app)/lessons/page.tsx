@@ -5,7 +5,8 @@ import { LessonTextGenerator } from "./lesson-text-generator";
 import { SummaryGenerator } from "./summary-generator";
 import { DeleteLessonButton } from "./delete-lesson-button";
 import { formatDate } from "@/lib/utils";
-import type { Lesson } from "@/lib/types";
+import { sourceMeta, sourceTypeForMaterial, pageRefLabel } from "@/lib/source";
+import type { MaterialType } from "@/lib/source";
 
 export default async function LessonsPage() {
   const supabase = await createClient();
@@ -15,14 +16,24 @@ export default async function LessonsPage() {
 
   const { data: lessons } = await supabase
     .from("lessons")
-    .select("id,title,created_at,article_md,kind")
+    .select(
+      "id,title,created_at,article_md,kind,material_type,page_start,page_end,collections(title)",
+    )
     .eq("user_id", user!.id)
     .order("created_at", { ascending: false });
 
-  const list = (lessons ?? []) as Pick<
-    Lesson,
-    "id" | "title" | "created_at" | "article_md" | "kind"
-  >[];
+  type LessonCard = {
+    id: string;
+    title: string | null;
+    created_at: string;
+    article_md: string | null;
+    kind: string;
+    material_type: string;
+    page_start: number | null;
+    page_end: number | null;
+    collections: { title: string } | null;
+  };
+  const list = (lessons ?? []) as unknown as LessonCard[];
 
   return (
     <div className="space-y-8 py-4">
@@ -50,7 +61,7 @@ export default async function LessonsPage() {
                 className="group relative rounded-2xl border border-border bg-surface p-4 transition-colors hover:bg-surface-2"
               >
                 <Link href={`/lessons/${lesson.id}`} className="block pr-8">
-                  <div className="mb-1 flex items-center gap-2">
+                  <div className="mb-1 flex flex-wrap items-center gap-1.5">
                     <span
                       className={
                         "rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide " +
@@ -67,6 +78,25 @@ export default async function LessonsPage() {
                             ? "Chat"
                             : "Photo"}
                     </span>
+                    {lesson.kind !== "summary" &&
+                      (() => {
+                        const meta = sourceMeta(
+                          sourceTypeForMaterial(
+                            lesson.material_type as MaterialType,
+                          ),
+                        );
+                        const pageRef = pageRefLabel(
+                          lesson.page_start,
+                          lesson.page_end,
+                        );
+                        const label = lesson.collections?.title ?? meta.label;
+                        return (
+                          <span className="rounded-full bg-surface-2 px-2 py-0.5 text-[10px] font-medium text-muted">
+                            {meta.emoji} {label}
+                            {pageRef ? ` · ${pageRef}` : ""}
+                          </span>
+                        );
+                      })()}
                   </div>
                   <p className="line-clamp-2 font-jp font-medium group-hover:text-primary">
                     {lesson.title || "Untitled lesson"}

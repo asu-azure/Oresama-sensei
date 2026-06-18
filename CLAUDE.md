@@ -172,10 +172,36 @@ The **data lives in Supabase (cloud)**, so chats/vocab/lessons sync automaticall
   note is the only paid call: `generateCoachNote` (**Haiku**, `COACH_MODEL`) via `/api/insights/coach`,
   **cached in `learner_insights`** (migration **0010**, owner runs it) keyed by a stats **signature** so
   it regenerates only when weaknesses shift or after 24h.
-- ⏳ Next ideas (not built): a standalone personalized-lesson generator; Anki export; paginate
+- ✅ v3.0 shipped (sources + books/collections + multi-page fix): **(a)** photo→lesson now **scales
+  with page count** — `buildLessonSystemPrompt(profile, recalled, pageCount)` raises the word/vocab/grammar
+  budget and tells the model to cover EVERY page (pages are wrapped in `<page n>` tags, not weak `--- Page ---`
+  markers); `streamLesson(..., pageCount)` scales `max_tokens` (`base + 1800·(pages−1)`, cap 12k); recall
+  is sampled across all pages (was page-1 only); **all** page images are saved (`lessons.image_paths`,
+  migration **0011**); OCR default is now Gemini. Fixes the old "only the first page got attention" bug.
+  **(b)** Every lesson/item carries a **source**: a material-type picker on upload (textbook/series/game/
+  internet/real-world) + a **select-or-add collection** (book/game/series) with cover + page range
+  (`src/lib/source.ts`, `src/lib/collections.ts`, migration **0012** adds `collections`, lessons
+  `material_type/collection_id/page_start/page_end`, and items `source_type/collection_id/lesson_id` — the
+  real `lesson_id` link finally replaces the title-ilike heuristic). `storeKnowledge` takes a
+  `KnowledgeAttribution` (set on insert only; dedupe keeps the original source). Source badges + a source
+  filter in Library; per-lesson **backfill** editor (`updateLessonSource` stamps items by `lesson_id`, or by
+  term-in-text for legacy items). **(c)** New **Books** tab (`/books`, `/books/[id]`): collection cards,
+  editable total pages, a **page grid colored by FSRS mastery** (`pageMastery()` in `lib/mastery.ts`;
+  cover/index/skip flags via `collection_pages`, migration **0013**), tap-a-page → its lesson + items,
+  per-collection vocab/grammar list, and a cached **AI summary** button (`generateCollectionSummary` +
+  `buildCollectionSummaryPrompt`, cached in `collections.summary_md`). Run migrations **0011–0013** in order.
+- ⏳ Next ideas (not built): library multi-select bulk source-tag (per-lesson editor covers backfill for
+  now); per-page knowledge granularity (page color currently aggregates the whole lesson's items); a
+  standalone personalized-lesson generator; Anki export; paginate
   `/dashboard` and `/map` (still fetch all items — covered for now by `loading.tsx`); real
   brand icon to replace the placeholder seal in `src/lib/icon-art.tsx`; a true `lesson_id` link on
   `knowledge_items` (would replace the text-match in "Lessons mentioning this", future items only).
+- ⏳ Maintenance / `npm audit`: 2 moderate advisories (GHSA-qx2v-qp2m-jg93, `postcss < 8.5.10` XSS)
+  come **only** from the `postcss@8.4.31` bundled inside `next@16.2.9` (our own postcss via
+  `@tailwindcss/postcss` is 8.5.15, already patched). Not exploitable here — Next's postcss processes
+  our own build-time CSS, not user input. **Do NOT run `npm audit fix --force`** (it would downgrade
+  next 16→9). The real fix lands in **Next 16.3.0** (only `16.3.0-preview.*` exists as of 2026-06-18,
+  we're on the latest stable). Bump to `next@16.3.0` when it ships stable and the advisories clear.
 
 ## Decisions log
 - Hybrid AI (Gemini OCR/embeddings + Claude chat/lessons) for best quality-per-cost.

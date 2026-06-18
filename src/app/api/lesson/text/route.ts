@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { streamLesson, extractKnowledge, generateExercises } from "@/lib/claude";
 import { recallKnowledge, storeKnowledge } from "@/lib/memory";
 import { buildLessonSystemPrompt } from "@/lib/prompts";
+import { sourceTypeForMaterial, type MaterialType } from "@/lib/source";
 import type { Profile } from "@/lib/types";
 
 const MAX_CHARS = 4000;
@@ -15,7 +16,12 @@ export async function POST(request: Request) {
   } = await supabase.auth.getUser();
   if (!user) return new Response("Unauthorized", { status: 401 });
 
-  let body: { text?: string; deep?: boolean; kind?: string };
+  let body: {
+    text?: string;
+    deep?: boolean;
+    kind?: string;
+    materialType?: MaterialType;
+  };
   try {
     body = await request.json();
   } catch {
@@ -25,6 +31,11 @@ export async function POST(request: Request) {
   const deep = body.deep === true;
   // "text" (typed) by default; "chat" when saving a chat answer as a lesson.
   const kind = body.kind === "chat" ? "chat" : "text";
+  // Material type: chat answers are "chat"; typed text defaults to "text"
+  // (→ internet) but the caller may specify internet/real_world.
+  const materialType: MaterialType =
+    kind === "chat" ? "chat" : body.materialType ?? "text";
+  const sourceType = sourceTypeForMaterial(materialType);
   if (!text) {
     return new Response("Please enter some Japanese text or a sentence.", {
       status: 400,
@@ -43,7 +54,13 @@ export async function POST(request: Request) {
   // Create the lesson row up front (no image).
   const { data: lesson, error: lessonError } = await supabase
     .from("lessons")
-    .insert({ user_id: user.id, title, source_text: text, kind })
+    .insert({
+      user_id: user.id,
+      title,
+      source_text: text,
+      kind,
+      material_type: materialType,
+    })
     .select("id")
     .single();
   if (lessonError || !lesson) {
@@ -89,7 +106,11 @@ export async function POST(request: Request) {
             .eq("id", lessonId);
           const items = await extractKnowledge(article);
           if (items.length > 0) {
-            await storeKnowledge(supabase, user.id, items, "lesson");
+            await storeKnowledge(supabase, user.id, items, {
+              source: "lesson",
+              source_type: sourceType,
+              lesson_id: lessonId,
+            });
           }
         }
       } catch (e) {

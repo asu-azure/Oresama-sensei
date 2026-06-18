@@ -7,6 +7,7 @@ import { motion } from "framer-motion";
 import {
   MessageCircle,
   BookImage,
+  BookMarked,
   Brain,
   Network,
   Library,
@@ -26,6 +27,7 @@ import { cn } from "@/lib/utils";
 const links = [
   { href: "/chat", label: "Chat", icon: MessageCircle },
   { href: "/lessons", label: "Lessons", icon: BookImage },
+  { href: "/books", label: "Books", icon: BookMarked },
   { href: "/review", label: "Review", icon: Brain },
   { href: "/tests", label: "Tests", icon: GraduationCap },
   { href: "/search", label: "Search", icon: Search },

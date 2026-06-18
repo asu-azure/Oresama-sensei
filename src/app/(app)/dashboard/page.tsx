@@ -93,7 +93,7 @@ export default async function DashboardPage() {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const nowMs = Date.now();
+  const nowMs = new Date().getTime();
   const [
     { data: itemsRaw },
     { data: lessonsRaw },

@@ -5,6 +5,8 @@ import { createClient } from "@/lib/supabase/server";
 import { Markdown } from "@/components/markdown";
 import { DeleteLessonButton } from "../delete-lesson-button";
 import { LessonPractice } from "../lesson-practice";
+import { LessonSourceEditor } from "../lesson-source-editor";
+import { listUserCollections } from "@/lib/collections";
 import { formatDate } from "@/lib/utils";
 import type { Lesson, Exercise } from "@/lib/types";
 
@@ -16,6 +18,10 @@ export default async function LessonDetailPage({
   const { id } = await params;
   const supabase = await createClient();
 
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
   const { data } = await supabase
     .from("lessons")
     .select("*")
@@ -24,13 +30,35 @@ export default async function LessonDetailPage({
   if (!data) notFound();
   const lesson = data as Lesson;
 
-  let imageUrl: string | null = null;
-  if (lesson.image_path) {
-    const { data: signed } = await supabase.storage
-      .from("lesson-images")
-      .createSignedUrl(lesson.image_path, 3600);
-    imageUrl = signed?.signedUrl ?? null;
-  }
+  // Sign URLs for every stored page image (fall back to the single image_path).
+  const imagePaths =
+    lesson.image_paths && lesson.image_paths.length > 0
+      ? lesson.image_paths
+      : lesson.image_path
+        ? [lesson.image_path]
+        : [];
+  const imageUrls = (
+    await Promise.all(
+      imagePaths.map(async (p) => {
+        const { data: signed } = await supabase.storage
+          .from("lesson-images")
+          .createSignedUrl(p, 3600);
+        return signed?.signedUrl ?? null;
+      }),
+    )
+  ).filter((u): u is string => u !== null);
+
+  // Source attribution: the collection title (if any) + the picker's options.
+  const [{ data: coll }, collections] = await Promise.all([
+    lesson.collection_id
+      ? supabase
+          .from("collections")
+          .select("title")
+          .eq("id", lesson.collection_id)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+    user ? listUserCollections(supabase, user.id) : Promise.resolve([]),
+  ]);
 
   return (
     <article className="space-y-6 py-4">
@@ -50,13 +78,30 @@ export default async function LessonDetailPage({
         <p className="mt-1 text-xs text-muted">{formatDate(lesson.created_at)}</p>
       </div>
 
-      {imageUrl && (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={imageUrl}
-          alt="Source page"
-          className="max-h-96 rounded-2xl border border-border object-contain"
+      {lesson.kind !== "summary" && (
+        <LessonSourceEditor
+          lessonId={lesson.id}
+          materialType={lesson.material_type}
+          collectionId={lesson.collection_id}
+          collectionTitle={(coll as { title: string } | null)?.title ?? null}
+          pageStart={lesson.page_start}
+          pageEnd={lesson.page_end}
+          collections={collections}
         />
+      )}
+
+      {imageUrls.length > 0 && (
+        <div className="flex flex-wrap gap-3">
+          {imageUrls.map((url, i) => (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              key={url}
+              src={url}
+              alt={`Source page ${i + 1}`}
+              className="max-h-96 rounded-2xl border border-border object-contain"
+            />
+          ))}
+        </div>
       )}
 
       {lesson.article_md ? (

@@ -127,7 +127,10 @@ export async function POST(request: Request) {
             `User asked: ${message}\n\nTutor answered:\n${answer}`,
           );
           if (items.length > 0) {
-            await storeKnowledge(supabase, user.id, items, "chat");
+            await storeKnowledge(supabase, user.id, items, {
+              source: "chat",
+              source_type: "chat",
+            });
           }
         }
       } catch (e) {

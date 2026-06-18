@@ -22,6 +22,7 @@ import {
   type MasteryLevel,
 } from "@/lib/mastery";
 import { showReading } from "@/lib/furigana";
+import { sourceMeta } from "@/lib/source";
 import { SpeakButton } from "@/components/speak-button";
 import { KanjiChips } from "@/components/kanji/kanji-chips";
 import { DeepDiveSection } from "@/components/knowledge/deep-dive-section";
@@ -51,6 +52,9 @@ export type LibraryItem = {
   times_seen: number | null;
   last_seen: string;
   created_at: string;
+  source_type: string | null;
+  collection_id: string | null;
+  collections: { title: string; kind: string } | null;
 };
 
 const TYPES = ["all", "vocab", "grammar", "expression"];
@@ -79,6 +83,7 @@ export function LibraryClient({
   const [type, setType] = useState("all");
   const [jlpt, setJlpt] = useState("all");
   const [mastery, setMastery] = useState<MasteryLevel | "all">("all");
+  const [source, setSource] = useState("all");
 
   // Recent list + infinite scroll
   const [items, setItems] = useState<LibraryItem[]>(initialItems);
@@ -155,6 +160,12 @@ export function LibraryClient({
     return ["all", ...Array.from(s).sort()];
   }, [items]);
 
+  const sourceTypes = useMemo(() => {
+    const s = new Set<string>();
+    for (const it of items) if (it.source_type) s.add(it.source_type);
+    return ["all", ...Array.from(s).sort()];
+  }, [items]);
+
   const withMastery = useMemo(
     () => base.map((it) => ({ it, m: masteryLevel(it) })),
     [base],
@@ -172,6 +183,7 @@ export function LibraryClient({
       if (type !== "all" && it.type !== type) return false;
       if (jlpt !== "all" && it.jlpt_level !== jlpt) return false;
       if (mastery !== "all" && m.level !== mastery) return false;
+      if (source !== "all" && it.source_type !== source) return false;
       if (needle) {
         const hay = `${it.term} ${it.reading ?? ""} ${
           it.meaning ?? ""
@@ -180,7 +192,7 @@ export function LibraryClient({
       }
       return true;
     });
-  }, [withMastery, q, type, jlpt, mastery]);
+  }, [withMastery, q, type, jlpt, mastery, source]);
 
   if (total === 0) {
     return (
@@ -322,6 +334,21 @@ export function LibraryClient({
             </FilterChip>
           ))}
         </div>
+        {sourceTypes.length > 1 && (
+          <div className="flex flex-wrap gap-2">
+            {sourceTypes.map((s) => (
+              <FilterChip
+                key={s}
+                active={source === s}
+                onClick={() => setSource(s)}
+              >
+                {s === "all"
+                  ? "all sources"
+                  : `${sourceMeta(s).emoji} ${sourceMeta(s).label}`}
+              </FilterChip>
+            ))}
+          </div>
+        )}
       </div>
 
       <p className="text-xs text-muted">
@@ -410,6 +437,13 @@ export function LibraryClient({
                         {it.jlpt_level && (
                           <span className="rounded-full bg-primary/10 px-2 py-0.5 text-primary">
                             {it.jlpt_level}
+                          </span>
+                        )}
+                        {it.source_type && (
+                          <span className="rounded-full bg-surface-2 px-2 py-0.5 text-muted">
+                            {sourceMeta(it.source_type).emoji}{" "}
+                            {it.collections?.title ??
+                              sourceMeta(it.source_type).label}
                           </span>
                         )}
                         <span

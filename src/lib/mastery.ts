@@ -87,3 +87,19 @@ export function masteryLevel(item: SrsLike): MasteryInfo {
 
   return masteryInfo(level);
 }
+
+/** Aggregate mastery for a group of items (e.g. all knowledge on a book page),
+ *  for a single color: surface trouble first (any struggling → struggling; any
+ *  not-yet-solid → learning), reward fully-solid groups (all young/mastered →
+ *  mastered), else new. Returns null for an empty group (nothing studied yet). */
+export function pageMastery(items: SrsLike[]): MasteryInfo | null {
+  if (items.length === 0) return null;
+  const levels = items.map((it) => masteryLevel(it).level);
+  if (levels.includes("struggling")) return masteryInfo("struggling");
+  if (levels.includes("learning")) return masteryInfo("learning");
+  if (levels.includes("new") && levels.every((l) => l === "new"))
+    return masteryInfo("new");
+  if (levels.includes("new")) return masteryInfo("learning");
+  if (levels.includes("young")) return masteryInfo("young");
+  return masteryInfo("mastered");
+}

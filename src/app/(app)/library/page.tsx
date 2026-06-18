@@ -27,7 +27,7 @@ export default async function LibraryPage() {
       .eq("user_id", user!.id),
   ]);
 
-  const items = (recent ?? []) as LibraryItem[];
+  const items = (recent ?? []) as unknown as LibraryItem[];
   const allDates = (dates ?? []) as { created_at: string }[];
 
   // Items added per UTC day -> { "YYYY-MM-DD": count } (matches dashboard bucketing).

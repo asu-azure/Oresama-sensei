@@ -8,6 +8,15 @@ import {
 } from "@/lib/claude";
 import { recallKnowledge, storeKnowledge } from "@/lib/memory";
 import { buildLessonSystemPrompt } from "@/lib/prompts";
+import {
+  findOrCreateCollection,
+  upsertCollectionPages,
+} from "@/lib/collections";
+import {
+  sourceTypeForMaterial,
+  collectionKindForMaterial,
+  type MaterialType,
+} from "@/lib/source";
 import type { Profile } from "@/lib/types";
 
 const MAX_BYTES = 12 * 1024 * 1024; // 12 MB per image
@@ -19,6 +28,11 @@ const EXT: Record<string, string> = {
 };
 
 type OcrModel = "auto" | "gemini" | "claude";
+
+function parseIntOrNull(v: FormDataEntryValue | null): number | null {
+  const n = parseInt(String(v ?? "").trim(), 10);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
 
 /** True when a Gemini error looks transient/overloaded — worth a Claude fallback. */
 function isBusy(e: unknown): boolean {
@@ -66,6 +80,19 @@ export async function POST(request: Request) {
   const deep = form.get("deep") === "true";
   const ocrModel = (form.get("ocrModel") as OcrModel) || "auto";
 
+  // Source attribution (where this material came from).
+  const materialType = ((form.get("materialType") as MaterialType) ||
+    "textbook") as MaterialType;
+  const sourceType = sourceTypeForMaterial(materialType);
+  const collectionKind = collectionKindForMaterial(materialType);
+  const existingCollectionId =
+    (form.get("collectionId") as string)?.trim() || null;
+  const newCollectionTitle = (form.get("collectionTitle") as string)?.trim() || null;
+  const newCollectionAuthor = (form.get("collectionAuthor") as string)?.trim() || null;
+  const coverFile = form.get("cover");
+  const pageStart = parseIntOrNull(form.get("pageStart"));
+  const pageEnd = parseIntOrNull(form.get("pageEnd"));
+
   // Accept one or many images (`images` from the multi-picker; `image` legacy).
   const raw = form.getAll("images");
   const files = (raw.length ? raw : [form.get("image")]).filter(
@@ -97,13 +124,16 @@ export async function POST(request: Request) {
   );
 
   let pageText: string;
+  let pages: string[] = [];
   try {
-    const pages = await Promise.all(
+    pages = await Promise.all(
       buffers.map((buf, i) => runOcr(buf.toString("base64"), files[i].type, ocrModel)),
     );
     pageText = pages
       .map((t, i) =>
-        files.length > 1 ? `--- Page ${i + 1} ---\n${t.trim()}` : t.trim(),
+        files.length > 1
+          ? `<page n="${i + 1}">\n${t.trim()}\n</page>`
+          : t.trim(),
       )
       .join("\n\n")
       .trim();
@@ -121,16 +151,50 @@ export async function POST(request: Request) {
     );
   }
 
-  // Store the first image (private, scoped to the user's folder).
-  const first = files[0];
-  const path = `${user.id}/${crypto.randomUUID()}.${EXT[first.type]}`;
-  const { error: uploadError } = await supabase.storage
-    .from("lesson-images")
-    .upload(path, buffers[0], { contentType: first.type, upsert: false });
-  if (uploadError) console.error("image upload failed:", uploadError.message);
+  // Store EVERY page image (private, scoped to the user's folder), in order.
+  const imagePaths = (
+    await Promise.all(
+      files.map(async (f, i) => {
+        const path = `${user.id}/${crypto.randomUUID()}.${EXT[f.type]}`;
+        const { error } = await supabase.storage
+          .from("lesson-images")
+          .upload(path, buffers[i], { contentType: f.type, upsert: false });
+        if (error) {
+          console.error("image upload failed:", error.message);
+          return null;
+        }
+        return path;
+      }),
+    )
+  ).filter((p): p is string => p !== null);
+
+  // Resolve the collection (book/game/series), uploading a cover if provided.
+  let collectionId: string | null = null;
+  if (collectionKind) {
+    let coverPath: string | null = null;
+    if (coverFile instanceof File && coverFile.size > 0 && EXT[coverFile.type]) {
+      coverPath = `${user.id}/covers/${crypto.randomUUID()}.${EXT[coverFile.type]}`;
+      const buf = Buffer.from(await coverFile.arrayBuffer());
+      const { error: coverErr } = await supabase.storage
+        .from("lesson-images")
+        .upload(coverPath, buf, { contentType: coverFile.type, upsert: false });
+      if (coverErr) {
+        console.error("cover upload failed:", coverErr.message);
+        coverPath = null;
+      }
+    }
+    collectionId = await findOrCreateCollection(supabase, user.id, {
+      collectionId: existingCollectionId,
+      title: newCollectionTitle,
+      kind: collectionKind,
+      author: newCollectionAuthor,
+      coverPath,
+    });
+  }
 
   const title =
-    pageText.replace(/^--- Page \d+ ---\n/, "").split("\n")[0].slice(0, 60) ||
+    pages[0]?.trim().split("\n")[0]?.slice(0, 60) ||
+    pageText.split("\n")[0].slice(0, 60) ||
     "Untitled lesson";
 
   // 3. Create the lesson row up front so we have an id to return.
@@ -139,8 +203,13 @@ export async function POST(request: Request) {
     .insert({
       user_id: user.id,
       title,
-      image_path: uploadError ? null : path,
+      image_path: imagePaths[0] ?? null,
+      image_paths: imagePaths.length > 0 ? imagePaths : null,
       source_text: pageText,
+      material_type: materialType,
+      collection_id: collectionId,
+      page_start: pageStart,
+      page_end: pageEnd,
     })
     .select("id")
     .single();
@@ -149,13 +218,34 @@ export async function POST(request: Request) {
   }
   const lessonId = lesson.id;
 
-  // 4. Build context and stream the generated lesson.
+  // Record the pages this upload covers (for the books page grid).
+  if (collectionId && pageStart != null) {
+    await upsertCollectionPages(supabase, user.id, {
+      collectionId,
+      lessonId,
+      pageStart,
+      pageEnd,
+      imagePaths,
+    });
+  }
+
+  // 4. Build context and stream the generated lesson. Sample the recall query
+  //    across ALL pages (not just the first ~500 chars) so memory recall isn't
+  //    biased toward page 1 on a multi-page upload.
+  const recallQuery = pages.length
+    ? pages.map((t) => t.trim().slice(0, 200)).join("\n").slice(0, 1000)
+    : pageText.slice(0, 500);
   const [{ data: profile }, recalled] = await Promise.all([
     supabase.from("profiles").select("*").eq("id", user.id).maybeSingle(),
-    recallKnowledge(supabase, pageText.slice(0, 500), 8),
+    recallKnowledge(supabase, recallQuery, 8),
   ]);
-  const system = buildLessonSystemPrompt(profile as Profile | null, recalled);
-  const claudeStream = streamLesson(system, pageText, deep);
+  const pageCount = files.length;
+  const system = buildLessonSystemPrompt(
+    profile as Profile | null,
+    recalled,
+    pageCount,
+  );
+  const claudeStream = streamLesson(system, pageText, deep, "photo", pageCount);
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({
@@ -191,7 +281,12 @@ export async function POST(request: Request) {
             .eq("id", lessonId);
           const items = await extractKnowledge(article);
           if (items.length > 0) {
-            await storeKnowledge(supabase, user.id, items, "lesson");
+            await storeKnowledge(supabase, user.id, items, {
+              source: "lesson",
+              source_type: sourceType,
+              collection_id: collectionId,
+              lesson_id: lessonId,
+            });
           }
         }
       } catch (e) {
@@ -210,7 +305,7 @@ export async function POST(request: Request) {
         if (article.trim()) {
           const exercises = await generateExercises({
             content: article,
-            count: 6,
+            count: Math.min(6 + (pageCount - 1) * 2, 14),
           });
           if (exercises.length > 0) {
             await supabase

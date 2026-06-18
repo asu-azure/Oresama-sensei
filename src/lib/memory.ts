@@ -35,6 +35,15 @@ export async function recallKnowledge(
   }
 }
 
+/** Source attribution stamped on newly-inserted knowledge items. `source` keeps
+ *  the original coarse value ("chat" | "lesson"); the rest enrich it. */
+export interface KnowledgeAttribution {
+  source: "chat" | "lesson";
+  source_type?: string | null;
+  collection_id?: string | null;
+  lesson_id?: string | null;
+}
+
 /**
  * Persist extracted knowledge items with embeddings, deduplicating against
  * what's already stored. This is what makes the app "remember" — re-asking
@@ -44,7 +53,7 @@ export async function storeKnowledge(
   supabase: SupabaseClient,
   userId: string,
   items: ExtractedKnowledge[],
-  source: "chat" | "lesson",
+  attribution: KnowledgeAttribution,
 ): Promise<void> {
   for (const item of items) {
     try {
@@ -60,6 +69,10 @@ export async function storeKnowledge(
       const top = (data ?? [])[0] as RecalledItem | undefined;
 
       if (top && (top.similarity >= DEDUPE_THRESHOLD || top.term === item.term)) {
+        // Re-encountered: just bump the counter. We deliberately keep the
+        // ORIGINAL attribution (don't overwrite a book source with a later
+        // chat); the match_knowledge RPC doesn't return it anyway. Backfilling
+        // an unattributed item is handled explicitly via updateLessonSource.
         await supabase
           .from("knowledge_items")
           .update({
@@ -77,7 +90,10 @@ export async function storeKnowledge(
           example: item.example || null,
           jlpt_level: item.jlpt_level || null,
           notes: item.notes || null,
-          source,
+          source: attribution.source,
+          source_type: attribution.source_type ?? null,
+          collection_id: attribution.collection_id ?? null,
+          lesson_id: attribution.lesson_id ?? null,
           embedding: vec,
         });
       }

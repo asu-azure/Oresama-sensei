@@ -105,7 +105,7 @@ export async function loadMoreItems(
     .order("created_at", { ascending: false })
     .range(offset, offset + limit - 1);
 
-  const items = (data ?? []) as LibraryItem[];
+  const items = (data ?? []) as unknown as LibraryItem[];
   return { items, hasMore: items.length === limit };
 }
 
@@ -129,5 +129,5 @@ export async function loadItemsForDay(dayKey: string): Promise<LibraryItem[]> {
     .lt("created_at", end)
     .order("created_at", { ascending: false });
 
-  return (data ?? []) as LibraryItem[];
+  return (data ?? []) as unknown as LibraryItem[];
 }

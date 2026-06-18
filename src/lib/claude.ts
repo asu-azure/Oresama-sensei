@@ -7,6 +7,7 @@ import {
   EXERCISE_REFINE_INSTRUCTION,
   buildDeepDivePrompt,
   buildCoachPrompt,
+  buildCollectionSummaryPrompt,
   OCR_PROMPT,
 } from "@/lib/prompts";
 import type {
@@ -99,17 +100,28 @@ export function streamChat(system: string, messages: ChatTurn[]) {
 // ask the model to stay concise so it concludes cleanly instead of being cut off.
 const LESSON_MAX_TOKENS = 3800;
 const DEEP_LESSON_MAX_TOKENS = 4500;
+// Hard ceiling so a many-page upload can't run away (and risk the host's
+// per-request time limit). Generous enough for a thorough 6-page lesson.
+const LESSON_MAX_TOKENS_CAP = 12000;
 
-/** Stream a generated lesson from transcribed page text. */
+/** Stream a generated lesson from transcribed page text. `pageCount` lets a
+ *  multi-page upload produce a proportionally longer lesson (the prompt is
+ *  scaled to match in buildLessonSystemPrompt). */
 export function streamLesson(
   system: string,
   pageText: string,
   deep = false,
   source: "photo" | "text" = "photo",
+  pageCount = 1,
 ) {
+  const base = deep ? DEEP_LESSON_MAX_TOKENS : LESSON_MAX_TOKENS;
+  const maxTokens = Math.min(
+    base + Math.max(0, pageCount - 1) * 1800,
+    LESSON_MAX_TOKENS_CAP,
+  );
   return anthropicClient().messages.stream({
     model: deep ? DEEP_LESSON_MODEL : LESSON_MODEL,
-    max_tokens: deep ? DEEP_LESSON_MAX_TOKENS : LESSON_MAX_TOKENS,
+    max_tokens: maxTokens,
     system,
     thinking: { type: "disabled" },
     messages: [
@@ -686,6 +698,30 @@ export async function generateKanjiMnemonic(input: {
     ],
   });
 
+  const text = res.content.find((b) => b.type === "text");
+  return text && text.type === "text" ? text.text.trim() : "";
+}
+
+/** Generate a brief AI overview of a whole collection (book/game/series) from
+ *  its lesson overviews + saved knowledge. Returns Markdown (may contain ruby).
+ *  Callers cache it in collections.summary_md. */
+export async function generateCollectionSummary(input: {
+  title: string;
+  kind: string;
+  digest: string;
+  profile: Profile | null;
+}): Promise<string> {
+  const res = await anthropicClient().messages.create({
+    model: CHAT_MODEL,
+    max_tokens: 700,
+    system: buildCollectionSummaryPrompt(input.profile),
+    messages: [
+      {
+        role: "user",
+        content: `Source: ${input.title} (${input.kind})\n\nWhat the learner has collected from it so far:\n\n${input.digest}`,
+      },
+    ],
+  });
   const text = res.content.find((b) => b.type === "text");
   return text && text.type === "text" ? text.text.trim() : "";
 }
