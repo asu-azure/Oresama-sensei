@@ -175,6 +175,8 @@ export const EXTRACTION_INSTRUCTION = `From the Japanese-learning content below,
 
 For each item provide: type (vocab | grammar | expression), term (the word/grammar pattern/expression in Japanese), reading (kana reading; for grammar, the pattern reading or empty), meaning (concise English), example (one natural Japanese example sentence), jlpt_level (best guess like N2/N1, or empty), and notes (one short nuance note, optional).
 
+IMPORTANT: "term" and "reading" must be PLAIN text — no <ruby>/<rt> tags, no furigana, no parentheses. Put the kanji/kana word in "term" and its kana in "reading", separately. Use <ruby>漢字<rt>かんじ</rt></ruby> furigana markup ONLY inside "example".
+
 Return at most 12 items. If there is nothing worth saving, return an empty list.`;
 
 /** Instruction for generating the Knowledge Map (grouping + relationships). */

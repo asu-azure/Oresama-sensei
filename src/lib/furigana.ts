@@ -26,6 +26,15 @@ export function stripFurigana(input: string): string {
     .replace(/<\/?(?:ruby|rt|rp)>/g, "");
 }
 
+/** Pull a kana reading out of ruby markup (the concatenated <rt> contents).
+ *  Used to backfill a missing reading when a term arrived with embedded ruby. */
+export function readingFromRuby(input: string): string {
+  if (!input) return "";
+  let out = "";
+  for (const m of input.matchAll(/<rt>(.*?)<\/rt>/g)) out += m[1];
+  return out;
+}
+
 const KANJI_RE = /[一-鿿々〆]/;
 
 /** Whether a separate reading adds information: only when the term contains

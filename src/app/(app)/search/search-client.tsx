@@ -14,7 +14,8 @@ import {
   Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { showReading } from "@/lib/furigana";
+import { showReading, stripFurigana } from "@/lib/furigana";
+import { RubyText } from "@/components/ruby-text";
 import { SpeakButton } from "@/components/speak-button";
 import { KanjiChips } from "@/components/kanji/kanji-chips";
 import { DeepDiveSection } from "@/components/knowledge/deep-dive-section";
@@ -65,7 +66,7 @@ export function SearchClient({
   const fuse = useMemo(() => {
     const docs = items.map((it) => ({
       ...it,
-      romaji: toRomaji(it.reading || it.term || ""),
+      romaji: toRomaji(stripFurigana(it.reading || it.term || "")),
     }));
     return new Fuse(docs, {
       threshold: 0.34,
@@ -190,7 +191,7 @@ export function SearchClient({
                     aria-expanded={open}
                   >
                     <span className="min-w-0 flex-1 truncate font-jp text-base font-medium">
-                      {it.term}
+                      <RubyText>{it.term}</RubyText>
                     </span>
                     {explainedSet.has(it.id) && (
                       <Sparkles
@@ -239,11 +240,13 @@ export function SearchClient({
                               )}
                               {it.example && (
                                 <p className="mt-1 font-jp text-xs text-muted">
-                                  {it.example}
+                                  <RubyText>{it.example}</RubyText>
                                 </p>
                               )}
                             </div>
-                            <SpeakButton text={it.reading || it.term} />
+                            <SpeakButton
+                              text={stripFurigana(it.reading || it.term)}
+                            />
                           </div>
                           <div className="mt-2.5 flex flex-wrap items-center gap-1.5 text-[11px]">
                             <span className="rounded-full bg-surface-2 px-2 py-0.5 text-muted">

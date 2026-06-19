@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { embedText } from "@/lib/gemini";
+import { readingFromRuby, stripFurigana } from "@/lib/furigana";
 import type { ExtractedKnowledge, RecalledItem } from "@/lib/types";
 
 /** Cosine-similarity above which a new item is treated as a duplicate of an
@@ -57,7 +58,12 @@ export async function storeKnowledge(
 ): Promise<void> {
   for (const item of items) {
     try {
-      const text = `${item.term} ${item.reading ?? ""} ${item.meaning ?? ""}`.trim();
+      // `term`/`reading` must be plain text — models (esp. Gemini) sometimes
+      // emit ruby markup inside the term. Strip it, and backfill the reading
+      // from the ruby if one wasn't given. `example` keeps its ruby (valid there).
+      const term = stripFurigana(item.term).trim();
+      const reading = (item.reading || readingFromRuby(item.term) || "").trim();
+      const text = `${term} ${reading} ${item.meaning ?? ""}`.trim();
       const emb = await embedText(text, "RETRIEVAL_DOCUMENT");
       const vec = toVector(emb);
 
@@ -68,7 +74,7 @@ export async function storeKnowledge(
       });
       const top = (data ?? [])[0] as RecalledItem | undefined;
 
-      if (top && (top.similarity >= DEDUPE_THRESHOLD || top.term === item.term)) {
+      if (top && (top.similarity >= DEDUPE_THRESHOLD || top.term === term)) {
         // Re-encountered: just bump the counter. We deliberately keep the
         // ORIGINAL attribution (don't overwrite a book source with a later
         // chat); the match_knowledge RPC doesn't return it anyway. Backfilling
@@ -84,8 +90,8 @@ export async function storeKnowledge(
         await supabase.from("knowledge_items").insert({
           user_id: userId,
           type: item.type,
-          term: item.term,
-          reading: item.reading || null,
+          term,
+          reading: reading || null,
           meaning: item.meaning || null,
           example: item.example || null,
           jlpt_level: item.jlpt_level || null,

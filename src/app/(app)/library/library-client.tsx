@@ -21,8 +21,9 @@ import {
   MASTERY_ORDER,
   type MasteryLevel,
 } from "@/lib/mastery";
-import { showReading } from "@/lib/furigana";
+import { showReading, stripFurigana } from "@/lib/furigana";
 import { sourceMeta } from "@/lib/source";
+import { RubyText } from "@/components/ruby-text";
 import { SpeakButton } from "@/components/speak-button";
 import { KanjiChips } from "@/components/kanji/kanji-chips";
 import { DeepDiveSection } from "@/components/knowledge/deep-dive-section";
@@ -392,7 +393,7 @@ export function LibraryClient({
                   title={m.label}
                 />
                 <span className="min-w-0 flex-1 truncate font-jp text-base font-medium">
-                  {it.term}
+                  <RubyText>{it.term}</RubyText>
                 </span>
                 {explainedSet.has(it.id) && (
                   <Sparkles
@@ -437,11 +438,13 @@ export function LibraryClient({
                           )}
                           {it.example && (
                             <p className="mt-1 font-jp text-xs text-muted">
-                              {it.example}
+                              <RubyText>{it.example}</RubyText>
                             </p>
                           )}
                         </div>
-                        <SpeakButton text={it.reading || it.term} />
+                        <SpeakButton
+                          text={stripFurigana(it.reading || it.term)}
+                        />
                       </div>
 
                       <div className="mt-2.5 flex flex-wrap items-center gap-1.5 text-[11px]">
