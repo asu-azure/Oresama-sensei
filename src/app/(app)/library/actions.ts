@@ -89,39 +89,86 @@ export async function getOrGenerateExplanation(
   return { explanation_md: result.explanation, examples: result.examples };
 }
 
-/** Signed URLs for a lesson's source page image(s), for the on-demand preview
- *  shown next to a saved item / a book page. Returns [] when the lesson isn't
- *  the user's or has no stored images. Fetched lazily (only when the user opens
- *  a preview) so the lists don't pay to sign hundreds of URLs up front. */
-export async function getLessonImageUrls(lessonId: string): Promise<string[]> {
+/** Sign each storage path into a small TRANSFORMED thumbnail (fast to load) plus
+ *  the FULL original (used by the lightbox and as an onError fallback when the
+ *  project doesn't have Storage image transforms enabled). */
+async function signThumbs(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  paths: string[],
+): Promise<{ thumb: string; full: string }[]> {
+  const out = await Promise.all(
+    paths.map(async (p) => {
+      const bucket = supabase.storage.from("lesson-images");
+      const [{ data: t }, { data: f }] = await Promise.all([
+        bucket.createSignedUrl(p, 3600, {
+          transform: { width: 1280, quality: 50, resize: "contain" },
+        }),
+        bucket.createSignedUrl(p, 3600),
+      ]);
+      const thumb = t?.signedUrl ?? f?.signedUrl ?? "";
+      const full = f?.signedUrl ?? t?.signedUrl ?? "";
+      return { thumb, full };
+    }),
+  );
+  return out.filter((x) => x.thumb);
+}
+
+/** Read a lesson's stored page image paths (RLS-scoped to the user). */
+async function lessonImagePaths(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+  lessonId: string,
+): Promise<string[]> {
+  const { data: lesson } = await supabase
+    .from("lessons")
+    .select("image_path,image_paths")
+    .eq("id", lessonId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (!lesson) return [];
+  return lesson.image_paths && lesson.image_paths.length > 0
+    ? lesson.image_paths
+    : lesson.image_path
+      ? [lesson.image_path]
+      : [];
+}
+
+/** Thumbnail + full URLs for a lesson's source page image(s), for the on-demand
+ *  preview next to a saved item. Fetched lazily (only when a preview opens) so
+ *  the lists don't sign hundreds of URLs up front. */
+export async function getLessonImageUrls(
+  lessonId: string,
+): Promise<{ thumb: string; full: string }[]> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return [];
+  const paths = await lessonImagePaths(supabase, user.id, lessonId);
+  return paths.length ? signThumbs(supabase, paths) : [];
+}
+
+/** Image(s) to preview for ONE book page: its own page photo when it has one,
+ *  otherwise every page image from its lesson (so a single upload tagged across
+ *  a page range still shows a picture on every page in that range). */
+export async function getBookPageImages(
+  lessonId: string | null,
+  ownPath: string | null,
+): Promise<{ thumb: string; full: string }[]> {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return [];
 
-  const { data: lesson } = await supabase
-    .from("lessons")
-    .select("image_path,image_paths")
-    .eq("id", lessonId)
-    .eq("user_id", user.id)
-    .maybeSingle();
-  if (!lesson) return [];
-
-  const paths: string[] =
-    lesson.image_paths && lesson.image_paths.length > 0
-      ? lesson.image_paths
-      : lesson.image_path
-        ? [lesson.image_path]
-        : [];
-  if (paths.length === 0) return [];
-
-  const { data: signed } = await supabase.storage
-    .from("lesson-images")
-    .createSignedUrls(paths, 3600);
-  return (signed ?? [])
-    .map((s) => s.signedUrl)
-    .filter((u): u is string => !!u);
+  // A page's own image (paths are stored under the user's folder; ignore anything
+  // that isn't, so a client can't ask us to sign someone else's object).
+  if (ownPath && ownPath.startsWith(`${user.id}/`)) {
+    return signThumbs(supabase, [ownPath]);
+  }
+  if (!lessonId) return [];
+  const paths = await lessonImagePaths(supabase, user.id, lessonId);
+  return paths.length ? signThumbs(supabase, paths) : [];
 }
 
 /** Next page of items, newest first, for infinite scroll. `hasMore` is true

@@ -11,6 +11,7 @@ import {
   Check,
   ChevronDown,
   X,
+  Image as ImageIcon,
 } from "lucide-react";
 import { Markdown } from "@/components/markdown";
 import { ImagePreview } from "@/components/image-preview";
@@ -23,6 +24,7 @@ import {
 import { collectionEmoji } from "@/lib/source";
 import { CostHint, MODEL_LABELS } from "@/components/cost-hint";
 import { cn } from "@/lib/utils";
+import { getBookPageImages } from "../../library/actions";
 import { generateSummary, setPageStatus, updateCollectionPages } from "../actions";
 
 export type BookItem = {
@@ -47,7 +49,7 @@ export type GridPage = {
   lesson_title: string | null;
   level: MasteryLevel | null;
   item_count: number;
-  image_url: string | null;
+  image_path: string | null;
 };
 
 type CollectionLite = {
@@ -417,10 +419,15 @@ export function BookDetail({
                               {n}
                             </button>
                           );
-                          return page?.image_url ? (
+                          return page?.lesson_id || page?.image_path ? (
                             <ImagePreview
                               key={n}
-                              urls={[page.image_url]}
+                              load={() =>
+                                getBookPageImages(
+                                  page.lesson_id,
+                                  page.image_path,
+                                )
+                              }
                               hoverOnly
                             >
                               {cell}
@@ -497,14 +504,19 @@ export function BookDetail({
               ))}
             </div>
 
-            {selectedPage?.image_url && (
-              <ImagePreview urls={[selectedPage.image_url]} directLightbox>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={selectedPage.image_url}
-                  alt={`Page ${selected}`}
-                  className="mt-3 max-h-72 cursor-zoom-in rounded-lg border border-border object-contain"
-                />
+            {(selectedPage?.lesson_id || selectedPage?.image_path) && (
+              <ImagePreview
+                load={() =>
+                  getBookPageImages(
+                    selectedPage.lesson_id,
+                    selectedPage.image_path,
+                  )
+                }
+                directLightbox
+              >
+                <span className="mt-2 flex cursor-zoom-in items-center gap-1 text-xs text-primary hover:underline">
+                  <ImageIcon className="h-3.5 w-3.5" /> View page photo
+                </span>
               </ImagePreview>
             )}
 

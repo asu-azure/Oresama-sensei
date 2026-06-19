@@ -6,7 +6,8 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Check, RotateCcw, Brain, GraduationCap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AskSensei } from "@/components/ask-sensei/ask-sensei";
-import { showReading } from "@/lib/furigana";
+import { showReading, stripFurigana } from "@/lib/furigana";
+import { RubyText } from "@/components/ruby-text";
 import { SpeakButton } from "@/components/speak-button";
 import { PitchAccent } from "@/components/pitch-accent";
 import { PitchToggle } from "@/components/pitch-toggle";
@@ -185,9 +186,11 @@ function Flashcards({
             )}
           </div>
 
-          <div className="font-jp text-3xl font-semibold">{card.term}</div>
+          <div className="font-jp text-3xl font-semibold">
+            <RubyText>{card.term}</RubyText>
+          </div>
           <div className="mt-2 flex justify-center">
-            <SpeakButton text={card.reading || card.term} />
+            <SpeakButton text={stripFurigana(card.reading || card.term)} />
           </div>
 
           {revealed ? (
@@ -204,7 +207,9 @@ function Flashcards({
                 ))}
               {card.meaning && <p className="text-base">{card.meaning}</p>}
               {card.example && (
-                <p className="font-jp text-sm text-muted">{card.example}</p>
+                <p className="font-jp text-sm text-muted">
+                  <RubyText>{card.example}</RubyText>
+                </p>
               )}
             </div>
           ) : (

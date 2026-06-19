@@ -52,22 +52,6 @@ export default async function BookDetailPage({
     lesson_id: string | null;
     image_path: string | null;
   }[];
-
-  // Batch-sign every tracked page image in one request, mapped by page number,
-  // so the grid can show a thumbnail on hover/tap without a round-trip per cell.
-  const pageImageUrl: Record<number, string> = {};
-  const imgRows = pageRows.filter((p) => p.image_path);
-  if (imgRows.length > 0) {
-    const { data: signed } = await supabase.storage
-      .from("lesson-images")
-      .createSignedUrls(
-        imgRows.map((p) => p.image_path!),
-        3600,
-      );
-    (signed ?? []).forEach((s, i) => {
-      if (s.signedUrl) pageImageUrl[imgRows[i].page_number] = s.signedUrl;
-    });
-  }
   const lessons = (lessonsRaw ?? []) as { id: string; title: string | null }[];
   const items = (itemsRaw ?? []) as BookItem[];
 
@@ -100,7 +84,7 @@ export default async function BookDetailPage({
       lesson_title: p.lesson_id ? (lessonTitle[p.lesson_id] ?? null) : null,
       level: m?.level ?? null,
       item_count: lessonItems.length,
-      image_url: pageImageUrl[p.page_number] ?? null,
+      image_path: p.image_path,
     };
   });
 
