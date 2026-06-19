@@ -13,6 +13,7 @@ import {
   X,
 } from "lucide-react";
 import { Markdown } from "@/components/markdown";
+import { ImagePreview } from "@/components/image-preview";
 import {
   masteryLevel,
   masteryInfo,
@@ -46,6 +47,7 @@ export type GridPage = {
   lesson_title: string | null;
   level: MasteryLevel | null;
   item_count: number;
+  image_url: string | null;
 };
 
 type CollectionLite = {
@@ -396,9 +398,8 @@ export function BookDetail({
                       <div className="flex flex-wrap gap-1.5 border-t border-border px-3 py-3">
                         {r.nums.map((n) => {
                           const page = pageMap.get(n);
-                          return (
+                          const cell = (
                             <button
-                              key={n}
                               id={`book-page-${n}`}
                               onClick={() => setSelected(selected === n ? null : n)}
                               className={cn(
@@ -415,6 +416,19 @@ export function BookDetail({
                             >
                               {n}
                             </button>
+                          );
+                          return page?.image_url ? (
+                            <ImagePreview
+                              key={n}
+                              urls={[page.image_url]}
+                              hoverOnly
+                            >
+                              {cell}
+                            </ImagePreview>
+                          ) : (
+                            <span key={n} className="inline-flex">
+                              {cell}
+                            </span>
                           );
                         })}
                       </div>
@@ -482,6 +496,17 @@ export function BookDetail({
                 </button>
               ))}
             </div>
+
+            {selectedPage?.image_url && (
+              <ImagePreview urls={[selectedPage.image_url]} directLightbox>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={selectedPage.image_url}
+                  alt={`Page ${selected}`}
+                  className="mt-3 max-h-72 cursor-zoom-in rounded-lg border border-border object-contain"
+                />
+              </ImagePreview>
+            )}
 
             {selectedItems.length > 0 ? (
               <ul className="mt-3 space-y-1.5">

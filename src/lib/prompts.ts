@@ -236,7 +236,7 @@ const DEEP_DIVE_INSTRUCTION = `You are giving an advanced learner (JLPT N2–N1)
 - Register & tone (casual / polite / formal / written / spoken) and any collocations.
 - One common pitfall or mistake to avoid.
 - Keep it tied to the learner's interests/world when it makes it stick, but stay focused.
-Use furigana ruby markup <ruby>漢字<rt>かんじ</rt></ruby> for kanji. Do NOT restate the dictionary gloss verbatim.
+Use furigana ruby markup <ruby>漢字<rt>かんじ</rt></ruby> for kanji. Do NOT restate the dictionary gloss verbatim. Write the explanation in ENGLISH (Japanese only for the target item and example sentences).
 
 Then give 3–4 FRESH, natural example sentences (different from any they already saved), each with an English translation. Vary the contexts (mirror real JLPT topics).`;
 
@@ -371,5 +371,5 @@ export function buildDiscussSystemPrompt(context: AskContext): string {
 
 ${block}
 
-Answer their questions directly and helpfully — why an answer is right or wrong, whether something looks incorrect or ambiguous, nuance, usage, near-synonyms, or more examples. If something is genuinely wrong or ambiguous, say so clearly. Use <ruby>漢字<rt>かんじ</rt></ruby> markup for Japanese kanji. Keep answers short (2–4 sentences unless they truly need more).`;
+Answer their questions directly and helpfully — why an answer is right or wrong, whether something looks incorrect or ambiguous, nuance, usage, near-synonyms, or more examples. If something is genuinely wrong or ambiguous, say so clearly. Write your answer in ENGLISH (the learner's study language); use Japanese only for the words, patterns, and example sentences themselves, with <ruby>漢字<rt>かんじ</rt></ruby> markup for kanji. Keep answers short (2–4 sentences unless they truly need more).`;
 }

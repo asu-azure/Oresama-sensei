@@ -12,18 +12,21 @@ import {
   Loader2,
   MessageCircle,
   Sparkles,
+  Image as ImageIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { showReading, stripFurigana } from "@/lib/furigana";
 import { RubyText } from "@/components/ruby-text";
 import { SpeakButton } from "@/components/speak-button";
 import { KanjiChips } from "@/components/kanji/kanji-chips";
+import { ImagePreview } from "@/components/image-preview";
 import { DeepDiveSection } from "@/components/knowledge/deep-dive-section";
 import { PitchAccent } from "@/components/pitch-accent";
 import { PitchToggle } from "@/components/pitch-toggle";
 import { PitchLegend } from "@/components/pitch-legend";
 import { usePitch } from "@/lib/use-pitch";
 import type { ExplanationMap } from "../library/explanations";
+import { getLessonImageUrls } from "../library/actions";
 import { searchLessons, type LessonHit } from "./actions";
 
 export type SearchItem = {
@@ -34,6 +37,7 @@ export type SearchItem = {
   meaning: string | null;
   example: string | null;
   jlpt_level: string | null;
+  lesson_id: string | null;
 };
 
 export function SearchClient({
@@ -252,9 +256,29 @@ export function SearchClient({
                             <span className="rounded-full bg-surface-2 px-2 py-0.5 text-muted">
                               {it.type}
                             </span>
+                            {it.lesson_id && (
+                              <>
+                                <Link
+                                  href={`/lessons/${it.lesson_id}`}
+                                  className="ml-auto flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-muted transition-colors hover:bg-surface-2 hover:text-foreground"
+                                >
+                                  <BookOpen className="h-3 w-3" /> Lesson
+                                </Link>
+                                <ImagePreview
+                                  load={() => getLessonImageUrls(it.lesson_id!)}
+                                >
+                                  <span className="flex cursor-pointer items-center gap-1 rounded-full border border-border px-2 py-0.5 text-muted transition-colors hover:bg-surface-2 hover:text-foreground">
+                                    <ImageIcon className="h-3 w-3" /> Page
+                                  </span>
+                                </ImagePreview>
+                              </>
+                            )}
                             <Link
                               href={`/review?item=${it.id}`}
-                              className="ml-auto rounded-full border border-border px-2 py-0.5 text-muted transition-colors hover:bg-surface-2 hover:text-foreground"
+                              className={cn(
+                                "rounded-full border border-border px-2 py-0.5 text-muted transition-colors hover:bg-surface-2 hover:text-foreground",
+                                !it.lesson_id && "ml-auto",
+                              )}
                             >
                               Practice
                             </Link>

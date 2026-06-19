@@ -3,4 +3,4 @@
 // Kept out of actions.ts because a "use server" module may only export async
 // functions.
 export const LIBRARY_COLS =
-  "id,type,term,reading,meaning,example,jlpt_level,srs_reps,srs_interval,srs_lapses,srs_stability,srs_difficulty,srs_due,times_seen,last_seen,created_at,source_type,collection_id,collections(title,kind)";
+  "id,type,term,reading,meaning,example,jlpt_level,srs_reps,srs_interval,srs_lapses,srs_stability,srs_difficulty,srs_due,times_seen,last_seen,created_at,source_type,collection_id,lesson_id,collections(title,kind)";

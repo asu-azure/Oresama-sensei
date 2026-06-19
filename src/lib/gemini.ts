@@ -65,6 +65,12 @@ export async function embedText(
 export const GEMINI_FLASH = "gemini-2.5-flash";
 export const GEMINI_PRO = "gemini-2.5-pro";
 
+/** Gemini (esp. Flash) tends to answer in Japanese. Reinforce English for every
+ *  secondary generation so explanations match the learner's study language —
+ *  Japanese stays only where it's the subject (target words + example sentences). */
+export const ENGLISH_DIRECTIVE =
+  "\n\nIMPORTANT: Write all explanations in ENGLISH (the learner's study language). Use Japanese ONLY for the target words, grammar patterns, and example sentences — every explanation, nuance note, and instruction must be in English.";
+
 /** Gemini's JSON mode HTML-escapes embedded markup, so `<ruby>漢字<rt>…` comes
  *  back as `&lt;ruby&gt;漢字&lt;rt&gt;…` and renders as literal brackets. These
  *  characters are all legal *raw* in JSON string values, so decoding them on the
@@ -94,7 +100,7 @@ export async function geminiStructured(opts: {
       ai().models.generateContent({
         model: opts.pro ? GEMINI_PRO : GEMINI_FLASH,
         config: {
-          systemInstruction: opts.system + opts.jsonHint,
+          systemInstruction: opts.system + ENGLISH_DIRECTIVE + opts.jsonHint,
           responseMimeType: "application/json",
           temperature: 0.7,
         },
@@ -116,7 +122,10 @@ export async function geminiText(opts: {
     () =>
       ai().models.generateContent({
         model: opts.pro ? GEMINI_PRO : GEMINI_FLASH,
-        config: { systemInstruction: opts.system, temperature: 0.8 },
+        config: {
+          systemInstruction: opts.system + ENGLISH_DIRECTIVE,
+          temperature: 0.8,
+        },
         contents: [{ role: "user", parts: [{ text: opts.user }] }],
       }),
     "geminiText",
@@ -144,7 +153,7 @@ export async function runGeminiStream(opts: {
     () =>
       ai().models.generateContentStream({
         model: opts.pro ? GEMINI_PRO : GEMINI_FLASH,
-        config: { systemInstruction: opts.system },
+        config: { systemInstruction: opts.system + ENGLISH_DIRECTIVE },
         contents,
       }),
     "geminiStream",
@@ -205,7 +214,7 @@ export async function generateKanjiMnemonicGemini(
       ai().models.generateContent({
         model: GEMINI_FLASH,
         config: {
-          systemInstruction: system + jsonHint,
+          systemInstruction: system + ENGLISH_DIRECTIVE + jsonHint,
           responseMimeType: "application/json",
           temperature: 0.9,
         },

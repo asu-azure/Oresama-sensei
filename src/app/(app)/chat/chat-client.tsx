@@ -21,9 +21,11 @@ export type UiMessage = {
 };
 
 const SUGGESTIONS = [
-  "What is the nuance between ~によって and ~により?",
-  "Teach me 3 N1 expressions I can use when chatting with artists on X.",
-  "Explain the grammar ~ともなると with examples.",
+  "What do these difficult words mean? (paste a sentence or some words)",
+  "Give me a vivid way to remember this word or kanji.",
+  "Show example sentences using this kanji and a few similar kanji.",
+  "What's the nuance between two similar words or grammar points?",
+  "Teach me natural expressions for chatting with artists on X.",
 ];
 
 export function ChatClient({
@@ -50,6 +52,7 @@ export function ChatClient({
   );
   const [loadingOlder, setLoadingOlder] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const prependingRef = useRef(false);
   const prevScrollHeight = useRef<number | null>(null);
   const router = useRouter();
@@ -109,6 +112,15 @@ export function ChatClient({
     }
     el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
   }, [messages]);
+
+  // Grow the input textarea with its content (up to the CSS max-height, then it
+  // scrolls). Runs whenever `input` changes, including the reset to "" on send.
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [input]);
 
   async function loadOlder() {
     if (!conversationId || loadingOlder || !oldestCursor) return;
@@ -328,6 +340,7 @@ export function ChatClient({
       >
         <div className="flex items-end gap-2">
           <textarea
+            ref={inputRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {
@@ -338,7 +351,7 @@ export function ChatClient({
             }}
             placeholder="日本語について何でも聞いてください…"
             rows={1}
-            className="max-h-40 flex-1 resize-none rounded-xl border border-border bg-surface px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+            className="max-h-40 flex-1 resize-none overflow-y-auto rounded-xl border border-border bg-surface px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-ring"
           />
           <Button
             type="submit"

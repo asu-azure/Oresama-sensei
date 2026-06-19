@@ -89,6 +89,41 @@ export async function getOrGenerateExplanation(
   return { explanation_md: result.explanation, examples: result.examples };
 }
 
+/** Signed URLs for a lesson's source page image(s), for the on-demand preview
+ *  shown next to a saved item / a book page. Returns [] when the lesson isn't
+ *  the user's or has no stored images. Fetched lazily (only when the user opens
+ *  a preview) so the lists don't pay to sign hundreds of URLs up front. */
+export async function getLessonImageUrls(lessonId: string): Promise<string[]> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return [];
+
+  const { data: lesson } = await supabase
+    .from("lessons")
+    .select("image_path,image_paths")
+    .eq("id", lessonId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (!lesson) return [];
+
+  const paths: string[] =
+    lesson.image_paths && lesson.image_paths.length > 0
+      ? lesson.image_paths
+      : lesson.image_path
+        ? [lesson.image_path]
+        : [];
+  if (paths.length === 0) return [];
+
+  const { data: signed } = await supabase.storage
+    .from("lesson-images")
+    .createSignedUrls(paths, 3600);
+  return (signed ?? [])
+    .map((s) => s.signedUrl)
+    .filter((u): u is string => !!u);
+}
+
 /** Next page of items, newest first, for infinite scroll. `hasMore` is true
  *  when a full page came back (so there is likely another page). */
 export async function loadMoreItems(
