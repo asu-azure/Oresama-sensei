@@ -62,7 +62,7 @@ export function SummaryGenerator() {
           <Button onClick={generate} disabled={busy} variant="accent">
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : "Generate"}
           </Button>
-          <CostHint model={MODEL_LABELS.sonnet} />
+          <CostHint model={MODEL_LABELS.engine} />
         </div>
       </div>
 

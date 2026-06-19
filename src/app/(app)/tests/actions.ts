@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { refineExercise as refineWithAi } from "@/lib/claude";
+import { getAiEngine } from "@/lib/ai-engine";
 import type { Exercise } from "@/lib/types";
 
 /** Verify/fix a flagged exercise with AI and, when a saved test or lesson +
@@ -23,7 +24,11 @@ export async function refineExercise(params: {
 
   let refined: Exercise | null;
   try {
-    refined = await refineWithAi(params.exercise, params.note);
+    refined = await refineWithAi(
+      params.exercise,
+      params.note,
+      await getAiEngine(supabase, user.id),
+    );
   } catch (e) {
     console.error("exercise refine failed:", e);
     return { error: "Couldn't check this question right now." };

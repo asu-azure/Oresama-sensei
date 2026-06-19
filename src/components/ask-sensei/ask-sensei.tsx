@@ -138,7 +138,7 @@ function AskPanel({
       <div className="flex items-center gap-2 border-b border-border px-4 py-3">
         <MessageCircle className="h-4 w-4 text-primary" />
         <span className="text-sm font-medium">Ask Sensei</span>
-        <CostHint model={MODEL_LABELS.sonnet} className="ml-2" />
+        <CostHint model={MODEL_LABELS.engine} className="ml-2" />
         <button
           onClick={onClose}
           className="ml-auto rounded-lg p-1.5 transition-colors hover:bg-surface-2"

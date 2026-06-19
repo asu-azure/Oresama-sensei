@@ -11,6 +11,9 @@ export interface Profile {
   jlpt_target: string;
   native_language: string;
   tone: string | null;
+  /** Which provider runs secondary (non-chat, non-lesson) AI calls:
+   *  'gemini' (default, cheaper) | 'claude'. Added in migration 0015. */
+  ai_engine?: string | null;
   created_at: string;
   updated_at: string;
 }

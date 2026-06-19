@@ -49,7 +49,7 @@ Two core features:
 - `supabase/migrations/0001_init.sql` — schema, pgvector, RLS, `match_knowledge`, storage, profile trigger.
 
 ## Running it
-1. Supabase project → run the SQL files in `supabase/migrations/` (0001–0009) in order in the SQL editor.
+1. Supabase project → run the SQL files in `supabase/migrations/` (0001–0015) in order in the SQL editor.
 2. `.env.local` (NOT committed) with: `NEXT_PUBLIC_SUPABASE_URL`,
    `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`. See `.env.example`.
 3. `npm install` → `npm run dev` → http://localhost:3000. Restart dev after editing `.env.local`
@@ -220,6 +220,25 @@ The **data lives in Supabase (cloud)**, so chats/vocab/lessons sync automaticall
   coach/deep-dive/collection generation, Check & fix, Ask Sensei, and kanji mnemonics. Run migration
   **0014** after 0011–0013. *(Search/Library scroll-position memory was intentionally left out —
   restoring it needs setState-in-effect, which the lint forbids.)*
+- ✅ v3.2 shipped (Gemini-default engine, lesson model options, mobile & ruby fixes): **(a)** a global
+  **AI engine** setting (`profiles.ai_engine`, migration **0015**, Settings toggle, default **gemini**)
+  routes the *secondary* AI calls to Gemini, switchable to Claude. Mixed tiers via `AiEngine` +
+  `resolveEngine` (`src/lib/claude.ts`) and `getAiEngine` (`src/lib/ai-engine.ts`): structured/cheap →
+  **Gemini Flash** (`generateExercises`, `refineExercise`, `extractKnowledge`, `generateKnowledgeMap`,
+  `generateDeepDive`, `generateCoachNote`), conversational → **Gemini Pro** (`runDiscussStream`,
+  `runSummaryStream`, `generateCollectionSummary`). Each generator takes an `engine` param and branches
+  to shared Gemini helpers (`geminiStructured`/`geminiText`/`runGeminiStream` in `src/lib/gemini.ts`,
+  reusing each function's existing parser). **The main chat tutor (`streamChat`) and OCR always stay on
+  their own models** — chat = Claude. Routes/actions read `ai_engine` and thread it (discuss + summary
+  routes refactored to the `onDelta` ReadableStream shape). `CostHint` on these shows **"AI engine"**
+  (model follows the toggle). **(b)** Lesson uploads gain a **Quick+ (Gemini Pro)** option (4th choice;
+  `gemini-pro` was already wired). **(c)** Lessons now **force English** output (explicit directive in
+  `buildLessonSystemPrompt` + reinforced in `runGeminiLessonStream`) — fixes Flash writing lessons in
+  Japanese. **(d)** **Ruby fix**: Gemini JSON HTML-escapes `<ruby>` (→ literal `&lt;ruby&gt;`);
+  `decodeRubyEntities` (safe `&lt;`/`&gt;`/`&amp;`, never `&quot;`) runs on all Gemini JSON, plus
+  `cleanRuby` strips stray backticks around ruby in `parseKanjiMnemonic`. **(e)** **iOS keyboard zoom**:
+  `@media (pointer: coarse) { input,textarea,select { font-size:16px } }` in `globals.css` (touch only;
+  no `maximum-scale`, pinch-zoom preserved). Run migration **0015** after 0011–0014.
 - ⏳ Next ideas (not built): library multi-select bulk source-tag (per-lesson editor covers backfill for
   now); per-page knowledge granularity (page color currently aggregates the whole lesson's items); a
   standalone personalized-lesson generator; Anki export; paginate

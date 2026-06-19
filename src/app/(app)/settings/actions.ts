@@ -15,7 +15,7 @@ export async function updateProfile(formData: FormData) {
     return v.length > 0 ? v : null;
   };
 
-  await supabase.from("profiles").upsert({
+  const base = {
     id: user.id,
     display_name: str("display_name"),
     interests: str("interests"),
@@ -23,7 +23,16 @@ export async function updateProfile(formData: FormData) {
     native_language: str("native_language") ?? "Thai",
     tone: str("tone"),
     updated_at: new Date().toISOString(),
-  });
+  };
+  const ai_engine = str("ai_engine") === "claude" ? "claude" : "gemini";
+
+  // Try with the ai_engine column; if migration 0015 hasn't run, fall back.
+  const withEngine = await supabase
+    .from("profiles")
+    .upsert({ ...base, ai_engine });
+  if (withEngine.error) {
+    await supabase.from("profiles").upsert(base);
+  }
 
   revalidatePath("/settings");
 }

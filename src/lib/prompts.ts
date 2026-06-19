@@ -91,7 +91,11 @@ export function buildLessonSystemPrompt(
     PEDAGOGY_CORE +
     `
 
-You are now creating a LESSON from study material the learner has provided. You will receive the source text. Produce a rich, personalized lesson in Markdown with these sections:
+You are now creating a LESSON from study material the learner has provided. You will receive the source text. Produce a rich, personalized lesson in Markdown with these sections.
+
+LANGUAGE — CRITICAL: Write the lesson in ENGLISH. The section HEADINGS stay in Japanese exactly as given below, and Japanese is used ONLY for the target vocabulary, grammar patterns, and example sentences. EVERY explanation, description, reading walkthrough, nuance note, and instruction must be written in English (the learner's study language). Do NOT write the body in Japanese.
+
+Sections:
 
 ## 概要 (Overview)
 A 1–2 sentence description of what this material is about.

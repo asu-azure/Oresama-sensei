@@ -294,7 +294,7 @@ export function ExercisePlayer({
             className="mt-1.5 w-full resize-none rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
           />
           <div className="mt-2 flex items-center justify-end gap-2">
-            <CostHint model={MODEL_LABELS.sonnet} className="mr-auto" />
+            <CostHint model={MODEL_LABELS.engine} className="mr-auto" />
             <Button
               variant="ghost"
               size="sm"

@@ -402,8 +402,8 @@ export function TestsClient({
             )}
           </Button>
           <CostHint
-            model={MODEL_LABELS.sonnet}
-            note="saved test replays are free"
+            model={MODEL_LABELS.engine}
+            note="Gemini by default (Settings); saved test replays are free"
           />
         </div>
       </section>
@@ -498,7 +498,7 @@ export function TestsClient({
                   )}
                   Generate
                 </Button>
-                <CostHint model={MODEL_LABELS.sonnet} className="self-center" />
+                <CostHint model={MODEL_LABELS.engine} className="self-center" />
               </div>
             )}
           </div>

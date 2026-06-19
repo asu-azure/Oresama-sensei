@@ -70,7 +70,7 @@ export function DeepDiveSection({
             )}
           />
         ) : (
-          <CostHint model={MODEL_LABELS.sonnet} className="ml-auto" />
+          <CostHint model={MODEL_LABELS.engine} className="ml-auto" />
         )}
       </button>
       {error && <p className="mt-1 text-xs text-accent">{error}</p>}
@@ -113,7 +113,7 @@ export function DeepDiveSection({
               >
                 Regenerate
               </button>
-              <CostHint model={MODEL_LABELS.sonnet} />
+              <CostHint model={MODEL_LABELS.engine} />
             </div>
           </motion.div>
         )}

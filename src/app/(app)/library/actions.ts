@@ -3,7 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import type { LibraryItem } from "./library-client";
 import { LIBRARY_COLS } from "./columns";
-import { generateDeepDive, type DeepDiveExample } from "@/lib/claude";
+import { generateDeepDive, resolveEngine, type DeepDiveExample } from "@/lib/claude";
 import { recallKnowledge } from "@/lib/memory";
 import type { Profile } from "@/lib/types";
 
@@ -62,6 +62,9 @@ export async function getOrGenerateExplanation(
       item,
       profile: profile as Profile | null,
       recalled,
+      engine: resolveEngine(
+        (profile as { ai_engine?: string } | null)?.ai_engine,
+      ),
     });
   } catch (e) {
     console.error("deep dive generation failed:", e);

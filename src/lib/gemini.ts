@@ -65,6 +65,101 @@ export async function embedText(
 export const GEMINI_FLASH = "gemini-2.5-flash";
 export const GEMINI_PRO = "gemini-2.5-pro";
 
+/** Gemini's JSON mode HTML-escapes embedded markup, so `<ruby>漢字<rt>…` comes
+ *  back as `&lt;ruby&gt;漢字&lt;rt&gt;…` and renders as literal brackets. These
+ *  characters are all legal *raw* in JSON string values, so decoding them on the
+ *  raw JSON text (before JSON.parse) is safe. We deliberately DON'T decode
+ *  `&quot;` — that would inject a `"` and corrupt the JSON structure. */
+export function decodeRubyEntities(s: string): string {
+  return s
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&#0*39;|&apos;/g, "'")
+    .replace(/&amp;/g, "&");
+}
+
+type GeminiTurn = { role: "user" | "assistant"; content: string };
+
+/** Run a Gemini structured-JSON request and return the cleaned raw JSON string
+ *  (caller does the JSON.parse with its own schema/normalizer). Flash by default,
+ *  Pro when `pro` is set. `jsonHint` describes the exact JSON shape to emit. */
+export async function geminiStructured(opts: {
+  system: string;
+  user: string;
+  jsonHint: string;
+  pro?: boolean;
+}): Promise<string> {
+  const res = await withRetry(
+    () =>
+      ai().models.generateContent({
+        model: opts.pro ? GEMINI_PRO : GEMINI_FLASH,
+        config: {
+          systemInstruction: opts.system + opts.jsonHint,
+          responseMimeType: "application/json",
+          temperature: 0.7,
+        },
+        contents: [{ role: "user", parts: [{ text: opts.user }] }],
+      }),
+    "geminiStructured",
+  );
+  return decodeRubyEntities((res.text ?? "").trim());
+}
+
+/** Run a Gemini plain-text request (Markdown out). For non-JSON generators like
+ *  the collection summary. */
+export async function geminiText(opts: {
+  system: string;
+  user: string;
+  pro?: boolean;
+}): Promise<string> {
+  const res = await withRetry(
+    () =>
+      ai().models.generateContent({
+        model: opts.pro ? GEMINI_PRO : GEMINI_FLASH,
+        config: { systemInstruction: opts.system, temperature: 0.8 },
+        contents: [{ role: "user", parts: [{ text: opts.user }] }],
+      }),
+    "geminiText",
+  );
+  return (res.text ?? "").trim();
+}
+
+/** Stream a Gemini response, pushing deltas to `onDelta`, resolving with the full
+ *  text. Accepts a single user string OR a conversation (assistant→model). Used
+ *  for the discuss/summary endpoints. Pro by default for conversational quality. */
+export async function runGeminiStream(opts: {
+  system: string;
+  user?: string;
+  messages?: GeminiTurn[];
+  pro?: boolean;
+  onDelta: (t: string) => void;
+}): Promise<string> {
+  const contents = opts.messages
+    ? opts.messages.map((m) => ({
+        role: m.role === "assistant" ? "model" : "user",
+        parts: [{ text: m.content }],
+      }))
+    : [{ role: "user", parts: [{ text: opts.user ?? "" }] }];
+  const res = await withRetry(
+    () =>
+      ai().models.generateContentStream({
+        model: opts.pro ? GEMINI_PRO : GEMINI_FLASH,
+        config: { systemInstruction: opts.system },
+        contents,
+      }),
+    "geminiStream",
+  );
+  let full = "";
+  for await (const chunk of res) {
+    const t = chunk.text ?? "";
+    if (t) {
+      full += t;
+      opts.onDelta(t);
+    }
+  }
+  return full;
+}
+
 /** Stream a generated lesson with Gemini (the cheap alternative to Claude),
  *  pushing text deltas to `onDelta` and resolving with the full article.
  *  `model` selects Flash (cheapest) or Pro (stronger). */
@@ -75,11 +170,14 @@ export async function runGeminiLessonStream(opts: {
   onDelta: (t: string) => void;
 }): Promise<string> {
   const modelId = opts.model === "gemini-pro" ? GEMINI_PRO : GEMINI_FLASH;
+  // Gemini Flash in particular tends to answer in Japanese; reinforce English.
+  const englishDirective =
+    "\n\nIMPORTANT: Write the lesson body in ENGLISH. Keep the Japanese section headings as given, and use Japanese only for target words, grammar patterns, and example sentences — all explanations must be in English.";
   const res = await withRetry(
     () =>
       ai().models.generateContentStream({
         model: modelId,
-        config: { systemInstruction: opts.system },
+        config: { systemInstruction: opts.system + englishDirective },
         contents: [{ role: "user", parts: [{ text: opts.userMessage }] }],
       }),
     "lessonGemini",
@@ -101,7 +199,7 @@ export async function generateKanjiMnemonicGemini(
   system: string,
   userMessage: string,
 ): Promise<string> {
-  const jsonHint = `\n\nReturn ONLY valid JSON (no markdown fences) matching exactly:\n{"mnemonic": "...", "examples": [{"term": "...", "reading": "...", "meaning": "...", "example": "...", "jlpt_level": "..."}]}`;
+  const jsonHint = `\n\nReturn ONLY valid JSON (no markdown fences) matching exactly:\n{"mnemonic": "...", "examples": [{"term": "...", "reading": "...", "meaning": "...", "example": "...", "jlpt_level": "..."}]}\nWrite any furigana as literal <ruby>漢字<rt>かんじ</rt></ruby> tags — do NOT HTML-escape the angle brackets.`;
   const res = await withRetry(
     () =>
       ai().models.generateContent({
@@ -115,7 +213,7 @@ export async function generateKanjiMnemonicGemini(
       }),
     "kanjiMnemonicGemini",
   );
-  return (res.text ?? "").trim();
+  return decodeRubyEntities((res.text ?? "").trim());
 }
 
 /** Read Japanese text from a photographed page using Gemini vision. */

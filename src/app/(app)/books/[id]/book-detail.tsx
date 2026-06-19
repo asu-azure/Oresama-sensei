@@ -279,7 +279,7 @@ export function BookDetail({
           <h2 className="text-sm font-semibold">Summary</h2>
           {summary && (
             <div className="ml-auto flex items-center gap-2">
-              <CostHint model={MODEL_LABELS.sonnet} />
+              <CostHint model={MODEL_LABELS.engine} />
               <button
                 onClick={() => runSummary(true)}
                 disabled={summaryBusy}
@@ -310,7 +310,7 @@ export function BookDetail({
               )}
               {summaryBusy ? "Writing…" : "Generate summary"}
             </button>
-            <CostHint model={MODEL_LABELS.sonnet} />
+            <CostHint model={MODEL_LABELS.engine} />
           </div>
         )}
         {summaryError && (

@@ -104,6 +104,27 @@ export default async function SettingsPage() {
           />
         </div>
 
+        <div className="space-y-1.5 border-t border-border pt-4">
+          <label htmlFor="ai_engine" className="text-sm font-medium">
+            AI engine
+          </label>
+          <select
+            id="ai_engine"
+            name="ai_engine"
+            defaultValue={p?.ai_engine === "claude" ? "claude" : "gemini"}
+            className={FIELD}
+          >
+            <option value="gemini">Gemini — cheaper (default)</option>
+            <option value="claude">Claude — best quality</option>
+          </select>
+          <p className="text-xs text-muted">
+            Controls exercises, kanji mnemonics, deep-dives, the knowledge map,
+            review summaries, the study coach, and the Ask Sensei helper. The main
+            chat tutor always uses Claude, and OCR + lesson writing keep their own
+            model pickers.
+          </p>
+        </div>
+
         <Button type="submit">Save profile</Button>
       </form>
     </div>

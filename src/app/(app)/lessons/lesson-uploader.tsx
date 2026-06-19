@@ -30,6 +30,7 @@ const OCR_OPTIONS: { value: OcrModel; label: string }[] = [
 type LessonModelChoice = "claude" | "opus" | "gemini" | "gemini-pro";
 const LESSON_MODEL_OPTIONS: { value: LessonModelChoice; label: string }[] = [
   { value: "gemini", label: "Quick" },
+  { value: "gemini-pro", label: "Quick+" },
   { value: "claude", label: "Standard" },
   { value: "opus", label: "Deep" },
 ];
@@ -448,8 +449,9 @@ export function LessonUploader() {
               ))}
             </div>
             <p className="mt-1 text-xs text-muted">
-              <b>Quick</b> uses Gemini (cheapest). <b>Standard</b> uses Claude for
-              the best teaching. <b>Deep</b> uses Opus for the richest lessons.
+              <b>Quick</b> = Gemini Flash (cheapest). <b>Quick+</b> = Gemini Pro
+              (stronger, still cheap). <b>Standard</b> = Claude (best teaching).
+              <b> Deep</b> = Opus (richest). All output English.
             </p>
           </div>
 

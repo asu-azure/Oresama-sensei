@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import { generateCoachNote } from "@/lib/claude";
+import { generateCoachNote, resolveEngine } from "@/lib/claude";
 import { computeInsights, statsDigest, type InsightItem } from "@/lib/insights";
 import type { Profile } from "@/lib/types";
 
@@ -64,6 +64,9 @@ export async function POST(request: Request) {
   const note = await generateCoachNote({
     digest: statsDigest(insights),
     profile: profile as Profile | null,
+    engine: resolveEngine(
+      (profile as { ai_engine?: string } | null)?.ai_engine,
+    ),
   });
 
   if (!note.summary_md) {

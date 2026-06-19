@@ -53,7 +53,7 @@ export function CoachNote({ initial }: { initial: CoachNoteData | null }) {
         </h2>
         {note && (
           <div className="flex items-center gap-2">
-            <CostHint model={MODEL_LABELS.haiku} />
+            <CostHint model={MODEL_LABELS.engine} />
             <button
               onClick={() => fetchNote(true)}
               disabled={loading}
@@ -117,7 +117,7 @@ export function CoachNote({ initial }: { initial: CoachNoteData | null }) {
               )}
               {loading ? "Thinking…" : "Get coaching"}
             </button>
-            <CostHint model={MODEL_LABELS.haiku} />
+            <CostHint model={MODEL_LABELS.engine} />
           </div>
         </div>
       )}

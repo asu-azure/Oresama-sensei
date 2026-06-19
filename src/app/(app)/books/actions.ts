@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { generateCollectionSummary } from "@/lib/claude";
+import { generateCollectionSummary, resolveEngine } from "@/lib/claude";
 import type { CollectionKind } from "@/lib/source";
 import type { Profile } from "@/lib/types";
 
@@ -181,6 +181,9 @@ export async function generateSummary(
       kind: coll.kind,
       digest,
       profile: profile as Profile | null,
+      engine: resolveEngine(
+        (profile as { ai_engine?: string } | null)?.ai_engine,
+      ),
     });
   } catch (e) {
     console.error("collection summary failed:", e);

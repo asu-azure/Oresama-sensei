@@ -8,6 +8,8 @@ export const MODEL_LABELS = {
   haiku: "Claude Haiku",
   geminiFlash: "Gemini Flash",
   geminiPro: "Gemini Pro",
+  /** Calls whose model follows the global "AI engine" Settings toggle. */
+  engine: "AI engine",
 } as const;
 
 /** Map the lesson-writer choice to a display label. */

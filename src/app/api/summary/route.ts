@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import { streamSummary } from "@/lib/claude";
+import { runSummaryStream, resolveEngine } from "@/lib/claude";
 import { buildSummarySystemPrompt } from "@/lib/prompts";
 import type { Profile } from "@/lib/types";
 
@@ -67,14 +67,16 @@ export async function POST() {
   const lessonId = lesson.id;
 
   const system = buildSummarySystemPrompt(profile as Profile | null);
-  const claudeStream = streamSummary(system, digest);
+  const engine = resolveEngine(
+    (profile as { ai_engine?: string } | null)?.ai_engine,
+  );
   const encoder = new TextEncoder();
 
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       let article = "";
       let clientGone = false;
-      claudeStream.on("text", (delta) => {
+      const onDelta = (delta: string) => {
         article += delta;
         if (!clientGone) {
           try {
@@ -83,10 +85,10 @@ export async function POST() {
             clientGone = true;
           }
         }
-      });
+      };
 
       try {
-        await claudeStream.finalMessage();
+        await runSummaryStream({ system, digest, engine, onDelta });
       } catch (e) {
         console.error("summary generation error:", e);
       }

@@ -6,6 +6,7 @@ import {
   extractKnowledge,
   generateExercises,
   ocrImageWithClaude,
+  resolveEngine,
   type LessonModelChoice,
 } from "@/lib/claude";
 import { recallKnowledge, storeKnowledge } from "@/lib/memory";
@@ -244,6 +245,11 @@ export async function POST(request: Request) {
     supabase.from("profiles").select("*").eq("id", user.id).maybeSingle(),
     recallKnowledge(supabase, recallQuery, 8),
   ]);
+  // The lesson writer uses the per-upload picker; extraction + exercises follow
+  // the global engine setting.
+  const engine = resolveEngine(
+    (profile as { ai_engine?: string } | null)?.ai_engine,
+  );
   const pageCount = files.length;
   const system = buildLessonSystemPrompt(
     profile as Profile | null,
@@ -297,7 +303,7 @@ export async function POST(request: Request) {
             .from("lessons")
             .update({ article_md: article })
             .eq("id", lessonId);
-          const items = await extractKnowledge(article);
+          const items = await extractKnowledge(article, engine);
           if (items.length > 0) {
             await storeKnowledge(supabase, user.id, items, {
               source: "lesson",
@@ -321,10 +327,13 @@ export async function POST(request: Request) {
       // the lesson. Safe on an always-on host (no per-request timeout).
       try {
         if (article.trim()) {
-          const exercises = await generateExercises({
-            content: article,
-            count: Math.min(6 + (pageCount - 1) * 2, 14),
-          });
+          const exercises = await generateExercises(
+            {
+              content: article,
+              count: Math.min(6 + (pageCount - 1) * 2, 14),
+            },
+            engine,
+          );
           if (exercises.length > 0) {
             await supabase
               .from("lessons")

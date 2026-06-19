@@ -19,6 +19,12 @@ import type {
   Profile,
 } from "@/lib/types";
 import type { KanjiInfo, KanjiComponent } from "@/lib/kanji";
+import {
+  geminiStructured,
+  geminiText,
+  runGeminiStream,
+  generateKanjiMnemonicGemini,
+} from "@/lib/gemini";
 
 export const CHAT_MODEL = "claude-sonnet-4-6";
 export const LESSON_MODEL = "claude-sonnet-4-6";
@@ -26,6 +32,18 @@ export const DEEP_LESSON_MODEL = "claude-opus-4-8";
 // The coach note only summarizes an already-digested stats snapshot, so the
 // cheapest model is plenty — and it's cached, so it rarely runs.
 export const COACH_MODEL = "claude-haiku-4-5";
+
+/** Which provider runs the "secondary" (non-chat, non-lesson) AI calls. Set per
+ *  user via profiles.ai_engine; defaults to Gemini for cost. When "gemini",
+ *  structured/cheap calls use Flash and conversational ones use Pro; when
+ *  "claude", everything falls back to Claude Sonnet. */
+export type AiEngine = "gemini" | "claude";
+
+/** Coerce a stored profiles.ai_engine value into an AiEngine (default Gemini —
+ *  cheaper; also the fallback when migration 0015 hasn't run yet). */
+export function resolveEngine(value: string | null | undefined): AiEngine {
+  return value === "claude" ? "claude" : "gemini";
+}
 
 let _client: Anthropic | null = null;
 function anthropicClient(): Anthropic {
@@ -79,6 +97,29 @@ export function streamDiscuss(system: string, messages: ChatTurn[]) {
     system,
     messages,
   });
+}
+
+/** Engine-aware "Ask Sensei" discussion stream. Claude Sonnet, or Gemini Pro
+ *  (conversational tier) when engine="gemini". Pushes deltas to onDelta. */
+export async function runDiscussStream(opts: {
+  system: string;
+  messages: ChatTurn[];
+  engine?: AiEngine;
+  onDelta: (t: string) => void;
+}): Promise<string> {
+  if ((opts.engine ?? "gemini") === "gemini") {
+    return runGeminiStream({
+      system: opts.system,
+      messages: opts.messages,
+      pro: true,
+      onDelta: opts.onDelta,
+    });
+  }
+  const stream = streamDiscuss(opts.system, opts.messages);
+  stream.on("text", opts.onDelta);
+  const final = await stream.finalMessage();
+  const t = final.content.find((b) => b.type === "text");
+  return t && t.type === "text" ? t.text : "";
 }
 
 /** Stream a tutor answer. Returns a MessageStream; the caller pipes
@@ -166,6 +207,30 @@ export function streamSummary(system: string, digest: string, deep = false) {
   });
 }
 
+/** Engine-aware "summary of everything" stream (Claude Sonnet or Gemini Pro). */
+export async function runSummaryStream(opts: {
+  system: string;
+  digest: string;
+  engine?: AiEngine;
+  onDelta: (t: string) => void;
+}): Promise<string> {
+  const user = `Here is everything I've saved so far. Write my summary review.\n\n<my_items>\n${opts.digest}\n</my_items>`;
+  if ((opts.engine ?? "gemini") === "gemini") {
+    return runGeminiStream({ system: opts.system, user, pro: true, onDelta: opts.onDelta });
+  }
+  const stream = anthropicClient().messages.stream({
+    model: LESSON_MODEL,
+    max_tokens: LESSON_MAX_TOKENS,
+    system: opts.system,
+    thinking: { type: "disabled" },
+    messages: [{ role: "user", content: user }],
+  });
+  stream.on("text", opts.onDelta);
+  const final = await stream.finalMessage();
+  const t = final.content.find((b) => b.type === "text");
+  return t && t.type === "text" ? t.text : "";
+}
+
 const KNOWLEDGE_TYPES: KnowledgeType[] = ["vocab", "grammar", "expression"];
 
 const EXTRACTION_SCHEMA = {
@@ -201,35 +266,46 @@ const EXTRACTION_SCHEMA = {
   additionalProperties: false,
 } as const;
 
-/** Extract reusable vocab/grammar/expression items from content, using
- *  Claude structured outputs so the JSON is guaranteed to parse. */
-export async function extractKnowledge(
-  content: string,
-): Promise<ExtractedKnowledge[]> {
-  const res = await anthropicClient().messages.create({
-    model: CHAT_MODEL,
-    max_tokens: 4000,
-    output_config: {
-      format: { type: "json_schema", schema: EXTRACTION_SCHEMA },
-    },
-    messages: [
-      {
-        role: "user",
-        content: `${EXTRACTION_INSTRUCTION}\n\n<content>\n${content}\n</content>`,
-      },
-    ],
-  });
+const EXTRACTION_JSON_HINT = `\n\nReturn ONLY valid JSON (no markdown fences) matching exactly:\n{"items":[{"type":"vocab|grammar|expression","term":"...","reading":"...","meaning":"...","example":"...","jlpt_level":"...","notes":"..."}]}\nWrite furigana as literal <ruby>漢字<rt>かんじ</rt></ruby> tags (do NOT HTML-escape them).`;
 
-  const text = res.content.find((b) => b.type === "text");
-  if (!text || text.type !== "text") return [];
+function parseExtraction(raw: string): ExtractedKnowledge[] {
   try {
-    const parsed = JSON.parse(text.text) as { items?: ExtractedKnowledge[] };
+    const parsed = JSON.parse(raw) as { items?: ExtractedKnowledge[] };
     return (parsed.items ?? []).filter(
       (i) => i.term && KNOWLEDGE_TYPES.includes(i.type),
     );
   } catch {
     return [];
   }
+}
+
+/** Extract reusable vocab/grammar/expression items from content. Uses structured
+ *  output (Claude json_schema, or Gemini JSON) so the result always parses. */
+export async function extractKnowledge(
+  content: string,
+  engine: AiEngine = "gemini",
+): Promise<ExtractedKnowledge[]> {
+  const user = `${EXTRACTION_INSTRUCTION}\n\n<content>\n${content}\n</content>`;
+  if (engine === "gemini") {
+    const raw = await geminiStructured({
+      system: "",
+      user,
+      jsonHint: EXTRACTION_JSON_HINT,
+    });
+    return parseExtraction(raw);
+  }
+  const res = await anthropicClient().messages.create({
+    model: CHAT_MODEL,
+    max_tokens: 4000,
+    output_config: {
+      format: { type: "json_schema", schema: EXTRACTION_SCHEMA },
+    },
+    messages: [{ role: "user", content: user }],
+  });
+
+  const text = res.content.find((b) => b.type === "text");
+  if (!text || text.type !== "text") return [];
+  return parseExtraction(text.text);
 }
 
 export type MapInputItem = {
@@ -282,8 +358,11 @@ const MAP_SCHEMA = {
  * relationships. Items are sent with short integer "refs" (not UUIDs) for
  * reliable echoing, then resolved back to real ids here.
  */
+const MAP_JSON_HINT = `\n\nReturn ONLY valid JSON (no markdown fences) matching exactly:\n{"groups":[{"label":"...","theme":"...","register":"...","note":"...","item_refs":[1,2]}],"edges":[{"source":1,"target":2,"relation":"..."}]}`;
+
 export async function generateKnowledgeMap(
   items: MapInputItem[],
+  engine: AiEngine = "gemini",
 ): Promise<MapData> {
   if (items.length === 0) return { groups: [], edges: [] };
 
@@ -299,20 +378,7 @@ export async function generateKnowledgeMap(
     return bits.join(" ");
   });
 
-  const res = await anthropicClient().messages.create({
-    model: CHAT_MODEL,
-    max_tokens: 8000,
-    output_config: { format: { type: "json_schema", schema: MAP_SCHEMA } },
-    messages: [
-      {
-        role: "user",
-        content: `${KNOWLEDGE_MAP_INSTRUCTION}\n\n<items>\n${lines.join("\n")}\n</items>`,
-      },
-    ],
-  });
-
-  const text = res.content.find((b) => b.type === "text");
-  if (!text || text.type !== "text") return { groups: [], edges: [] };
+  const user = `${KNOWLEDGE_MAP_INSTRUCTION}\n\n<items>\n${lines.join("\n")}\n</items>`;
 
   type RawGroup = {
     label: string;
@@ -323,9 +389,24 @@ export async function generateKnowledgeMap(
   };
   type RawEdge = { source: number; target: number; relation: string };
 
+  let rawJson: string;
+  if (engine === "gemini") {
+    rawJson = await geminiStructured({ system: "", user, jsonHint: MAP_JSON_HINT });
+  } else {
+    const res = await anthropicClient().messages.create({
+      model: CHAT_MODEL,
+      max_tokens: 8000,
+      output_config: { format: { type: "json_schema", schema: MAP_SCHEMA } },
+      messages: [{ role: "user", content: user }],
+    });
+    const text = res.content.find((b) => b.type === "text");
+    if (!text || text.type !== "text") return { groups: [], edges: [] };
+    rawJson = text.text;
+  }
+
   let parsed: { groups?: RawGroup[]; edges?: RawEdge[] };
   try {
-    parsed = JSON.parse(text.text);
+    parsed = JSON.parse(rawJson);
   } catch {
     return { groups: [], edges: [] };
   }
@@ -513,11 +594,14 @@ function normalizeExercise(
   return null;
 }
 
+const EXERCISE_JSON_HINT = `\n\nReturn ONLY valid JSON (no markdown fences) matching exactly:\n{"exercises":[{"type":"mcq|arrange|cloze","prompt":"...","explanation":"...","choices":["..."],"answer_index":0,"tokens":["..."],"answer_order":["..."],"answer_text":"...","star_index":-1,"item_ref":0}]}\nFill EVERY field on every exercise (use "" / [] / -1 where a field doesn't apply). Write furigana as literal <ruby>漢字<rt>かんじ</rt></ruby> tags (do NOT HTML-escape them).`;
+
 /** Generate practice exercises (structured output) from lesson content and/or
  *  saved knowledge items. When items carry refs, each exercise links back to a
  *  knowledge_items row (item_id) for SRS grading. */
 export async function generateExercises(
   input: GenerateExercisesInput,
+  engine: AiEngine = "gemini",
 ): Promise<Exercise[]> {
   const types = input.types ?? ["mcq", "arrange", "cloze"];
   const count = input.count ?? 6;
@@ -534,24 +618,27 @@ export async function generateExercises(
       ? `\n\n<items>\nBase each exercise on one of these saved items and set "item_ref" to its number:\n${itemLines.join("\n")}\n</items>`
       : "";
 
-  const res = await anthropicClient().messages.create({
-    model: CHAT_MODEL,
-    // ~300 tokens per exercise is plenty; scale with count (cap to stay cheap).
-    max_tokens: Math.min(4000, 800 + count * 300),
-    output_config: { format: { type: "json_schema", schema: EXERCISE_SCHEMA } },
-    messages: [
-      {
-        role: "user",
-        content: `${buildExerciseInstruction(types, count)}\n\n<content>\n${input.content.slice(0, 8000)}\n</content>${itemsBlock}`,
-      },
-    ],
-  });
+  const user = `${buildExerciseInstruction(types, count)}\n\n<content>\n${input.content.slice(0, 8000)}\n</content>${itemsBlock}`;
 
-  const text = res.content.find((b) => b.type === "text");
-  if (!text || text.type !== "text") return [];
+  let rawJson: string;
+  if (engine === "gemini") {
+    rawJson = await geminiStructured({ system: "", user, jsonHint: EXERCISE_JSON_HINT });
+  } else {
+    const res = await anthropicClient().messages.create({
+      model: CHAT_MODEL,
+      // ~300 tokens per exercise is plenty; scale with count (cap to stay cheap).
+      max_tokens: Math.min(4000, 800 + count * 300),
+      output_config: { format: { type: "json_schema", schema: EXERCISE_SCHEMA } },
+      messages: [{ role: "user", content: user }],
+    });
+    const text = res.content.find((b) => b.type === "text");
+    if (!text || text.type !== "text") return [];
+    rawJson = text.text;
+  }
+
   let parsed: { exercises?: RawExercise[] };
   try {
-    parsed = JSON.parse(text.text);
+    parsed = JSON.parse(rawJson);
   } catch {
     return [];
   }
@@ -588,28 +675,32 @@ function exerciseToRaw(ex: Exercise): RawExercise {
 export async function refineExercise(
   ex: Exercise,
   userNote?: string,
+  engine: AiEngine = "gemini",
 ): Promise<Exercise | null> {
   const note = (userNote ?? "").trim();
   const noteBlock = note
     ? `\n\n<learner_note>\n${note}\n</learner_note>`
     : "";
-  const res = await anthropicClient().messages.create({
-    model: CHAT_MODEL,
-    max_tokens: 1500,
-    output_config: { format: { type: "json_schema", schema: EXERCISE_SCHEMA } },
-    messages: [
-      {
-        role: "user",
-        content: `${EXERCISE_REFINE_INSTRUCTION}\n\n<exercise>\n${JSON.stringify(exerciseToRaw(ex))}\n</exercise>${noteBlock}`,
-      },
-    ],
-  });
+  const user = `${EXERCISE_REFINE_INSTRUCTION}\n\n<exercise>\n${JSON.stringify(exerciseToRaw(ex))}\n</exercise>${noteBlock}`;
 
-  const text = res.content.find((b) => b.type === "text");
-  if (!text || text.type !== "text") return null;
+  let rawJson: string;
+  if (engine === "gemini") {
+    rawJson = await geminiStructured({ system: "", user, jsonHint: EXERCISE_JSON_HINT });
+  } else {
+    const res = await anthropicClient().messages.create({
+      model: CHAT_MODEL,
+      max_tokens: 1500,
+      output_config: { format: { type: "json_schema", schema: EXERCISE_SCHEMA } },
+      messages: [{ role: "user", content: user }],
+    });
+    const text = res.content.find((b) => b.type === "text");
+    if (!text || text.type !== "text") return null;
+    rawJson = text.text;
+  }
+
   let parsed: { exercises?: RawExercise[] };
   try {
-    parsed = JSON.parse(text.text);
+    parsed = JSON.parse(rawJson);
   } catch {
     return null;
   }
@@ -641,6 +732,8 @@ const DEEP_DIVE_SCHEMA = {
 
 export type DeepDiveExample = { ja: string; en: string };
 
+const DEEP_DIVE_JSON_HINT = `\n\nReturn ONLY valid JSON (no markdown fences) matching exactly:\n{"explanation":"...markdown...","examples":[{"ja":"...","en":"..."}]}\nWrite furigana as literal <ruby>漢字<rt>かんじ</rt></ruby> tags (do NOT HTML-escape them).`;
+
 /** Generate a personalized deep-dive (nuance/register/pitfalls + fresh examples)
  *  for one saved item. Structured output so it always parses. */
 export async function generateDeepDive(input: {
@@ -655,6 +748,7 @@ export async function generateDeepDive(input: {
   };
   profile: Profile | null;
   recalled: { term: string; reading: string | null; meaning: string | null }[];
+  engine?: AiEngine;
 }): Promise<{ explanation: string; examples: DeepDiveExample[] }> {
   const it = input.item;
   const related =
@@ -676,18 +770,25 @@ export async function generateDeepDive(input: {
 Related items they've studied (avoid repeating these):
 ${related}`;
 
-  const res = await anthropicClient().messages.create({
-    model: CHAT_MODEL,
-    max_tokens: 1800,
-    output_config: { format: { type: "json_schema", schema: DEEP_DIVE_SCHEMA } },
-    system: buildDeepDivePrompt(input.profile),
-    messages: [{ role: "user", content: user }],
-  });
+  const system = buildDeepDivePrompt(input.profile);
 
-  const text = res.content.find((b) => b.type === "text");
-  if (!text || text.type !== "text") return { explanation: "", examples: [] };
+  let rawJson: string;
+  if ((input.engine ?? "gemini") === "gemini") {
+    rawJson = await geminiStructured({ system, user, jsonHint: DEEP_DIVE_JSON_HINT });
+  } else {
+    const res = await anthropicClient().messages.create({
+      model: CHAT_MODEL,
+      max_tokens: 1800,
+      output_config: { format: { type: "json_schema", schema: DEEP_DIVE_SCHEMA } },
+      system,
+      messages: [{ role: "user", content: user }],
+    });
+    const text = res.content.find((b) => b.type === "text");
+    if (!text || text.type !== "text") return { explanation: "", examples: [] };
+    rawJson = text.text;
+  }
   try {
-    const parsed = JSON.parse(text.text) as {
+    const parsed = JSON.parse(rawJson) as {
       explanation?: string;
       examples?: DeepDiveExample[];
     };
@@ -729,6 +830,13 @@ export interface KanjiMnemonicResult {
   examples: ExtractedKnowledge[];
 }
 
+/** Strip stray markdown that some models wrap around ruby (`<ruby>…</ruby>` in
+ *  backticks / code fences) so furigana renders instead of showing as code. */
+function cleanRuby(s: string | undefined): string | undefined {
+  if (!s) return s;
+  return s.replace(/`+\s*(<ruby>[\s\S]*?<\/ruby>)\s*`+/g, "$1");
+}
+
 /** Normalize the structured mnemonic JSON into our shared shape (examples become
  *  ExtractedKnowledge so they can flow straight into storeKnowledge). */
 export function parseKanjiMnemonic(raw: string, char: string): KanjiMnemonicResult {
@@ -751,10 +859,13 @@ export function parseKanjiMnemonic(raw: string, char: string): KanjiMnemonicResu
         term: e.term!.trim(),
         reading: e.reading?.trim() || undefined,
         meaning: e.meaning?.trim() || undefined,
-        example: e.example?.trim() || undefined,
+        example: cleanRuby(e.example?.trim()) || undefined,
         jlpt_level: e.jlpt_level?.trim() || undefined,
       }));
-    return { mnemonic: (parsed.mnemonic ?? "").trim(), examples };
+    return {
+      mnemonic: cleanRuby((parsed.mnemonic ?? "").trim()) ?? "",
+      examples,
+    };
   } catch {
     return { mnemonic: "", examples: [] };
   }
@@ -789,7 +900,6 @@ export async function generateKanjiMnemonic(input: {
   const system = buildKanjiMnemonicPrompt(input.profile);
 
   if (input.model === "gemini") {
-    const { generateKanjiMnemonicGemini } = await import("@/lib/gemini");
     const raw = await generateKanjiMnemonicGemini(system, userMsg);
     return parseKanjiMnemonic(raw, input.char);
   }
@@ -819,17 +929,18 @@ export async function generateCollectionSummary(input: {
   kind: string;
   digest: string;
   profile: Profile | null;
+  engine?: AiEngine;
 }): Promise<string> {
+  const system = buildCollectionSummaryPrompt(input.profile);
+  const user = `Source: ${input.title} (${input.kind})\n\nWhat the learner has collected from it so far:\n\n${input.digest}`;
+  if ((input.engine ?? "gemini") === "gemini") {
+    return geminiText({ system, user, pro: true });
+  }
   const res = await anthropicClient().messages.create({
     model: CHAT_MODEL,
     max_tokens: 700,
-    system: buildCollectionSummaryPrompt(input.profile),
-    messages: [
-      {
-        role: "user",
-        content: `Source: ${input.title} (${input.kind})\n\nWhat the learner has collected from it so far:\n\n${input.digest}`,
-      },
-    ],
+    system,
+    messages: [{ role: "user", content: user }],
   });
   const text = res.content.find((b) => b.type === "text");
   return text && text.type === "text" ? text.text.trim() : "";
@@ -862,30 +973,35 @@ const COACH_SCHEMA = {
 export type CoachFocus = { label: string; why: string; action: string };
 export type CoachNote = { summary_md: string; focus_areas: CoachFocus[] };
 
+const COACH_JSON_HINT = `\n\nReturn ONLY valid JSON (no markdown fences) matching exactly:\n{"summary_md":"...markdown...","focus_areas":[{"label":"...","why":"...","action":"..."}]}\nWrite furigana as literal <ruby>漢字<rt>かんじ</rt></ruby> tags (do NOT HTML-escape them).`;
+
 /** Turn a deterministic strengths/weaknesses digest into a short coaching note
  *  with named focus areas. Cheap model + structured output; callers cache it. */
 export async function generateCoachNote(input: {
   digest: string;
   profile: Profile | null;
+  engine?: AiEngine;
 }): Promise<CoachNote> {
-  const res = await anthropicClient().messages.create({
-    model: COACH_MODEL,
-    max_tokens: 1200,
-    output_config: { format: { type: "json_schema", schema: COACH_SCHEMA } },
-    system: buildCoachPrompt(input.profile),
-    messages: [
-      {
-        role: "user",
-        content: `Here is the learner's current progress snapshot. Coach me.\n\n<snapshot>\n${input.digest}\n</snapshot>`,
-      },
-    ],
-  });
+  const system = buildCoachPrompt(input.profile);
+  const user = `Here is the learner's current progress snapshot. Coach me.\n\n<snapshot>\n${input.digest}\n</snapshot>`;
 
-  const text = res.content.find((b) => b.type === "text");
-  if (!text || text.type !== "text")
-    return { summary_md: "", focus_areas: [] };
+  let rawJson: string;
+  if ((input.engine ?? "gemini") === "gemini") {
+    rawJson = await geminiStructured({ system, user, jsonHint: COACH_JSON_HINT });
+  } else {
+    const res = await anthropicClient().messages.create({
+      model: COACH_MODEL,
+      max_tokens: 1200,
+      output_config: { format: { type: "json_schema", schema: COACH_SCHEMA } },
+      system,
+      messages: [{ role: "user", content: user }],
+    });
+    const text = res.content.find((b) => b.type === "text");
+    if (!text || text.type !== "text") return { summary_md: "", focus_areas: [] };
+    rawJson = text.text;
+  }
   try {
-    const parsed = JSON.parse(text.text) as Partial<CoachNote>;
+    const parsed = JSON.parse(rawJson) as Partial<CoachNote>;
     return {
       summary_md: (parsed.summary_md ?? "").trim(),
       focus_areas: (parsed.focus_areas ?? []).slice(0, 4),

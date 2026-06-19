@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { generateKnowledgeMap, type MapInputItem } from "@/lib/claude";
+import { getAiEngine } from "@/lib/ai-engine";
 
 /** Regenerate the knowledge map from the user's current knowledge_items. */
 export async function POST() {
@@ -27,7 +28,7 @@ export async function POST() {
 
   let data;
   try {
-    data = await generateKnowledgeMap(list);
+    data = await generateKnowledgeMap(list, await getAiEngine(supabase, user.id));
   } catch (e) {
     console.error("map generation failed:", e);
     return new Response(

@@ -75,6 +75,17 @@ html {
   -webkit-text-size-adjust: 100%;
 }
 
+/* iOS Safari auto-zooms a focused form control whose font is < 16px (most of our
+   inputs use text-sm = 14px). Forcing 16px on touch devices only stops the zoom
+   without touching the desktop look. No maximum-scale, so pinch-zoom still works. */
+@media (pointer: coarse) {
+  input,
+  textarea,
+  select {
+    font-size: 16px;
+  }
+}
+
 body {
   background-color: var(--background);
   /* Faint graph-paper grid (classroom manuscript feel). Static, GPU-free,

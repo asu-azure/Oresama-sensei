@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { generateExercises, type ExerciseItemRef } from "@/lib/claude";
+import { getAiEngine } from "@/lib/ai-engine";
 
 type ItemRow = {
   id: string;
@@ -145,11 +146,14 @@ export async function POST(req: Request) {
 
   let exercises;
   try {
-    exercises = await generateExercises({
-      content: digest,
-      items,
-      count: Math.min(8, Math.max(4, items.length)),
-    });
+    exercises = await generateExercises(
+      {
+        content: digest,
+        items,
+        count: Math.min(8, Math.max(4, items.length)),
+      },
+      await getAiEngine(supabase, user.id),
+    );
   } catch (e) {
     console.error("test generation failed:", e);
     return new Response("Could not generate a test right now.", { status: 503 });

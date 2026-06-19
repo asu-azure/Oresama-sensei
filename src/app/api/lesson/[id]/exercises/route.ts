@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { generateExercises } from "@/lib/claude";
+import { getAiEngine } from "@/lib/ai-engine";
 
 /** (Re)generate practice exercises for one lesson and cache them on the row. */
 export async function POST(
@@ -27,7 +28,10 @@ export async function POST(
 
   let exercises;
   try {
-    exercises = await generateExercises({ content, count: 6 });
+    exercises = await generateExercises(
+      { content, count: 6 },
+      await getAiEngine(supabase, user.id),
+    );
   } catch (e) {
     console.error("exercise generation failed:", e);
     return new Response("Could not generate exercises right now.", {

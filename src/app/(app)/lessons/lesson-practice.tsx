@@ -74,7 +74,7 @@ export function LessonPractice({
             )}
             {exercises.length > 0 ? "Regenerate" : "Generate"}
           </Button>
-          <CostHint model={MODEL_LABELS.sonnet} />
+          <CostHint model={MODEL_LABELS.engine} />
         </div>
       </div>
 

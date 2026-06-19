@@ -4,6 +4,7 @@ import {
   lessonUserMessage,
   extractKnowledge,
   generateExercises,
+  resolveEngine,
   type LessonModelChoice,
 } from "@/lib/claude";
 import { runGeminiLessonStream } from "@/lib/gemini";
@@ -83,6 +84,9 @@ export async function POST(request: Request) {
     recallKnowledge(supabase, text.slice(0, 500), 8),
   ]);
   const system = buildLessonSystemPrompt(profile as Profile | null, recalled);
+  const engine = resolveEngine(
+    (profile as { ai_engine?: string } | null)?.ai_engine,
+  );
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({
@@ -127,7 +131,7 @@ export async function POST(request: Request) {
             .from("lessons")
             .update({ article_md: article })
             .eq("id", lessonId);
-          const items = await extractKnowledge(article);
+          const items = await extractKnowledge(article, engine);
           if (items.length > 0) {
             await storeKnowledge(supabase, user.id, items, {
               source: "lesson",
@@ -149,10 +153,10 @@ export async function POST(request: Request) {
       // Background: generate practice exercises (no timeout pressure on Render).
       try {
         if (article.trim()) {
-          const exercises = await generateExercises({
-            content: article,
-            count: 6,
-          });
+          const exercises = await generateExercises(
+            { content: article, count: 6 },
+            engine,
+          );
           if (exercises.length > 0) {
             await supabase
               .from("lessons")

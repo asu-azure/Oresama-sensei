@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
-import { streamDiscuss, type ChatTurn } from "@/lib/claude";
+import { runDiscussStream, type ChatTurn } from "@/lib/claude";
+import { getAiEngine } from "@/lib/ai-engine";
 import { buildDiscussSystemPrompt } from "@/lib/prompts";
 import type { AskContext, Exercise } from "@/lib/types";
 
@@ -31,16 +32,31 @@ export async function POST(request: Request) {
       : { kind: "free" });
 
   const system = buildDiscussSystemPrompt(context);
-  const claudeStream = streamDiscuss(system, body.messages);
+  const engine = await getAiEngine(supabase, user.id);
+  const messages = body.messages;
 
   const stream = new ReadableStream({
     async start(controller) {
       const encoder = new TextEncoder();
-      claudeStream.on("text", (delta) => {
-        controller.enqueue(encoder.encode(delta));
-      });
-      await claudeStream.finalMessage();
-      controller.close();
+      let gone = false;
+      const onDelta = (delta: string) => {
+        if (gone) return;
+        try {
+          controller.enqueue(encoder.encode(delta));
+        } catch {
+          gone = true;
+        }
+      };
+      try {
+        await runDiscussStream({ system, messages, engine, onDelta });
+      } catch (e) {
+        console.error("discuss generation error:", e);
+      }
+      try {
+        controller.close();
+      } catch {
+        // already closed
+      }
     },
   });
 

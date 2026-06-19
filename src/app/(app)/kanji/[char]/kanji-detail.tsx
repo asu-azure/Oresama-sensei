@@ -56,7 +56,7 @@ export function KanjiDetail({
   const [genExamples, setGenExamples] = useState<MnemonicExample[]>([]);
   const [generating, setGenerating] = useState(false);
   const [mnemonicError, setMnemonicError] = useState<string | null>(null);
-  const [model, setModel] = useState<"claude" | "gemini">("claude");
+  const [model, setModel] = useState<"claude" | "gemini">("gemini");
   const [learned, setLearnedState] = useState(initialLearned);
   // Effective state shown on the card: an explicit mark OR auto (a word mastered).
   const effectiveLearned = learned || autoLearned;
