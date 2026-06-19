@@ -277,10 +277,10 @@ export default async function DashboardPage() {
                   return (
                     <div
                       key={i}
-                      className="flex flex-1 flex-col items-center gap-1"
+                      className="flex h-full flex-1 flex-col items-center gap-1"
                       title={`${d.label}: ${d.added} added, ${d.reviewed} reviewed`}
                     >
-                      <div className="flex h-full w-full items-end justify-center gap-0.5">
+                      <div className="flex w-full flex-1 items-end justify-center gap-0.5">
                         <div
                           className="w-1/2 rounded-t bg-primary/80"
                           style={{

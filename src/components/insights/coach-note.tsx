@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Compass, Loader2, RefreshCw, ArrowRight } from "lucide-react";
 import { Markdown } from "@/components/markdown";
+import { RubyText } from "@/components/ruby-text";
 import { CostHint, MODEL_LABELS } from "@/components/cost-hint";
 import { cn } from "@/lib/utils";
 
@@ -82,10 +83,14 @@ export function CoachNote({ initial }: { initial: CoachNoteData | null }) {
                       {f.label}
                     </span>
                   </div>
-                  <p className="mt-1.5 text-sm text-muted">{f.why}</p>
+                  <p className="mt-1.5 text-sm text-muted">
+                    <RubyText>{f.why}</RubyText>
+                  </p>
                   <p className="mt-1 flex items-start gap-1.5 text-sm">
                     <ArrowRight className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
-                    <span>{f.action}</span>
+                    <span>
+                      <RubyText>{f.action}</RubyText>
+                    </span>
                   </p>
                 </li>
               ))}
