@@ -1,4 +1,4 @@
-import type { Profile, RecalledItem, Exercise } from "@/lib/types";
+import type { Profile, RecalledItem, Exercise, AskContext } from "@/lib/types";
 
 /** OCR / page-reading instruction for Gemini vision. */
 export const OCR_PROMPT = `You are reading a photo of Japanese study material (a textbook page, manga panel, worksheet, or handwriting).
@@ -105,6 +105,9 @@ Key grammar/expressions, each explained with nuance and a contextual example.
 ## 読解 (Reading & Meaning)
 A clear walkthrough of the passage's meaning, highlighting anything subtle.
 
+## 問題の解説 (Exercises Explained)
+ONLY include this section if the source material itself contains exercises, questions, drills, or quiz items (e.g. fill-in-the-blank ＿＿, multiple-choice, 並べ替え ordering, true/false, comprehension questions, grammar drills). If it does, work through EVERY such item the learner can see: restate the question briefly, give the correct answer, and explain WHY it's right and why the tempting wrong choices are wrong — teaching the underlying point so they could answer a similar one. If the material has no exercises, OMIT this heading entirely.
+
 ## 関連づけ (Make It Stick)
 Connect the content to the learner's life and broad interests (art and the JP art community on X, music, world news, teaching). Offer a vivid mnemonic image for 1–2 of the hardest items.
 
@@ -200,10 +203,11 @@ ${CONTEXT_VARIETY}
 Rules for EVERY exercise:
 - Write Japanese with furigana using ruby markup: <ruby>漢字<rt>かんじ</rt></ruby>.
 - Test genuinely useful vocabulary, grammar, or usage from the content — not trivia.
-- For "mcq": exactly ONE correct option plus 3 distractors that are plausible (wrong but tempting), all DISTINCT from each other and from the answer — never duplicate or near-identical options.
+- NO GIVEAWAYS: never let the answer be guessable from surface overlap. The question stem and the wrong options must NOT contain, repeat, or paraphrase the target word/its English gloss, and must not share a distinctive substring with the correct answer that the others lack. A learner who doesn't know the point should have to actually think.
+- For "mcq": exactly ONE correct option plus 3 distractors that are plausible (wrong but tempting), all DISTINCT from each other and from the answer — never duplicate or near-identical options. All four options should be the same KIND of thing (e.g. all single words, or all short glosses) and similar length, so length/format alone never reveals the answer. Don't make distractors absurd or obviously off-topic.
 - "explanation": one concise sentence on why the answer is right (Markdown ok, with furigana).
 - Always fill EVERY field in the schema. For fields that do not apply to a type, use an empty string or empty array, and set "star_index" to -1 for mcq and cloze. A cloze has empty "tokens"/"answer_order"; an mcq has empty "tokens"/"answer_order"/"answer_text".
-- For "arrange": "answer_order" must hold EXACTLY four clean atomic units (words/particles) — never three or five. "tokens" must be exactly those same four pieces, just shuffled (never add a fifth piece or extra option). "prompt" must contain {{BLANKS}} once and must NOT contain the answer, and "star_index" must be 0-3.
+- For "arrange": "answer_order" must hold EXACTLY four clean atomic units (words/particles) — never three or five. "tokens" must be exactly those same four pieces, just shuffled (never add a fifth piece or extra option). "prompt" must contain {{BLANKS}} once and must NOT contain the answer. CRITICAL: none of the four pieces may ALSO appear in the visible part of the context sentence — if a piece (e.g. a particle like が・を・に) already sits elsewhere in the sentence, rewrite the sentence so it doesn't, otherwise the tile is ambiguous. "star_index" must be 0-3.
 - If items with ref numbers are provided, base each exercise on one of them and set "item_ref" to that number; otherwise set "item_ref" to 0.
 
 Keep prompts short and focused. Return exactly ${count} exercises (fewer only if the content is too thin).`;
@@ -213,8 +217,12 @@ Keep prompts short and focused. Return exactly ${count} exercises (fewer only if
 export const EXERCISE_REFINE_INSTRUCTION = `You are reviewing ONE Japanese practice exercise that a learner flagged as possibly wrong or malformed. Check it carefully:
 - Is the marked answer genuinely correct, and is the Japanese natural with exactly one defensible answer (no ambiguity, no second option that also works)?
 - Is the format valid for its type? mcq: exactly one correct option plus distinct, plausible distractors. arrange (JLPT ★): a natural context sentence whose "prompt" contains the literal {{BLANKS}} marker once and does NOT reveal the order, with EXACTLY four atomic pieces in "answer_order", the same four (shuffled) in "tokens", and "star_index" 0-3. cloze: a sentence showing the blank as ＿＿ with the correct "answer_text".
+- NO GIVEAWAYS (mcq): the question stem and the wrong options must not contain or paraphrase the answer or its English gloss, and must not share a distinctive substring with the correct answer that the others lack. All options should be the same kind of thing and similar length. If they give the answer away, rewrite them to be genuinely testing.
+- NO DUPLICATE TILES (arrange): none of the four pieces may also appear elsewhere in the visible context sentence (e.g. a が tile when が already sits in the sentence). If one does, rewrite the sentence so each piece occurs only in the blanks.
 
-If it is already valid and correct, return it unchanged. Otherwise return a corrected version of the SAME type that is valid and has a single unambiguous correct answer. Keep furigana ruby markup (<ruby>漢字<rt>かんじ</rt></ruby>). Return EXACTLY ONE exercise, filling every schema field (empty string/array and "star_index":-1 where a field doesn't apply).`;
+If a learner note is provided in <learner_note>, treat it as the primary thing to fix and act on it specifically, even if the exercise would otherwise look acceptable.
+
+If it is already valid and correct (and there is no learner note to address), return it unchanged. Otherwise return a corrected version of the SAME type that is valid and has a single unambiguous correct answer. Keep furigana ruby markup (<ruby>漢字<rt>かんじ</rt></ruby>). Return EXACTLY ONE exercise, filling every schema field (empty string/array and "star_index":-1 where a field doesn't apply).`;
 
 /** Instruction for an on-demand "deep dive" on a saved vocab/grammar item. */
 const DEEP_DIVE_INSTRUCTION = `You are giving an advanced learner (JLPT N2–N1) a deeper look at ONE Japanese vocabulary/grammar/expression item they've already saved. Go beyond the basic meaning. In the "explanation" (Markdown, concise — about 150–250 words):
@@ -232,15 +240,22 @@ export function buildDeepDivePrompt(profile: Profile | null): string {
 }
 
 /** Instruction for generating a personalized kanji mnemonic. */
-const KANJI_MNEMONIC_INSTRUCTION = `You are helping an advanced Japanese learner remember a kanji. You will be given the kanji, its meaning(s), readings, and the component parts it is built from.
+const KANJI_MNEMONIC_INSTRUCTION = `You are helping an advanced Japanese learner remember a kanji. You will be given the kanji, its meaning(s), readings, and the component parts it is built from. Return TWO things.
 
-Write a SHORT, vivid mnemonic that fuses the meanings of the component parts into one memorable mini-scene that lands on the kanji's meaning. Rules:
+1) "mnemonic": a SHORT, vivid memory story that fuses the meanings of the component parts into one memorable mini-scene that lands on the kanji's meaning.
 - 2–4 sentences, concrete and visual (the learner is a visual artist — paint a picture).
 - Build the story explicitly out of the named components so the shape is encoded, not just the meaning.
 - Tie it to the learner's interests/world when it makes the image stickier, but keep it tight.
 - You may weave in a key reading once if it helps, but do NOT just list readings.
-- Write in English. Use <ruby>漢字<rt>かんじ</rt></ruby> markup for any Japanese kanji you mention.
-- Output only the mnemonic (Markdown ok). No preamble, no headings.`;
+- Write in English. Use <ruby>漢字<rt>かんじ</rt></ruby> markup for any Japanese kanji you mention. No preamble, no headings.
+
+2) "examples": 2–3 genuinely useful real words that CONTAIN this kanji (prefer common JLPT N3–N1 vocabulary the learner can actually use). For each word give:
+- "term": the word in Japanese (must contain the given kanji),
+- "reading": its kana reading,
+- "meaning": concise English gloss,
+- "example": one natural Japanese example sentence using the word, with <ruby> furigana on its kanji,
+- "jlpt_level": best guess like "N2"/"N1", or "".
+Pick words that show different readings/uses of the kanji when possible. Avoid the kanji in isolation.`;
 
 /** System prompt for the kanji mnemonic generator (personalized). */
 export function buildKanjiMnemonicPrompt(profile: Profile | null): string {
@@ -261,9 +276,8 @@ export function buildCoachPrompt(profile: Profile | null): string {
   return COACH_INSTRUCTION + LEARNER_CONTEXT + profileBlock(profile);
 }
 
-/** System prompt for the lightweight in-test discussion endpoint.
- *  Includes the full exercise so Claude can answer questions about it. */
-export function buildDiscussSystemPrompt(exercise: Exercise): string {
+/** Renders the <exercise> context block for an in-test discussion. */
+function exerciseDiscussBlock(exercise: Exercise): string {
   let exBlock: string;
 
   if (exercise.type === "mcq") {
@@ -301,11 +315,55 @@ Correct answer: ${exercise.answer}${choices}
 Explanation: ${exercise.explanation}`;
   }
 
-  return `You are a concise Japanese practice tutor reviewing ONE exercise with a learner (JLPT N2–N1 level).
+  return exBlock;
+}
 
-<exercise>
-${exBlock}
-</exercise>
+/** System prompt for the lightweight "Ask Sensei" discussion endpoint. The
+ *  context block adapts to whatever the learner is looking at (an exercise, a
+ *  saved word, a kanji, a lesson) so the tutor answers about that exact thing. */
+export function buildDiscussSystemPrompt(context: AskContext): string {
+  let block: string;
+  let intro: string;
 
-The learner may ask: why their answer was wrong, whether the question itself is incorrect or ambiguous, or for more context on the grammar/vocabulary. Be direct and helpful. If the question is genuinely wrong or ambiguous, acknowledge it clearly. Use <ruby>漢字<rt>かんじ</rt></ruby> markup for Japanese kanji. Keep answers short (2–4 sentences unless they need more).`;
+  if (context.kind === "exercise") {
+    intro = "reviewing ONE practice exercise with";
+    block = `<exercise>\n${exerciseDiscussBlock(context.exercise)}\n</exercise>`;
+  } else if (context.kind === "vocab") {
+    const it = context.item;
+    intro = "discussing ONE saved word/grammar item with";
+    const lines = [
+      `Type: ${it.type ?? "vocab"}`,
+      `Term: ${it.term}`,
+      it.reading ? `Reading: ${it.reading}` : "",
+      it.meaning ? `Meaning: ${it.meaning}` : "",
+      it.jlpt_level ? `JLPT: ${it.jlpt_level}` : "",
+      it.example ? `Saved example: ${it.example}` : "",
+    ].filter(Boolean);
+    block = `<item>\n${lines.join("\n")}\n</item>`;
+  } else if (context.kind === "kanji") {
+    intro = "discussing ONE kanji with";
+    const lines = [
+      `Kanji: ${context.char}`,
+      context.meanings?.length ? `Meanings: ${context.meanings.join(", ")}` : "",
+      context.on?.length ? `On'yomi: ${context.on.join("、")}` : "",
+      context.kun?.length ? `Kun'yomi: ${context.kun.join("、")}` : "",
+    ].filter(Boolean);
+    block = `<kanji>\n${lines.join("\n")}\n</kanji>`;
+  } else if (context.kind === "lesson") {
+    intro = "discussing a lesson with";
+    const lines = [
+      context.title ? `Lesson: ${context.title}` : "",
+      context.excerpt ? `Excerpt:\n${context.excerpt.slice(0, 1500)}` : "",
+    ].filter(Boolean);
+    block = `<lesson>\n${lines.join("\n")}\n</lesson>`;
+  } else {
+    intro = "chatting with";
+    block = "";
+  }
+
+  return `You are 先生 (Sensei), a concise, warm Japanese tutor ${intro} an advanced learner (JLPT N2–N1 level).
+
+${block}
+
+Answer their questions directly and helpfully — why an answer is right or wrong, whether something looks incorrect or ambiguous, nuance, usage, near-synonyms, or more examples. If something is genuinely wrong or ambiguous, say so clearly. Use <ruby>漢字<rt>かんじ</rt></ruby> markup for Japanese kanji. Keep answers short (2–4 sentences unless they truly need more).`;
 }

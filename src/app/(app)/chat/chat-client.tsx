@@ -6,6 +6,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Send, Plus, Loader2, Sparkles, BookPlus } from "lucide-react";
 import { Markdown } from "@/components/markdown";
 import { Button } from "@/components/ui/button";
+import { CostHint, MODEL_LABELS } from "@/components/cost-hint";
 import {
   ConversationDrawer,
   type ConversationSummary,
@@ -296,6 +297,10 @@ export function ChatClient({
                               <BookPlus className="h-3.5 w-3.5" />
                             )}
                             Save as lesson
+                            <CostHint
+                              model={MODEL_LABELS.sonnet}
+                              className="ml-1"
+                            />
                           </button>
                         </div>
                       )}
@@ -347,6 +352,9 @@ export function ChatClient({
               <Send className="h-5 w-5" />
             )}
           </Button>
+        </div>
+        <div className="mt-1.5 flex justify-center">
+          <CostHint model={MODEL_LABELS.sonnet} />
         </div>
       </form>
     </div>

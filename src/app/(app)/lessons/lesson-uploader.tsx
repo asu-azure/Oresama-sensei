@@ -7,6 +7,7 @@ import { Camera, Sparkles, X, Plus, ImagePlus } from "lucide-react";
 import { Markdown } from "@/components/markdown";
 import { Button } from "@/components/ui/button";
 import { GeometricLoader } from "@/components/geometric-loader";
+import { CostHint, lessonModelLabel } from "@/components/cost-hint";
 import { cn } from "@/lib/utils";
 import {
   UPLOAD_MATERIAL_TYPES,
@@ -24,6 +25,15 @@ const OCR_OPTIONS: { value: OcrModel; label: string }[] = [
   { value: "claude", label: "Claude" },
 ];
 
+// Mirrors LessonModelChoice in lib/claude (kept local so this client component
+// doesn't pull in the server SDK).
+type LessonModelChoice = "claude" | "opus" | "gemini" | "gemini-pro";
+const LESSON_MODEL_OPTIONS: { value: LessonModelChoice; label: string }[] = [
+  { value: "gemini", label: "Quick" },
+  { value: "claude", label: "Standard" },
+  { value: "opus", label: "Deep" },
+];
+
 type Pic = { file: File; url: string };
 
 const NEW_COLLECTION = "__new__";
@@ -32,7 +42,7 @@ export function LessonUploader() {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const [pics, setPics] = useState<Pic[]>([]);
-  const [deep, setDeep] = useState(false);
+  const [lessonModel, setLessonModel] = useState<LessonModelChoice>("claude");
   const [ocrModel, setOcrModel] = useState<OcrModel>("gemini");
 
   // Source / collection metadata
@@ -141,7 +151,7 @@ export function LessonUploader() {
     try {
       const fd = new FormData();
       pics.forEach((p) => fd.append("images", p.file));
-      fd.append("deep", String(deep));
+      fd.append("lessonModel", lessonModel);
       fd.append("ocrModel", ocrModel);
       fd.append("materialType", materialType);
       if (collectionKind) {
@@ -417,18 +427,33 @@ export function LessonUploader() {
             </p>
           </div>
 
-          <label className="mt-3 flex items-center gap-2 text-sm text-muted">
-            <input
-              type="checkbox"
-              checked={deep}
-              onChange={(e) => setDeep(e.target.checked)}
-              disabled={busy}
-              className="h-4 w-4 accent-[var(--color-primary)]"
-            />
-            Deep lesson (slower, uses Opus for extra depth)
-          </label>
+          {/* Lesson writer: cheap vs quality */}
+          <div className="mt-3">
+            <span className="text-sm text-muted">Write with</span>
+            <div className="mt-1 inline-flex overflow-hidden rounded-lg border border-border">
+              {LESSON_MODEL_OPTIONS.map((o) => (
+                <button
+                  key={o.value}
+                  onClick={() => setLessonModel(o.value)}
+                  disabled={busy}
+                  className={cn(
+                    "px-3 py-1 text-sm transition-colors disabled:opacity-50",
+                    lessonModel === o.value
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-surface text-muted hover:bg-surface-2",
+                  )}
+                >
+                  {o.label}
+                </button>
+              ))}
+            </div>
+            <p className="mt-1 text-xs text-muted">
+              <b>Quick</b> uses Gemini (cheapest). <b>Standard</b> uses Claude for
+              the best teaching. <b>Deep</b> uses Opus for the richest lessons.
+            </p>
+          </div>
 
-          <div className="mt-3 flex gap-2">
+          <div className="mt-3 flex items-center gap-2">
             <Button onClick={generate} disabled={busy}>
               {busy ? (
                 <GeometricLoader size={18} />
@@ -440,6 +465,11 @@ export function LessonUploader() {
             <Button variant="ghost" onClick={reset} disabled={busy}>
               <X className="h-4 w-4" /> Clear
             </Button>
+            <CostHint
+              model={lessonModelLabel(lessonModel)}
+              note={`reads pages with ${ocrModel === "claude" ? "Claude" : "Gemini"} OCR`}
+              className="ml-auto"
+            />
           </div>
         </div>
       )}

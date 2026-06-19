@@ -190,6 +190,36 @@ The **data lives in Supabase (cloud)**, so chats/vocab/lessons sync automaticall
   cover/index/skip flags via `collection_pages`, migration **0013**), tap-a-page → its lesson + items,
   per-collection vocab/grammar list, and a cached **AI summary** button (`generateCollectionSummary` +
   `buildCollectionSummaryPrompt`, cached in `collections.summary_md`). Run migrations **0011–0013** in order.
+- ✅ v3.1 shipped (study-page AI helper, cost toggle, UX polish): **(a)** the in-test discuss drawer
+  became a **floating "Ask Sensei" bubble** (`src/components/ask-sensei/ask-sensei.tsx`) reused on
+  **tests, lessons, flashcards, and kanji** — context-aware via a discriminated `AskContext` union
+  (`exercise|vocab|kanji|lesson|free`) that `buildDiscussSystemPrompt(context)` branches on; on mobile
+  it's a bottom **sheet** so the close X is never trapped under the top nav (the old bug). Hosts lift
+  the active item: `ExercisePlayer` reports `onIndexChange`; the old `ExerciseDiscussPanel`/in-player
+  "Ask AI" button are gone (file now unused). **(b)** Lessons get a **Quick (Gemini) / Standard
+  (Claude Sonnet) / Deep (Opus)** writer toggle (`lessonModel` form field → `runClaudeLessonStream` /
+  `runGeminiLessonStream`); **deep no longer silently uses Opus** — only when picked. `generateExercises`
+  `max_tokens` trimmed. **(c)** Library mastery legend + source filter now count the **whole DB**
+  (`page.tsx` aggregates SRS fields for all items via `masteryLevel`), not just the loaded 150.
+  **(d)** Books page grid collapses into **ranges of 50** with a mini mastery bar + "N studied" and a
+  **jump-to-page** box (`book-detail.tsx`). **(e)** Kanji: detail remembers the level you came from via
+  `?level=`/`?from=` + sessionStorage **scroll restore**; **learned (top-right) and has-words
+  (bottom-right) badges no longer overlap**; the **mnemonic generator is structured** (`KANJI_MNEMONIC_SCHEMA`
+  → `{mnemonic, examples}`) with a **Gemini/Claude model picker**, and its 2–3 example words are
+  **auto-saved to the library** tagged `source_type:"kanji"` (new SourceType + badge) and cached in
+  `kanji.examples` (migration **0014**, degrades gracefully). **(f)** After a flashcard session you get
+  **"Keep studying (N due)"** (review page returns a total due count); the test/lesson completion screen
+  supports an `onContinue`. **(g)** Check & fix takes a **free-text note** (`refineExercise(ex, note)` →
+  `<learner_note>`); exercise prompts tightened against **answer-giveaway MCQs** and **duplicate arrange
+  tiles** (`normalizeExercise` rejects a ★-tile already present in the visible sentence). **(h)** Lesson
+  prompt now adds a **問題の解説** section that solves/explains any exercises present in the photo.
+  **(i)** Dashboard "Added in 14 days" → **Activity** (added + reviewed, with a min bar height and an
+  empty-state link to Review). **(j)** Every action that spends API tokens now shows a tiny
+  **`CostHint`** (`src/components/cost-hint.tsx`) — a coin icon + the model name (e.g. "Claude Sonnet",
+  "Gemini Flash", "Claude Haiku") with a hover tooltip — on chat send, lesson/summary/exercise/test/map/
+  coach/deep-dive/collection generation, Check & fix, Ask Sensei, and kanji mnemonics. Run migration
+  **0014** after 0011–0013. *(Search/Library scroll-position memory was intentionally left out —
+  restoring it needs setState-in-effect, which the lint forbids.)*
 - ⏳ Next ideas (not built): library multi-select bulk source-tag (per-lesson editor covers backfill for
   now); per-page knowledge granularity (page color currently aggregates the whole lesson's items); a
   standalone personalized-lesson generator; Anki export; paginate

@@ -9,6 +9,7 @@ import {
   Loader2,
   RefreshCw,
   Check,
+  ChevronDown,
   X,
 } from "lucide-react";
 import { Markdown } from "@/components/markdown";
@@ -19,6 +20,7 @@ import {
   type MasteryLevel,
 } from "@/lib/mastery";
 import { collectionEmoji } from "@/lib/source";
+import { CostHint, MODEL_LABELS } from "@/components/cost-hint";
 import { cn } from "@/lib/utils";
 import { generateSummary, setPageStatus, updateCollectionPages } from "../actions";
 
@@ -121,6 +123,56 @@ export function BookDetail({
     }
     return pages.map((p) => p.page_number);
   }, [collection.total_pages, pages]);
+
+  // Group pages into ranges of 50 so a long book isn't an intimidating wall of
+  // cells. Each range collapses to a summary bar; one expands at a time.
+  const RANGE_SIZE = 50;
+  const ranges = useMemo(() => {
+    const out: { idx: number; start: number; end: number; nums: number[] }[] = [];
+    for (let i = 0; i < slots.length; i += RANGE_SIZE) {
+      const nums = slots.slice(i, i + RANGE_SIZE);
+      out.push({
+        idx: out.length,
+        start: nums[0],
+        end: nums[nums.length - 1],
+        nums,
+      });
+    }
+    return out;
+  }, [slots]);
+
+  const [openRange, setOpenRange] = useState(0);
+  const [jumpInput, setJumpInput] = useState("");
+
+  function rangeStats(nums: number[]) {
+    const byLevel: Partial<Record<MasteryLevel, number>> = {};
+    let studied = 0;
+    for (const n of nums) {
+      const p = pageMap.get(n);
+      if (p && p.status === "content" && p.level) {
+        byLevel[p.level] = (byLevel[p.level] ?? 0) + 1;
+        studied++;
+      }
+    }
+    return { studied, byLevel };
+  }
+
+  function jumpToPage() {
+    const n = parseInt(jumpInput, 10);
+    if (!Number.isFinite(n)) return;
+    const ri = ranges.findIndex((r) => r.nums.includes(n));
+    if (ri === -1) return;
+    setOpenRange(ri);
+    setSelected(n);
+    setJumpInput("");
+    setTimeout(
+      () =>
+        document
+          .getElementById(`book-page-${n}`)
+          ?.scrollIntoView({ behavior: "smooth", block: "center" }),
+      60,
+    );
+  }
 
   async function saveTotalPages() {
     setSavingPages(true);
@@ -226,15 +278,18 @@ export function BookDetail({
         <div className="flex items-center gap-2">
           <h2 className="text-sm font-semibold">Summary</h2>
           {summary && (
-            <button
-              onClick={() => runSummary(true)}
-              disabled={summaryBusy}
-              title="Regenerate"
-              className="ml-auto flex items-center gap-1 rounded-full border border-border px-2.5 py-1 text-xs text-muted transition-colors hover:bg-surface-2 hover:text-foreground disabled:opacity-50"
-            >
-              <RefreshCw className={cn("h-3 w-3", summaryBusy && "animate-spin")} />
-              Refresh
-            </button>
+            <div className="ml-auto flex items-center gap-2">
+              <CostHint model={MODEL_LABELS.sonnet} />
+              <button
+                onClick={() => runSummary(true)}
+                disabled={summaryBusy}
+                title="Regenerate"
+                className="flex items-center gap-1 rounded-full border border-border px-2.5 py-1 text-xs text-muted transition-colors hover:bg-surface-2 hover:text-foreground disabled:opacity-50"
+              >
+                <RefreshCw className={cn("h-3 w-3", summaryBusy && "animate-spin")} />
+                Refresh
+              </button>
+            </div>
           )}
         </div>
         {summary ? (
@@ -242,7 +297,7 @@ export function BookDetail({
             <Markdown>{summary}</Markdown>
           </div>
         ) : (
-          <div className="mt-2">
+          <div className="mt-2 flex items-center gap-3">
             <button
               onClick={() => runSummary(false)}
               disabled={summaryBusy}
@@ -255,6 +310,7 @@ export function BookDetail({
               )}
               {summaryBusy ? "Writing…" : "Generate summary"}
             </button>
+            <CostHint model={MODEL_LABELS.sonnet} />
           </div>
         )}
         {summaryError && (
@@ -272,26 +328,98 @@ export function BookDetail({
           </p>
         ) : (
           <>
-            <div className="flex flex-wrap gap-1.5">
-              {slots.map((n) => {
-                const page = pageMap.get(n);
+            {/* Jump to a page */}
+            {slots.length > RANGE_SIZE && (
+              <div className="mb-3 flex items-center gap-2">
+                <input
+                  value={jumpInput}
+                  onChange={(e) => setJumpInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") jumpToPage();
+                  }}
+                  inputMode="numeric"
+                  placeholder="Jump to page…"
+                  className="w-32 rounded-lg border border-border bg-surface px-2.5 py-1 text-sm outline-none focus:ring-2 focus:ring-ring"
+                />
+                <button
+                  onClick={jumpToPage}
+                  className="rounded-lg border border-border px-2.5 py-1 text-xs text-muted transition-colors hover:bg-surface-2 hover:text-foreground"
+                >
+                  Go
+                </button>
+              </div>
+            )}
+
+            {/* Collapsible ranges of 50 */}
+            <div className="space-y-1.5">
+              {ranges.map((r) => {
+                const { studied, byLevel } = rangeStats(r.nums);
+                const open = openRange === r.idx;
                 return (
-                  <button
-                    key={n}
-                    onClick={() => setSelected(selected === n ? null : n)}
-                    className={cn(
-                      "flex h-9 w-9 items-center justify-center rounded-md text-xs font-medium transition-transform hover:scale-105",
-                      cellClasses(page),
-                      selected === n && "ring-2 ring-ring ring-offset-1 ring-offset-background",
-                    )}
-                    title={
-                      page
-                        ? `Page ${n} · ${page.status}${page.level ? ` · ${masteryInfo(page.level).label}` : ""}`
-                        : `Page ${n} · not uploaded`
-                    }
+                  <div
+                    key={r.idx}
+                    className="overflow-hidden rounded-xl border border-border bg-surface"
                   >
-                    {n}
-                  </button>
+                    <button
+                      onClick={() => setOpenRange(open ? -1 : r.idx)}
+                      className="flex w-full items-center gap-3 px-3 py-2.5 text-left"
+                      aria-expanded={open}
+                    >
+                      <span className="w-28 shrink-0 text-sm font-medium">
+                        Pages {r.start}–{r.end}
+                      </span>
+                      {/* Mini mastery bar */}
+                      <span className="flex h-2 flex-1 overflow-hidden rounded-full bg-surface-2">
+                        {MASTERY_ORDER.map((lvl) => {
+                          const c = byLevel[lvl] ?? 0;
+                          if (c === 0) return null;
+                          return (
+                            <span
+                              key={lvl}
+                              className={cn("h-full", masteryInfo(lvl).dot)}
+                              style={{ width: `${(c / r.nums.length) * 100}%` }}
+                            />
+                          );
+                        })}
+                      </span>
+                      <span className="w-20 shrink-0 text-right text-xs text-muted">
+                        {studied} studied
+                      </span>
+                      <ChevronDown
+                        className={cn(
+                          "h-4 w-4 shrink-0 text-muted transition-transform",
+                          open && "rotate-180",
+                        )}
+                      />
+                    </button>
+                    {open && (
+                      <div className="flex flex-wrap gap-1.5 border-t border-border px-3 py-3">
+                        {r.nums.map((n) => {
+                          const page = pageMap.get(n);
+                          return (
+                            <button
+                              key={n}
+                              id={`book-page-${n}`}
+                              onClick={() => setSelected(selected === n ? null : n)}
+                              className={cn(
+                                "flex h-9 w-9 items-center justify-center rounded-md text-xs font-medium transition-transform hover:scale-105",
+                                cellClasses(page),
+                                selected === n &&
+                                  "ring-2 ring-ring ring-offset-1 ring-offset-background",
+                              )}
+                              title={
+                                page
+                                  ? `Page ${n} · ${page.status}${page.level ? ` · ${masteryInfo(page.level).label}` : ""}`
+                                  : `Page ${n} · not uploaded`
+                              }
+                            >
+                              {n}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                 );
               })}
             </div>

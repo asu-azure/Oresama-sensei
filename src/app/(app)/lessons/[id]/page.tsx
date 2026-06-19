@@ -117,6 +117,8 @@ export default async function LessonDetailPage({
       {lesson.article_md && (
         <LessonPractice
           lessonId={lesson.id}
+          lessonTitle={lesson.title}
+          lessonExcerpt={lesson.article_md}
           initialExercises={(lesson.exercises ?? []) as Exercise[]}
         />
       )}

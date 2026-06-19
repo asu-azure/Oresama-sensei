@@ -190,6 +190,32 @@ export interface ExerciseSet {
   exercises: Exercise[];
 }
 
+/** What the floating "Ask Sensei" helper is currently looking at. Drives the
+ *  context block in buildDiscussSystemPrompt so the tutor answers about the
+ *  exact exercise / word / kanji / lesson the learner is viewing. */
+export type AskContext =
+  | { kind: "exercise"; exercise: Exercise }
+  | {
+      kind: "vocab";
+      item: {
+        type?: string;
+        term: string;
+        reading?: string | null;
+        meaning?: string | null;
+        example?: string | null;
+        jlpt_level?: string | null;
+      };
+    }
+  | {
+      kind: "kanji";
+      char: string;
+      meanings?: string[];
+      on?: string[];
+      kun?: string[];
+    }
+  | { kind: "lesson"; title?: string | null; excerpt?: string | null }
+  | { kind: "free" };
+
 /** A saved practice test (the "test bank"). `exercises` replays for free. */
 export interface ReviewTest {
   id: string;

@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { streamDiscuss, type ChatTurn } from "@/lib/claude";
 import { buildDiscussSystemPrompt } from "@/lib/prompts";
-import type { Exercise } from "@/lib/types";
+import type { AskContext, Exercise } from "@/lib/types";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -10,17 +10,27 @@ export async function POST(request: Request) {
   } = await supabase.auth.getUser();
   if (!user) return new Response("Unauthorized", { status: 401 });
 
-  let body: { exercise?: Exercise; messages?: ChatTurn[] };
+  // Accepts the new generalized { context } shape, or legacy { exercise }.
+  let body: {
+    context?: AskContext;
+    exercise?: Exercise;
+    messages?: ChatTurn[];
+  };
   try {
     body = await request.json();
   } catch {
     return new Response("Bad request", { status: 400 });
   }
-  if (!body.exercise || !body.messages?.length) {
+  if (!body.messages?.length) {
     return new Response("Bad request", { status: 400 });
   }
+  const context: AskContext =
+    body.context ??
+    (body.exercise
+      ? { kind: "exercise", exercise: body.exercise }
+      : { kind: "free" });
 
-  const system = buildDiscussSystemPrompt(body.exercise);
+  const system = buildDiscussSystemPrompt(context);
   const claudeStream = streamDiscuss(system, body.messages);
 
   const stream = new ReadableStream({

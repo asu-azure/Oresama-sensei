@@ -5,6 +5,7 @@ import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
 import { Check, RotateCcw, Brain, GraduationCap } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { AskSensei } from "@/components/ask-sensei/ask-sensei";
 import { showReading } from "@/lib/furigana";
 import { SpeakButton } from "@/components/speak-button";
 import { PitchAccent } from "@/components/pitch-accent";
@@ -33,9 +34,11 @@ const RATINGS: { rating: Rating; label: string; cls: string }[] = [
 export function ReviewClient({
   cards,
   previews = {},
+  totalDue,
 }: {
   cards: ReviewCard[];
   previews?: Record<string, IntervalPreview>;
+  totalDue?: number;
 }) {
   return (
     <div className="mx-auto max-w-lg py-6">
@@ -54,7 +57,11 @@ export function ReviewClient({
         </div>
       </div>
       <PitchLegend className="mb-4" />
-      <Flashcards cards={cards} previews={previews} />
+      <Flashcards
+        cards={cards}
+        previews={previews}
+        totalDue={totalDue ?? cards.length}
+      />
     </div>
   );
 }
@@ -62,9 +69,11 @@ export function ReviewClient({
 function Flashcards({
   cards,
   previews,
+  totalDue,
 }: {
   cards: ReviewCard[];
   previews: Record<string, IntervalPreview>;
+  totalDue: number;
 }) {
   const pitchOn = usePitch();
   const [index, setIndex] = useState(0);
@@ -93,6 +102,9 @@ function Flashcards({
   }
 
   if (index >= cards.length) {
+    // Cards just graded are rescheduled into the future, so anything still due
+    // is beyond this batch. Force a fresh load to pull the next due cards.
+    const remaining = Math.max(0, totalDue - reviewed);
     return (
       <div className="py-12 text-center">
         <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-600/10 text-emerald-600">
@@ -101,14 +113,23 @@ function Flashcards({
         <h1 className="text-xl font-semibold">Done! 🎉</h1>
         <p className="mt-1 text-sm text-muted">
           You reviewed {reviewed} {reviewed === 1 ? "item" : "items"}.
+          {remaining > 0
+            ? ` ${remaining} still due.`
+            : " You're all caught up."}
         </p>
-        <div className="mt-5 flex justify-center gap-2">
+        <div className="mt-5 flex flex-wrap justify-center gap-2">
           <Link href="/dashboard">
             <Button variant="outline">See progress</Button>
           </Link>
-          <Link href="/chat">
-            <Button>Keep studying</Button>
-          </Link>
+          {remaining > 0 ? (
+            <Button onClick={() => window.location.assign("/review")}>
+              Keep studying ({remaining} due)
+            </Button>
+          ) : (
+            <Link href="/chat">
+              <Button>Study something new</Button>
+            </Link>
+          )}
         </div>
       </div>
     );
@@ -217,6 +238,26 @@ function Flashcards({
           })}
         </div>
       )}
+
+      <AskSensei
+        context={{
+          kind: "vocab",
+          item: {
+            type: card.type,
+            term: card.term,
+            reading: card.reading,
+            meaning: card.meaning,
+            example: card.example,
+            jlpt_level: card.jlpt_level,
+          },
+        }}
+        contextKey={`card-${card.id}`}
+        suggestions={[
+          "Explain this word in depth.",
+          "Give me another example sentence.",
+          "What's an easy way to remember this?",
+        ]}
+      />
     </>
   );
 }

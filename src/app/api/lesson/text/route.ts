@@ -1,5 +1,12 @@
 import { createClient } from "@/lib/supabase/server";
-import { streamLesson, extractKnowledge, generateExercises } from "@/lib/claude";
+import {
+  runClaudeLessonStream,
+  lessonUserMessage,
+  extractKnowledge,
+  generateExercises,
+  type LessonModelChoice,
+} from "@/lib/claude";
+import { runGeminiLessonStream } from "@/lib/gemini";
 import { recallKnowledge, storeKnowledge } from "@/lib/memory";
 import { buildLessonSystemPrompt } from "@/lib/prompts";
 import { sourceTypeForMaterial, type MaterialType } from "@/lib/source";
@@ -19,6 +26,7 @@ export async function POST(request: Request) {
   let body: {
     text?: string;
     deep?: boolean;
+    lessonModel?: LessonModelChoice;
     kind?: string;
     materialType?: MaterialType;
   };
@@ -29,6 +37,8 @@ export async function POST(request: Request) {
   }
   const text = (body.text ?? "").trim();
   const deep = body.deep === true;
+  const lessonModel: LessonModelChoice =
+    body.lessonModel ?? (deep ? "opus" : "claude");
   // "text" (typed) by default; "chat" when saving a chat answer as a lesson.
   const kind = body.kind === "chat" ? "chat" : "text";
   // Material type: chat answers are "chat"; typed text defaults to "text"
@@ -73,7 +83,6 @@ export async function POST(request: Request) {
     recallKnowledge(supabase, text.slice(0, 500), 8),
   ]);
   const system = buildLessonSystemPrompt(profile as Profile | null, recalled);
-  const claudeStream = streamLesson(system, text, deep, "text");
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({
@@ -81,8 +90,7 @@ export async function POST(request: Request) {
       let article = "";
       let clientGone = false;
 
-      claudeStream.on("text", (delta) => {
-        article += delta;
+      const onDelta = (delta: string) => {
         if (!clientGone) {
           try {
             controller.enqueue(encoder.encode(delta));
@@ -90,10 +98,25 @@ export async function POST(request: Request) {
             clientGone = true;
           }
         }
-      });
+      };
 
       try {
-        await claudeStream.finalMessage();
+        if (lessonModel === "gemini" || lessonModel === "gemini-pro") {
+          article = await runGeminiLessonStream({
+            system,
+            userMessage: lessonUserMessage(text, "text"),
+            model: lessonModel,
+            onDelta,
+          });
+        } else {
+          article = await runClaudeLessonStream({
+            system,
+            pageText: text,
+            source: "text",
+            opus: lessonModel === "opus",
+            onDelta,
+          });
+        }
       } catch (e) {
         console.error("text lesson generation error:", e);
       }

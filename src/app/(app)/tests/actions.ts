@@ -12,6 +12,8 @@ export async function refineExercise(params: {
   testId?: string;
   lessonId?: string;
   index?: number;
+  /** Optional free-text note from the learner on what's wrong. */
+  note?: string;
 }): Promise<{ exercise: Exercise } | { error: string }> {
   const supabase = await createClient();
   const {
@@ -21,7 +23,7 @@ export async function refineExercise(params: {
 
   let refined: Exercise | null;
   try {
-    refined = await refineWithAi(params.exercise);
+    refined = await refineWithAi(params.exercise, params.note);
   } catch (e) {
     console.error("exercise refine failed:", e);
     return { error: "Couldn't check this question right now." };

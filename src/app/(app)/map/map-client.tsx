@@ -22,6 +22,7 @@ import {
   BookOpen,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { CostHint, MODEL_LABELS } from "@/components/cost-hint";
 import { cn, formatDate } from "@/lib/utils";
 import { showReading } from "@/lib/furigana";
 import type { MapData } from "@/lib/types";
@@ -327,14 +328,17 @@ export function MapClient({
               </button>
             </div>
           )}
-          <Button onClick={regenerate} disabled={busy} variant="outline">
-            {busy ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <RefreshCw className="h-4 w-4" />
-            )}
-            {data ? "Regenerate" : "Generate map"}
-          </Button>
+          <div className="flex flex-col items-end gap-1">
+            <Button onClick={regenerate} disabled={busy} variant="outline">
+              {busy ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <RefreshCw className="h-4 w-4" />
+              )}
+              {data ? "Regenerate" : "Generate map"}
+            </Button>
+            <CostHint model={MODEL_LABELS.sonnet} />
+          </div>
         </div>
       </div>
 

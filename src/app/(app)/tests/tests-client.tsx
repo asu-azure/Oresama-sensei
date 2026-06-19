@@ -14,6 +14,8 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ExercisePlayer } from "@/components/exercises/exercise-player";
+import { AskSensei } from "@/components/ask-sensei/ask-sensei";
+import { CostHint, MODEL_LABELS } from "@/components/cost-hint";
 import { cn, formatDate } from "@/lib/utils";
 import type { Exercise } from "@/lib/types";
 import { refineExercise } from "./actions";
@@ -65,6 +67,7 @@ export function TestsClient({
 
   const [phase, setPhase] = useState<"browse" | "playing">("browse");
   const [exercises, setExercises] = useState<Exercise[]>([]);
+  const [activeIndex, setActiveIndex] = useState(0);
   const [playingTestId, setPlayingTestId] = useState<string | null>(null);
   const [playToken, setPlayToken] = useState(0);
   const [busy, setBusy] = useState(false);
@@ -284,15 +287,28 @@ export function TestsClient({
           exercises={exercises}
           onGrade={gradeItem}
           onDone={() => setPhase("browse")}
-          onRefine={async (index, ex) => {
+          onIndexChange={setActiveIndex}
+          onRefine={async (index, ex, note) => {
             const res = await refineExercise({
               exercise: ex,
               testId: playingTestId ?? undefined,
               index,
+              note,
             });
             return "exercise" in res ? res.exercise : null;
           }}
         />
+        {exercises[activeIndex] && (
+          <AskSensei
+            context={{ kind: "exercise", exercise: exercises[activeIndex] }}
+            contextKey={`test-${playToken}-${activeIndex}`}
+            suggestions={[
+              "Why is this answer correct?",
+              "I think the answer should be different — why?",
+              "Explain this grammar point more.",
+            ]}
+          />
+        )}
       </div>
     );
   }
@@ -373,7 +389,7 @@ export function TestsClient({
           </div>
         )}
 
-        <div className="mt-4">
+        <div className="mt-4 flex items-center gap-3">
           <Button onClick={generate} disabled={busy}>
             {busy ? (
               <>
@@ -385,6 +401,10 @@ export function TestsClient({
               </>
             )}
           </Button>
+          <CostHint
+            model={MODEL_LABELS.sonnet}
+            note="saved test replays are free"
+          />
         </div>
       </section>
 
@@ -478,6 +498,7 @@ export function TestsClient({
                   )}
                   Generate
                 </Button>
+                <CostHint model={MODEL_LABELS.sonnet} className="self-center" />
               </div>
             )}
           </div>

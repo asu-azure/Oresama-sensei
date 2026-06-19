@@ -1,10 +1,12 @@
 import { createClient } from "@/lib/supabase/server";
-import { ocrImage } from "@/lib/gemini";
+import { ocrImage, runGeminiLessonStream } from "@/lib/gemini";
 import {
-  streamLesson,
+  runClaudeLessonStream,
+  lessonUserMessage,
   extractKnowledge,
   generateExercises,
   ocrImageWithClaude,
+  type LessonModelChoice,
 } from "@/lib/claude";
 import { recallKnowledge, storeKnowledge } from "@/lib/memory";
 import { buildLessonSystemPrompt } from "@/lib/prompts";
@@ -77,7 +79,10 @@ export async function POST(request: Request) {
   if (!user) return new Response("Unauthorized", { status: 401 });
 
   const form = await request.formData();
+  // Legacy "deep" flag maps to Opus; new "lessonModel" supersedes it.
   const deep = form.get("deep") === "true";
+  const lessonModel = ((form.get("lessonModel") as LessonModelChoice) ||
+    (deep ? "opus" : "claude")) as LessonModelChoice;
   const ocrModel = (form.get("ocrModel") as OcrModel) || "auto";
 
   // Source attribution (where this material came from).
@@ -245,8 +250,6 @@ export async function POST(request: Request) {
     recalled,
     pageCount,
   );
-  const claudeStream = streamLesson(system, pageText, deep, "photo", pageCount);
-
   const encoder = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -254,8 +257,7 @@ export async function POST(request: Request) {
       let clientGone = false;
 
       // Stream deltas to the browser, but keep generating even if it leaves.
-      claudeStream.on("text", (delta) => {
-        article += delta;
+      const onDelta = (delta: string) => {
         if (!clientGone) {
           try {
             controller.enqueue(encoder.encode(delta));
@@ -263,10 +265,26 @@ export async function POST(request: Request) {
             clientGone = true;
           }
         }
-      });
+      };
 
       try {
-        await claudeStream.finalMessage();
+        if (lessonModel === "gemini" || lessonModel === "gemini-pro") {
+          article = await runGeminiLessonStream({
+            system,
+            userMessage: lessonUserMessage(pageText, "photo"),
+            model: lessonModel,
+            onDelta,
+          });
+        } else {
+          article = await runClaudeLessonStream({
+            system,
+            pageText,
+            source: "photo",
+            pageCount,
+            opus: lessonModel === "opus",
+            onDelta,
+          });
+        }
       } catch (e) {
         console.error("lesson generation error:", e);
       }

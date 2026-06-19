@@ -42,16 +42,27 @@ export default async function ReviewPage({
   }
 
   const nowIso = new Date().toISOString();
-  const { data } = await supabase
-    .from("knowledge_items")
-    .select(COLS)
-    .eq("user_id", user!.id)
-    .or(`srs_due.is.null,srs_due.lte.${nowIso}`)
-    .order("srs_due", { ascending: true, nullsFirst: true })
-    .limit(30);
+  const [{ data }, { count }] = await Promise.all([
+    supabase
+      .from("knowledge_items")
+      .select(COLS)
+      .eq("user_id", user!.id)
+      .or(`srs_due.is.null,srs_due.lte.${nowIso}`)
+      .order("srs_due", { ascending: true, nullsFirst: true })
+      .limit(30),
+    supabase
+      .from("knowledge_items")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", user!.id)
+      .or(`srs_due.is.null,srs_due.lte.${nowIso}`),
+  ]);
 
   const rows = (data ?? []) as Row[];
   return (
-    <ReviewClient cards={rows as ReviewCard[]} previews={buildPreviews(rows)} />
+    <ReviewClient
+      cards={rows as ReviewCard[]}
+      previews={buildPreviews(rows)}
+      totalDue={count ?? rows.length}
+    />
   );
 }

@@ -19,6 +19,7 @@ type Item = {
   srs_stability: number | null;
   srs_difficulty: number | null;
   srs_interval: number | null;
+  srs_last_review: string | null;
   term: string;
   reading: string | null;
 };
@@ -103,7 +104,7 @@ export default async function DashboardPage() {
     supabase
       .from("knowledge_items")
       .select(
-        "type,jlpt_level,created_at,times_seen,srs_due,srs_reps,srs_lapses,srs_stability,srs_difficulty,srs_interval,term,reading",
+        "type,jlpt_level,created_at,times_seen,srs_due,srs_reps,srs_lapses,srs_stability,srs_difficulty,srs_interval,srs_last_review,term,reading",
       )
       .eq("user_id", user!.id),
     supabase.from("lessons").select("kind").eq("user_id", user!.id),
@@ -148,17 +149,28 @@ export default async function DashboardPage() {
     },
   ];
 
-  // Items added per day, last 14 days.
-  const days: { label: string; value: number }[] = [];
+  // Activity per day, last 14 days: items ADDED and items REVIEWED. Reviewing
+  // keeps the chart alive on days you didn't add anything new.
+  const addedByDay: Record<string, number> = {};
+  const reviewedByDay: Record<string, number> = {};
+  for (const i of items) {
+    addedByDay[i.created_at.slice(0, 10)] =
+      (addedByDay[i.created_at.slice(0, 10)] ?? 0) + 1;
+    if (i.srs_last_review) {
+      const k = i.srs_last_review.slice(0, 10);
+      reviewedByDay[k] = (reviewedByDay[k] ?? 0) + 1;
+    }
+  }
+  const days: { label: string; added: number; reviewed: number }[] = [];
   for (let d = 13; d >= 0; d--) {
-    const day = new Date(nowMs - d * 86_400_000);
-    const key = day.toISOString().slice(0, 10);
-    const value = items.filter((i) => i.created_at.slice(0, 10) === key).length;
+    const key = new Date(nowMs - d * 86_400_000).toISOString().slice(0, 10);
     days.push({
       label: d === 0 ? "Today" : key.slice(5),
-      value,
+      added: addedByDay[key] ?? 0,
+      reviewed: reviewedByDay[key] ?? 0,
     });
   }
+  const activityTotal = days.reduce((s, d) => s + d.added + d.reviewed, 0);
 
   const topSeen = [...items]
     .sort((a, b) => b.times_seen - a.times_seen)
@@ -222,27 +234,72 @@ export default async function DashboardPage() {
           </div>
 
           <section className="rounded-2xl border border-border bg-surface p-5">
-            <h2 className="mb-3 text-sm font-medium text-muted">
-              Added in the last 14 days · {scheduled} in review rotation
-            </h2>
-            <div className="flex h-32 items-end gap-1">
-              {days.map((d, i) => {
-                const max = Math.max(1, ...days.map((x) => x.value));
-                return (
-                  <div
-                    key={i}
-                    className="flex flex-1 flex-col items-center gap-1"
-                    title={`${d.label}: ${d.value}`}
-                  >
-                    <div
-                      className="w-full rounded-t bg-primary/80"
-                      style={{ height: `${(d.value / max) * 100}%` }}
-                    />
-                    <span className="text-[9px] text-muted">{d.label}</span>
-                  </div>
-                );
-              })}
+            <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1">
+              <h2 className="text-sm font-medium text-muted">
+                Activity · last 14 days
+              </h2>
+              <span className="flex items-center gap-1 text-[11px] text-muted">
+                <span className="h-2 w-2 rounded-sm bg-primary/80" /> added
+              </span>
+              <span className="flex items-center gap-1 text-[11px] text-muted">
+                <span className="h-2 w-2 rounded-sm bg-emerald-500/80" /> reviewed
+              </span>
+              <span className="ml-auto text-[11px] text-muted">
+                {scheduled} in review rotation
+              </span>
             </div>
+            {activityTotal === 0 ? (
+              <div className="flex h-32 flex-col items-center justify-center gap-2 text-center text-sm text-muted">
+                <p>No study activity in the last 14 days.</p>
+                {dueNow > 0 ? (
+                  <Link
+                    href="/review"
+                    className="rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90"
+                  >
+                    Review {dueNow} due →
+                  </Link>
+                ) : (
+                  <Link
+                    href="/chat"
+                    className="rounded-lg border border-border px-3 py-1.5 text-xs transition-colors hover:bg-surface-2"
+                  >
+                    Study something new →
+                  </Link>
+                )}
+              </div>
+            ) : (
+              <div className="flex h-32 items-end gap-1">
+                {days.map((d, i) => {
+                  const max = Math.max(
+                    1,
+                    ...days.map((x) => Math.max(x.added, x.reviewed)),
+                  );
+                  return (
+                    <div
+                      key={i}
+                      className="flex flex-1 flex-col items-center gap-1"
+                      title={`${d.label}: ${d.added} added, ${d.reviewed} reviewed`}
+                    >
+                      <div className="flex h-full w-full items-end justify-center gap-0.5">
+                        <div
+                          className="w-1/2 rounded-t bg-primary/80"
+                          style={{
+                            height: `${Math.max(d.added > 0 ? 6 : 0, (d.added / max) * 100)}%`,
+                          }}
+                        />
+                        <div
+                          className="w-1/2 rounded-t bg-emerald-500/80"
+                          style={{
+                            height: `${Math.max(d.reviewed > 0 ? 6 : 0, (d.reviewed / max) * 100)}%`,
+                          }}
+                        />
+                      </div>
+                      <span className="text-[9px] text-muted">{d.label}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </section>
 
           <section className="rounded-2xl border border-border bg-surface p-5">

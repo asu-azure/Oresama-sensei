@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Compass, Loader2, RefreshCw, ArrowRight } from "lucide-react";
 import { Markdown } from "@/components/markdown";
+import { CostHint, MODEL_LABELS } from "@/components/cost-hint";
 import { cn } from "@/lib/utils";
 
 export type CoachFocus = { label: string; why: string; action: string };
@@ -51,15 +52,18 @@ export function CoachNote({ initial }: { initial: CoachNoteData | null }) {
           <Compass className="h-4 w-4 text-primary" /> Coach&apos;s note
         </h2>
         {note && (
-          <button
-            onClick={() => fetchNote(true)}
-            disabled={loading}
-            title="Regenerate"
-            className="flex items-center gap-1 rounded-full border border-border px-2.5 py-1 text-xs text-muted transition-colors hover:bg-surface-2 hover:text-foreground disabled:opacity-50"
-          >
-            <RefreshCw className={cn("h-3 w-3", loading && "animate-spin")} />
-            Refresh
-          </button>
+          <div className="flex items-center gap-2">
+            <CostHint model={MODEL_LABELS.haiku} />
+            <button
+              onClick={() => fetchNote(true)}
+              disabled={loading}
+              title="Regenerate"
+              className="flex items-center gap-1 rounded-full border border-border px-2.5 py-1 text-xs text-muted transition-colors hover:bg-surface-2 hover:text-foreground disabled:opacity-50"
+            >
+              <RefreshCw className={cn("h-3 w-3", loading && "animate-spin")} />
+              Refresh
+            </button>
+          </div>
         )}
       </div>
 
@@ -100,18 +104,21 @@ export function CoachNote({ initial }: { initial: CoachNoteData | null }) {
               little more first.
             </p>
           )}
-          <button
-            onClick={() => fetchNote(false)}
-            disabled={loading}
-            className="mt-3 flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:opacity-90 disabled:opacity-50"
-          >
-            {loading ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Compass className="h-4 w-4" />
-            )}
-            {loading ? "Thinking…" : "Get coaching"}
-          </button>
+          <div className="mt-3 flex items-center gap-3">
+            <button
+              onClick={() => fetchNote(false)}
+              disabled={loading}
+              className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:opacity-90 disabled:opacity-50"
+            >
+              {loading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Compass className="h-4 w-4" />
+              )}
+              {loading ? "Thinking…" : "Get coaching"}
+            </button>
+            <CostHint model={MODEL_LABELS.haiku} />
+          </div>
         </div>
       )}
     </section>

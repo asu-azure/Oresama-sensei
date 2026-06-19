@@ -6,6 +6,7 @@ import { motion } from "framer-motion";
 import { Loader2, Sparkles, PenLine } from "lucide-react";
 import { Markdown } from "@/components/markdown";
 import { Button } from "@/components/ui/button";
+import { CostHint, MODEL_LABELS } from "@/components/cost-hint";
 
 export function LessonTextGenerator() {
   const router = useRouter();
@@ -86,14 +87,17 @@ export function LessonTextGenerator() {
               />
               Deep lesson (slower, uses Opus)
             </label>
-            <Button onClick={generate} disabled={busy || !text.trim()}>
-              {busy ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Sparkles className="h-4 w-4" />
-              )}
-              {busy ? "Working…" : "Generate lesson"}
-            </Button>
+            <div className="flex flex-col items-end gap-1">
+              <Button onClick={generate} disabled={busy || !text.trim()}>
+                {busy ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Sparkles className="h-4 w-4" />
+                )}
+                {busy ? "Working…" : "Generate lesson"}
+              </Button>
+              <CostHint model={deep ? MODEL_LABELS.opus : MODEL_LABELS.sonnet} />
+            </div>
           </div>
         </div>
       </div>

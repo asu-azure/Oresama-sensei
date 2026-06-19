@@ -21,12 +21,11 @@ import {
   Trophy,
   Wand2,
   Loader2,
-  MessageCircle,
 } from "lucide-react";
 import { Markdown } from "@/components/markdown";
 import { RubyText } from "@/components/ruby-text";
 import { Button } from "@/components/ui/button";
-import { ExerciseDiscussPanel } from "@/components/exercises/exercise-discuss-panel";
+import { CostHint, MODEL_LABELS } from "@/components/cost-hint";
 import { stripFurigana } from "@/lib/furigana";
 import { cn } from "@/lib/utils";
 import type {
@@ -34,7 +33,6 @@ import type {
   McqExercise,
   ArrangeExercise,
   ClozeExercise,
-  DiscussMessage,
 } from "@/lib/types";
 
 // --- Snapshot types for back-navigation state restoration ---
@@ -73,34 +71,46 @@ export function ExercisePlayer({
   onGrade,
   onDone,
   onRefine,
+  onIndexChange,
+  onContinue,
+  continueLabel,
 }: {
   exercises: Exercise[];
   onGrade?: (itemId: string, correct: boolean) => void;
   onDone?: () => void;
-  onRefine?: (index: number, ex: Exercise) => Promise<Exercise | null>;
+  onRefine?: (
+    index: number,
+    ex: Exercise,
+    note?: string,
+  ) => Promise<Exercise | null>;
+  /** Reports the active question index so a host can keep an "Ask Sensei"
+   *  helper in sync. Called only from event handlers (no effects). */
+  onIndexChange?: (index: number) => void;
+  /** When set, the completion screen shows a "keep going" button (e.g. continue
+   *  with remaining due items). */
+  onContinue?: () => void;
+  continueLabel?: string;
 }) {
   const [index, setIndex] = useState(0);
   const [cardKey, setCardKey] = useState(0);
   const [items, setItems] = useState<Exercise[]>(exercises);
   const [refining, setRefining] = useState(false);
   const [refineNote, setRefineNote] = useState<string | null>(null);
+  const [fixOpen, setFixOpen] = useState(false);
+  const [fixText, setFixText] = useState("");
   const [history, setHistory] = useState<HistoryEntry[]>(() =>
     exercises.map(() => ({ answered: false, correct: null, snapshot: null })),
   );
-  const [chatByIndex, setChatByIndex] = useState<
-    Record<number, DiscussMessage[]>
-  >({});
-  const [chatOpen, setChatOpen] = useState(false);
 
   const correctCount = history.filter((h) => h.correct === true).length;
   const answeredCount = history.filter((h) => h.answered).length;
 
-  async function checkAndFix() {
+  async function checkAndFix(note?: string) {
     if (!onRefine || refining) return;
     setRefining(true);
     setRefineNote(null);
     try {
-      const fixed = await onRefine(index, items[index]);
+      const fixed = await onRefine(index, items[index], note);
       if (fixed) {
         setItems((prev) => {
           const next = [...prev];
@@ -113,6 +123,8 @@ export function ExercisePlayer({
           return next;
         });
         setCardKey((k) => k + 1);
+        setFixOpen(false);
+        setFixText("");
         setRefineNote("Question checked & refined.");
       } else {
         setRefineNote("Couldn't refine this one.");
@@ -152,11 +164,12 @@ export function ExercisePlayer({
         <p className="mt-1 text-sm text-muted">
           {correctCount} / {items.length} correct ({pct}%)
         </p>
-        <div className="mt-5 flex justify-center gap-2">
+        <div className="mt-5 flex flex-wrap justify-center gap-2">
           <Button
             variant="outline"
             onClick={() => {
               setIndex(0);
+              onIndexChange?.(0);
               setHistory(
                 items.map(() => ({
                   answered: false,
@@ -164,14 +177,21 @@ export function ExercisePlayer({
                   snapshot: null,
                 })),
               );
-              setChatByIndex({});
-              setChatOpen(false);
               setCardKey((k) => k + 1);
             }}
           >
             <RotateCcw className="h-4 w-4" /> Try again
           </Button>
-          {onDone && <Button onClick={onDone}>Done</Button>}
+          {onContinue && (
+            <Button onClick={onContinue}>
+              {continueLabel ?? "Keep studying"} <ArrowRight className="h-4 w-4" />
+            </Button>
+          )}
+          {onDone && (
+            <Button variant={onContinue ? "outline" : undefined} onClick={onDone}>
+              Done
+            </Button>
+          )}
         </div>
       </motion.div>
     );
@@ -190,17 +210,23 @@ export function ExercisePlayer({
   }
 
   function next() {
-    setIndex((i) => i + 1);
+    setIndex((i) => {
+      onIndexChange?.(i + 1);
+      return i + 1;
+    });
     setCardKey((k) => k + 1);
-    setChatOpen(false);
+    setFixOpen(false);
     setRefineNote(null);
   }
 
   function prev() {
     if (index === 0) return;
-    setIndex((i) => i - 1);
+    setIndex((i) => {
+      onIndexChange?.(i - 1);
+      return i - 1;
+    });
     setCardKey((k) => k + 1);
-    setChatOpen(false);
+    setFixOpen(false);
     setRefineNote(null);
   }
 
@@ -224,10 +250,13 @@ export function ExercisePlayer({
         <div className="flex items-center gap-2">
           {onRefine && (
             <button
-              onClick={checkAndFix}
+              onClick={() => setFixOpen((o) => !o)}
               disabled={refining}
-              title="Looks wrong? Ask AI to check & fix this question"
-              className="flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-xs transition-colors hover:bg-surface-2 disabled:opacity-50"
+              title="Looks wrong? Tell the AI what to fix"
+              className={cn(
+                "flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs transition-colors hover:bg-surface-2 disabled:opacity-50",
+                fixOpen ? "border-primary/50 bg-primary/10 text-primary" : "border-border",
+              )}
             >
               {refining ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -237,22 +266,6 @@ export function ExercisePlayer({
               Check &amp; fix
             </button>
           )}
-          <button
-            onClick={() => setChatOpen((o) => !o)}
-            title="Ask AI about this question"
-            className={cn(
-              "flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs transition-colors hover:bg-surface-2",
-              chatOpen
-                ? "border-primary/50 bg-primary/10 text-primary"
-                : "border-border",
-              chatByIndex[index]?.length
-                ? "border-primary/40 text-primary"
-                : "",
-            )}
-          >
-            <MessageCircle className="h-3.5 w-3.5" />
-            Ask AI
-          </button>
           <span className="rounded-full bg-surface-2 px-2 py-0.5 text-xs uppercase tracking-wide">
             {ex.type === "mcq"
               ? "Multiple choice"
@@ -264,6 +277,47 @@ export function ExercisePlayer({
           </span>
         </div>
       </div>
+
+      {/* Check & fix: optional free-text note so the learner can say what's wrong */}
+      {fixOpen && onRefine && (
+        <div className="mb-3 rounded-xl border border-border bg-surface p-3">
+          <label className="text-xs text-muted">
+            What looks wrong? (optional — e.g. &quot;option B also works&quot;, or
+            &quot;the が tile is already in the sentence&quot;)
+          </label>
+          <textarea
+            value={fixText}
+            onChange={(e) => setFixText(e.target.value)}
+            rows={2}
+            disabled={refining}
+            placeholder="Leave blank to just re-check it…"
+            className="mt-1.5 w-full resize-none rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
+          />
+          <div className="mt-2 flex items-center justify-end gap-2">
+            <CostHint model={MODEL_LABELS.sonnet} className="mr-auto" />
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setFixOpen(false)}
+              disabled={refining}
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => checkAndFix(fixText.trim() || undefined)}
+              disabled={refining}
+            >
+              {refining ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Wand2 className="h-4 w-4" />
+              )}
+              Fix it
+            </Button>
+          </div>
+        </div>
+      )}
 
       {refineNote && (
         <p className="mb-2 text-xs text-muted">{refineNote}</p>
@@ -336,20 +390,6 @@ export function ExercisePlayer({
             />
           )}
         </motion.div>
-      </AnimatePresence>
-
-      {/* In-test AI chat panel */}
-      <AnimatePresence>
-        {chatOpen && (
-          <ExerciseDiscussPanel
-            exercise={ex}
-            messages={chatByIndex[index] ?? []}
-            onMessages={(msgs) =>
-              setChatByIndex((prev) => ({ ...prev, [index]: msgs }))
-            }
-            onClose={() => setChatOpen(false)}
-          />
-        )}
       </AnimatePresence>
     </div>
   );

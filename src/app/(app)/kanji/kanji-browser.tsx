@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Search, Check, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -24,10 +24,35 @@ export function KanjiBrowser({
   learned?: string[];
 }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const seenSet = useMemo(() => new Set(seen), [seen]);
   const learnedSet = useMemo(() => new Set(learned), [learned]);
-  const [level, setLevel] = useState<Level>("N5");
+  // Remember the chosen level across visits via the URL (?level=N2) so coming
+  // back from a kanji detail page returns you to the same level, not N5.
+  const initialLevel = (() => {
+    const fromUrl = searchParams.get("level");
+    return fromUrl && (LEVELS as readonly string[]).includes(fromUrl)
+      ? (fromUrl as Level)
+      : "N5";
+  })();
+  const [level, setLevelState] = useState<Level>(initialLevel);
   const [q, setQ] = useState("");
+  const scrollRestored = useRef(false);
+
+  function setLevel(lv: Level) {
+    setLevelState(lv);
+    router.replace(`/kanji?level=${lv}`, { scroll: false });
+  }
+
+  /** Save scroll position before navigating into a kanji, so returning here
+   *  restores it (sessionStorage keyed by level). */
+  function rememberScroll() {
+    try {
+      sessionStorage.setItem(`kanji:scroll:${level}`, String(window.scrollY));
+    } catch {
+      /* ignore */
+    }
+  }
   // Info for the active level (lazy) — used for English/reading search + tooltips.
   const [info, setInfo] = useState<{ level: Level; data: Record<string, KanjiInfo> } | null>(
     null,
@@ -50,6 +75,20 @@ export function KanjiBrowser({
   }, [level]);
 
   const ready = info && info.level === level ? info.data : null;
+
+  // Restore scroll once, after the initial level's grid is ready (returning
+  // from a kanji detail page). Only the first paint — switching levels later
+  // shouldn't yank the page.
+  useEffect(() => {
+    if (!ready || scrollRestored.current) return;
+    scrollRestored.current = true;
+    try {
+      const y = sessionStorage.getItem(`kanji:scroll:${level}`);
+      if (y) window.scrollTo(0, parseInt(y, 10) || 0);
+    } catch {
+      /* ignore */
+    }
+  }, [ready, level]);
 
   const list = useMemo(() => {
     const query = q.trim();
@@ -210,20 +249,26 @@ export function KanjiBrowser({
                   ? "border border-primary/50 bg-surface hover:bg-surface-2"
                   : "border border-border bg-surface hover:bg-surface-2",
           );
-          const badge = learnedNow ? (
-            <span
-              className="absolute right-0.5 top-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-emerald-500 text-white"
-              title="Learned"
-            >
-              <Check className="h-2.5 w-2.5" />
-            </span>
-          ) : (
-            isSeen && (
-              <span
-                className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-primary"
-                title="In your saved words"
-              />
-            )
+          // Learned (emerald check, TOP-right) and "in your words" (primary dot,
+          // BOTTOM-right) are shown independently so a learned kanji still shows
+          // it has saved words.
+          const badges = (
+            <>
+              {learnedNow && (
+                <span
+                  className="absolute right-0.5 top-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-emerald-500 text-white"
+                  title="Learned"
+                >
+                  <Check className="h-2.5 w-2.5" />
+                </span>
+              )}
+              {isSeen && (
+                <span
+                  className="absolute bottom-0.5 right-0.5 h-1.5 w-1.5 rounded-full bg-primary"
+                  title="In your saved words"
+                />
+              )}
+            </>
           );
 
           if (selectMode) {
@@ -235,7 +280,7 @@ export function KanjiBrowser({
                     <Check className="h-3 w-3" />
                   </span>
                 ) : (
-                  badge
+                  badges
                 )}
               </button>
             );
@@ -243,12 +288,13 @@ export function KanjiBrowser({
           return (
             <Link
               key={ch}
-              href={`/kanji/${encodeURIComponent(ch)}`}
+              href={`/kanji/${encodeURIComponent(ch)}?from=${level}`}
+              onClick={rememberScroll}
               title={ready?.[ch]?.meanings.slice(0, 3).join(", ")}
               className={cls}
             >
               {ch}
-              {badge}
+              {badges}
             </Link>
           );
         })}

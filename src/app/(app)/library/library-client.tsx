@@ -63,6 +63,8 @@ export function LibraryClient({
   initialItems,
   dayCounts,
   total,
+  totalCounts,
+  allSourceTypes,
   pageSize,
   explanations,
   explainedIds,
@@ -70,6 +72,8 @@ export function LibraryClient({
   initialItems: LibraryItem[];
   dayCounts: Record<string, number>;
   total: number;
+  totalCounts?: Record<string, number>;
+  allSourceTypes?: string[];
   pageSize: number;
   explanations: ExplanationMap;
   explainedIds: string[];
@@ -161,21 +165,31 @@ export function LibraryClient({
   }, [items]);
 
   const sourceTypes = useMemo(() => {
+    // Prefer the DB-wide list (covers sources beyond the loaded page).
+    if (allSourceTypes && allSourceTypes.length > 0) {
+      return ["all", ...allSourceTypes];
+    }
     const s = new Set<string>();
     for (const it of items) if (it.source_type) s.add(it.source_type);
     return ["all", ...Array.from(s).sort()];
-  }, [items]);
+  }, [items, allSourceTypes]);
 
   const withMastery = useMemo(
     () => base.map((it) => ({ it, m: masteryLevel(it) })),
     [base],
   );
 
-  const counts = useMemo(() => {
+  // Counts over what's currently in view (loaded page, or the selected day).
+  const viewCounts = useMemo(() => {
     const c: Record<string, number> = {};
     for (const { m } of withMastery) c[m.level] = (c[m.level] ?? 0) + 1;
     return c;
   }, [withMastery]);
+
+  // The legend shows DB-wide totals (the whole library) when browsing, and the
+  // day's counts when a calendar day is selected.
+  const legendCounts =
+    selectedDate || !totalCounts ? viewCounts : totalCounts;
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -264,7 +278,7 @@ export function LibraryClient({
             >
               <span className={cn("h-2 w-2 rounded-full", info.dot)} />
               {info.label}
-              <span className="opacity-60">{counts[lvl] ?? 0}</span>
+              <span className="opacity-60">{legendCounts[lvl] ?? 0}</span>
             </button>
           );
         })}

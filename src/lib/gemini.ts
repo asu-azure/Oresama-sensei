@@ -62,6 +62,62 @@ export async function embedText(
   return l2normalize(values);
 }
 
+export const GEMINI_FLASH = "gemini-2.5-flash";
+export const GEMINI_PRO = "gemini-2.5-pro";
+
+/** Stream a generated lesson with Gemini (the cheap alternative to Claude),
+ *  pushing text deltas to `onDelta` and resolving with the full article.
+ *  `model` selects Flash (cheapest) or Pro (stronger). */
+export async function runGeminiLessonStream(opts: {
+  system: string;
+  userMessage: string;
+  model: "gemini" | "gemini-pro";
+  onDelta: (t: string) => void;
+}): Promise<string> {
+  const modelId = opts.model === "gemini-pro" ? GEMINI_PRO : GEMINI_FLASH;
+  const res = await withRetry(
+    () =>
+      ai().models.generateContentStream({
+        model: modelId,
+        config: { systemInstruction: opts.system },
+        contents: [{ role: "user", parts: [{ text: opts.userMessage }] }],
+      }),
+    "lessonGemini",
+  );
+  let full = "";
+  for await (const chunk of res) {
+    const t = chunk.text ?? "";
+    if (t) {
+      full += t;
+      opts.onDelta(t);
+    }
+  }
+  return full;
+}
+
+/** Generate a kanji mnemonic + example words with Gemini (cheap path). Returns
+ *  the raw JSON string for parseKanjiMnemonic to normalize. */
+export async function generateKanjiMnemonicGemini(
+  system: string,
+  userMessage: string,
+): Promise<string> {
+  const jsonHint = `\n\nReturn ONLY valid JSON (no markdown fences) matching exactly:\n{"mnemonic": "...", "examples": [{"term": "...", "reading": "...", "meaning": "...", "example": "...", "jlpt_level": "..."}]}`;
+  const res = await withRetry(
+    () =>
+      ai().models.generateContent({
+        model: GEMINI_FLASH,
+        config: {
+          systemInstruction: system + jsonHint,
+          responseMimeType: "application/json",
+          temperature: 0.9,
+        },
+        contents: [{ role: "user", parts: [{ text: userMessage }] }],
+      }),
+    "kanjiMnemonicGemini",
+  );
+  return (res.text ?? "").trim();
+}
+
 /** Read Japanese text from a photographed page using Gemini vision. */
 export async function ocrImage(
   base64Data: string,

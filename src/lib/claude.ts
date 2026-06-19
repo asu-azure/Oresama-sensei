@@ -104,36 +104,50 @@ const DEEP_LESSON_MAX_TOKENS = 4500;
 // per-request time limit). Generous enough for a thorough 6-page lesson.
 const LESSON_MAX_TOKENS_CAP = 12000;
 
-/** Stream a generated lesson from transcribed page text. `pageCount` lets a
- *  multi-page upload produce a proportionally longer lesson (the prompt is
- *  scaled to match in buildLessonSystemPrompt). */
-export function streamLesson(
-  system: string,
+/** Which model writes a lesson. "claude" = Sonnet (default quality),
+ *  "opus" = Opus (deepest, costliest — only when explicitly chosen),
+ *  "gemini"/"gemini-pro" = Gemini Flash/Pro (cheapest). */
+export type LessonModelChoice = "claude" | "opus" | "gemini" | "gemini-pro";
+
+/** Build the user message for lesson generation (shared by Claude and Gemini). */
+export function lessonUserMessage(
   pageText: string,
-  deep = false,
-  source: "photo" | "text" = "photo",
-  pageCount = 1,
-) {
-  const base = deep ? DEEP_LESSON_MAX_TOKENS : LESSON_MAX_TOKENS;
+  source: "photo" | "text",
+): string {
+  return source === "text"
+    ? `Here is the text I want a lesson on. Create my lesson.\n\n<text>\n${pageText}\n</text>`
+    : `Here is the transcribed text from the page I photographed. Create my lesson.\n\n<page_text>\n${pageText}\n</page_text>`;
+}
+
+/** Run a Claude lesson stream, pushing text deltas to `onDelta`, and resolve
+ *  with the full article. Keeps generating server-side even if the browser
+ *  disconnects (the caller just stops enqueuing). `pageCount` scales the budget.
+ *  `opus` picks the deeper, costlier model — only when the learner asked for it. */
+export async function runClaudeLessonStream(opts: {
+  system: string;
+  pageText: string;
+  source?: "photo" | "text";
+  pageCount?: number;
+  opus?: boolean;
+  onDelta: (t: string) => void;
+}): Promise<string> {
+  const { system, pageText, source = "photo", pageCount = 1, opus = false, onDelta } = opts;
+  const base = opus ? DEEP_LESSON_MAX_TOKENS : LESSON_MAX_TOKENS;
   const maxTokens = Math.min(
     base + Math.max(0, pageCount - 1) * 1800,
     LESSON_MAX_TOKENS_CAP,
   );
-  return anthropicClient().messages.stream({
-    model: deep ? DEEP_LESSON_MODEL : LESSON_MODEL,
+  const stream = anthropicClient().messages.stream({
+    model: opus ? DEEP_LESSON_MODEL : LESSON_MODEL,
     max_tokens: maxTokens,
     system,
     thinking: { type: "disabled" },
-    messages: [
-      {
-        role: "user",
-        content:
-          source === "text"
-            ? `Here is the text I want a lesson on. Create my lesson.\n\n<text>\n${pageText}\n</text>`
-            : `Here is the transcribed text from the page I photographed. Create my lesson.\n\n<page_text>\n${pageText}\n</page_text>`,
-      },
-    ],
+    messages: [{ role: "user", content: lessonUserMessage(pageText, source) }],
   });
+  stream.on("text", onDelta);
+  const final = await stream.finalMessage();
+  const t = final.content.find((b) => b.type === "text");
+  return t && t.type === "text" ? t.text : "";
 }
 
 /** Stream a "summary of everything" review from the learner's saved items. */
@@ -456,6 +470,11 @@ function normalizeExercise(
       star <= 3 &&
       prompt.includes("{{BLANKS}}");
     if (starMode) {
+      // Reject ambiguous tiles: a piece must not ALSO appear in the visible
+      // sentence (the part outside the {{BLANKS}} slot), or the learner can't
+      // tell which copy goes where (the "が tile + sentence-が" problem).
+      const visible = prompt.replace("{{BLANKS}}", " ");
+      if (answerOrder.some((p) => visible.includes(p))) return null;
       return {
         type: "arrange",
         prompt,
@@ -517,7 +536,8 @@ export async function generateExercises(
 
   const res = await anthropicClient().messages.create({
     model: CHAT_MODEL,
-    max_tokens: 6000,
+    // ~300 tokens per exercise is plenty; scale with count (cap to stay cheap).
+    max_tokens: Math.min(4000, 800 + count * 300),
     output_config: { format: { type: "json_schema", schema: EXERCISE_SCHEMA } },
     messages: [
       {
@@ -561,9 +581,18 @@ function exerciseToRaw(ex: Exercise): RawExercise {
   };
 }
 
-/** Ask Claude to verify and, if needed, fix a single flagged exercise. Returns a
- *  normalized Exercise (unchanged if it was already fine), preserving item_id. */
-export async function refineExercise(ex: Exercise): Promise<Exercise | null> {
+/** Ask Claude to verify and, if needed, fix a single flagged exercise. An
+ *  optional `userNote` lets the learner say exactly what's wrong (e.g. "option B
+ *  also works", "the が tile duplicates the sentence"). Returns a normalized
+ *  Exercise (unchanged if it was already fine), preserving item_id. */
+export async function refineExercise(
+  ex: Exercise,
+  userNote?: string,
+): Promise<Exercise | null> {
+  const note = (userNote ?? "").trim();
+  const noteBlock = note
+    ? `\n\n<learner_note>\n${note}\n</learner_note>`
+    : "";
   const res = await anthropicClient().messages.create({
     model: CHAT_MODEL,
     max_tokens: 1500,
@@ -571,7 +600,7 @@ export async function refineExercise(ex: Exercise): Promise<Exercise | null> {
     messages: [
       {
         role: "user",
-        content: `${EXERCISE_REFINE_INSTRUCTION}\n\n<exercise>\n${JSON.stringify(exerciseToRaw(ex))}\n</exercise>`,
+        content: `${EXERCISE_REFINE_INSTRUCTION}\n\n<exercise>\n${JSON.stringify(exerciseToRaw(ex))}\n</exercise>${noteBlock}`,
       },
     ],
   });
@@ -671,35 +700,115 @@ ${related}`;
   }
 }
 
-/** Generate a short, personalized kanji mnemonic from its meaning, readings,
- *  and KanjiVG components. Returns Markdown (may contain <ruby> furigana). */
-export async function generateKanjiMnemonic(input: {
+export const KANJI_MNEMONIC_SCHEMA = {
+  type: "object",
+  properties: {
+    mnemonic: { type: "string" },
+    examples: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          term: { type: "string" },
+          reading: { type: "string" },
+          meaning: { type: "string" },
+          example: { type: "string" },
+          jlpt_level: { type: "string" },
+        },
+        required: ["term", "reading", "meaning", "example", "jlpt_level"],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ["mnemonic", "examples"],
+  additionalProperties: false,
+} as const;
+
+export interface KanjiMnemonicResult {
+  mnemonic: string;
+  examples: ExtractedKnowledge[];
+}
+
+/** Normalize the structured mnemonic JSON into our shared shape (examples become
+ *  ExtractedKnowledge so they can flow straight into storeKnowledge). */
+export function parseKanjiMnemonic(raw: string, char: string): KanjiMnemonicResult {
+  try {
+    const parsed = JSON.parse(raw) as {
+      mnemonic?: string;
+      examples?: {
+        term?: string;
+        reading?: string;
+        meaning?: string;
+        example?: string;
+        jlpt_level?: string;
+      }[];
+    };
+    const examples: ExtractedKnowledge[] = (parsed.examples ?? [])
+      .filter((e) => e.term && e.term.includes(char))
+      .slice(0, 3)
+      .map((e) => ({
+        type: "vocab" as KnowledgeType,
+        term: e.term!.trim(),
+        reading: e.reading?.trim() || undefined,
+        meaning: e.meaning?.trim() || undefined,
+        example: e.example?.trim() || undefined,
+        jlpt_level: e.jlpt_level?.trim() || undefined,
+      }));
+    return { mnemonic: (parsed.mnemonic ?? "").trim(), examples };
+  } catch {
+    return { mnemonic: "", examples: [] };
+  }
+}
+
+/** Build the user message for kanji-mnemonic generation (shared Claude/Gemini). */
+export function kanjiMnemonicUserMessage(input: {
   char: string;
   info: KanjiInfo | null;
   components: KanjiComponent[];
-  profile: Profile | null;
-}): Promise<string> {
+}): string {
   const meaning = input.info?.meanings.join(", ") || "(unknown)";
   const readings = [...(input.info?.kun ?? []), ...(input.info?.on ?? [])].join(
     "、",
   );
   const components =
     input.components.map((c) => c.el).join(" + ") || "(no sub-components)";
+  return `Kanji: ${input.char}\nMeaning: ${meaning}\nReadings: ${readings || "(none)"}\nComponents: ${components}`;
+}
+
+/** Generate a personalized kanji mnemonic + example words, structured so the
+ *  examples can be saved to the learner's library. `model` picks the provider
+ *  (Claude Sonnet for richer pedagogy, Gemini Flash for lower cost). */
+export async function generateKanjiMnemonic(input: {
+  char: string;
+  info: KanjiInfo | null;
+  components: KanjiComponent[];
+  profile: Profile | null;
+  model?: "claude" | "gemini";
+}): Promise<KanjiMnemonicResult> {
+  const userMsg = kanjiMnemonicUserMessage(input);
+  const system = buildKanjiMnemonicPrompt(input.profile);
+
+  if (input.model === "gemini") {
+    const { generateKanjiMnemonicGemini } = await import("@/lib/gemini");
+    const raw = await generateKanjiMnemonicGemini(system, userMsg);
+    return parseKanjiMnemonic(raw, input.char);
+  }
 
   const res = await anthropicClient().messages.create({
     model: CHAT_MODEL,
-    max_tokens: 700,
-    system: buildKanjiMnemonicPrompt(input.profile),
-    messages: [
-      {
-        role: "user",
-        content: `Kanji: ${input.char}\nMeaning: ${meaning}\nReadings: ${readings || "(none)"}\nComponents: ${components}`,
-      },
-    ],
+    max_tokens: 1200,
+    output_config: {
+      format: { type: "json_schema", schema: KANJI_MNEMONIC_SCHEMA },
+    },
+    system,
+    messages: [{ role: "user", content: userMsg }],
   });
 
   const text = res.content.find((b) => b.type === "text");
-  return text && text.type === "text" ? text.text.trim() : "";
+  return parseKanjiMnemonic(
+    text && text.type === "text" ? text.text : "",
+    input.char,
+  );
 }
 
 /** Generate a brief AI overview of a whole collection (book/game/series) from

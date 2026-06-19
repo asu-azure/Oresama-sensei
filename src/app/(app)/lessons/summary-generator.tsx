@@ -6,6 +6,7 @@ import { motion } from "framer-motion";
 import { Loader2, NotebookPen } from "lucide-react";
 import { Markdown } from "@/components/markdown";
 import { Button } from "@/components/ui/button";
+import { CostHint, MODEL_LABELS } from "@/components/cost-hint";
 
 export function SummaryGenerator() {
   const router = useRouter();
@@ -57,9 +58,12 @@ export function SummaryGenerator() {
             </p>
           </div>
         </div>
-        <Button onClick={generate} disabled={busy} variant="accent">
-          {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : "Generate"}
-        </Button>
+        <div className="flex flex-col items-end gap-1">
+          <Button onClick={generate} disabled={busy} variant="accent">
+            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : "Generate"}
+          </Button>
+          <CostHint model={MODEL_LABELS.sonnet} />
+        </div>
       </div>
 
       {error && <p className="mt-3 text-sm text-accent">{error}</p>}

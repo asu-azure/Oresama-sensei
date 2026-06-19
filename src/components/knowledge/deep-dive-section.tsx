@@ -5,6 +5,7 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { Sparkles, ChevronDown, Loader2 } from "lucide-react";
 import { Markdown } from "@/components/markdown";
 import { RubyText } from "@/components/ruby-text";
+import { CostHint, MODEL_LABELS } from "@/components/cost-hint";
 import { cn } from "@/lib/utils";
 import { getOrGenerateExplanation } from "@/app/(app)/library/actions";
 import type { DeepDiveExample } from "@/lib/claude";
@@ -61,13 +62,15 @@ export function DeepDiveSection({
           <Sparkles className="h-3.5 w-3.5" />
         )}
         {explanation ? "Explanation" : "Explain more"}
-        {explanation && (
+        {explanation ? (
           <ChevronDown
             className={cn(
               "ml-auto h-3.5 w-3.5 transition-transform",
               open && "rotate-180",
             )}
           />
+        ) : (
+          <CostHint model={MODEL_LABELS.sonnet} className="ml-auto" />
         )}
       </button>
       {error && <p className="mt-1 text-xs text-accent">{error}</p>}
@@ -102,13 +105,16 @@ export function DeepDiveSection({
                 </ul>
               </div>
             )}
-            <button
-              onClick={() => load(true)}
-              disabled={loading}
-              className="mt-2 text-xs text-muted underline transition-colors hover:text-foreground disabled:opacity-50"
-            >
-              Regenerate
-            </button>
+            <div className="mt-2 flex items-center gap-2">
+              <button
+                onClick={() => load(true)}
+                disabled={loading}
+                className="text-xs text-muted underline transition-colors hover:text-foreground disabled:opacity-50"
+              >
+                Regenerate
+              </button>
+              <CostHint model={MODEL_LABELS.sonnet} />
+            </div>
           </motion.div>
         )}
       </AnimatePresence>

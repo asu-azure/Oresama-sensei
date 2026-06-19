@@ -2,15 +2,22 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, Sparkles, Check, Lightbulb } from "lucide-react";
 import { StrokeOrder } from "@/components/kanji/stroke-order";
 import { SpeakButton } from "@/components/speak-button";
 import { Markdown } from "@/components/markdown";
 import { Button } from "@/components/ui/button";
 import { GeometricLoader } from "@/components/geometric-loader";
+import { AskSensei } from "@/components/ask-sensei/ask-sensei";
+import { CostHint, MODEL_LABELS } from "@/components/cost-hint";
 import { cn } from "@/lib/utils";
 import { levelOf, isKanji, type KanjiInfo, type KanjiStrokes } from "@/lib/kanji";
-import { getOrGenerateMnemonic, setLearned } from "../actions";
+import {
+  getOrGenerateMnemonic,
+  setLearned,
+  type MnemonicExample,
+} from "../actions";
 
 export type ExampleWord = {
   id: string;
@@ -40,9 +47,16 @@ export function KanjiDetail({
   const speakText =
     info?.kun[0]?.replace(/[.\-]/g, "") || info?.on[0] || char;
 
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const fromLevel = searchParams.get("from");
+  const backHref = fromLevel ? `/kanji?level=${fromLevel}` : "/kanji";
+
   const [mnemonic, setMnemonic] = useState<string | null>(initialMnemonic);
+  const [genExamples, setGenExamples] = useState<MnemonicExample[]>([]);
   const [generating, setGenerating] = useState(false);
   const [mnemonicError, setMnemonicError] = useState<string | null>(null);
+  const [model, setModel] = useState<"claude" | "gemini">("claude");
   const [learned, setLearnedState] = useState(initialLearned);
   // Effective state shown on the card: an explicit mark OR auto (a word mastered).
   const effectiveLearned = learned || autoLearned;
@@ -50,9 +64,15 @@ export function KanjiDetail({
   async function generate() {
     setGenerating(true);
     setMnemonicError(null);
-    const res = await getOrGenerateMnemonic(char);
-    if ("mnemonic" in res) setMnemonic(res.mnemonic);
-    else setMnemonicError(res.error);
+    const res = await getOrGenerateMnemonic(char, model);
+    if ("mnemonic" in res) {
+      setMnemonic(res.mnemonic);
+      setGenExamples(res.examples);
+      // New example words were saved to the library — refresh "Your words".
+      if (res.examples.length > 0) router.refresh();
+    } else {
+      setMnemonicError(res.error);
+    }
     setGenerating(false);
   }
 
@@ -66,7 +86,7 @@ export function KanjiDetail({
     <div className="space-y-5 py-4">
       <div className="flex items-center justify-between gap-2">
         <Link
-          href="/kanji"
+          href={backHref}
           className="inline-flex items-center gap-1.5 text-sm text-muted transition-colors hover:text-foreground"
         >
           <ArrowLeft className="h-4 w-4" /> All kanji
@@ -202,43 +222,110 @@ export function KanjiDetail({
 
       {/* Personalized mnemonic */}
       <section className="rounded-2xl border border-border bg-surface p-4">
-        <h2 className="mb-2 flex items-center gap-1.5 text-sm font-medium text-muted">
-          <Lightbulb className="h-4 w-4 text-primary" /> Mnemonic
-        </h2>
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <h2 className="flex items-center gap-1.5 text-sm font-medium text-muted">
+            <Lightbulb className="h-4 w-4 text-primary" /> Mnemonic
+          </h2>
+          {/* Model picker: Claude (richer) vs Gemini (cheaper) */}
+          <div className="flex items-center gap-1 rounded-full border border-border bg-background p-0.5 text-xs">
+            {(["claude", "gemini"] as const).map((m) => (
+              <button
+                key={m}
+                onClick={() => setModel(m)}
+                disabled={generating}
+                className={cn(
+                  "rounded-full px-2 py-0.5 capitalize transition-colors disabled:opacity-50",
+                  model === m
+                    ? "bg-primary/10 text-primary"
+                    : "text-muted hover:text-foreground",
+                )}
+              >
+                {m}
+              </button>
+            ))}
+          </div>
+        </div>
         {mnemonic ? (
           <div className="space-y-2">
             <div className="text-sm">
               <Markdown>{mnemonic}</Markdown>
             </div>
-            <button
-              onClick={generate}
-              disabled={generating}
-              className="text-xs text-muted underline transition-colors hover:text-foreground disabled:opacity-50"
-            >
-              {generating ? "Regenerating…" : "Regenerate"}
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={generate}
+                disabled={generating}
+                className="text-xs text-muted underline transition-colors hover:text-foreground disabled:opacity-50"
+              >
+                {generating ? "Regenerating…" : "Regenerate"}
+              </button>
+              <CostHint
+                model={
+                  model === "gemini"
+                    ? MODEL_LABELS.geminiFlash
+                    : MODEL_LABELS.sonnet
+                }
+              />
+            </div>
           </div>
         ) : (
           <div>
             <p className="mb-3 text-sm text-muted">
               Get a vivid memory story built from {char}&apos;s parts and tailored
-              to you.
+              to you — plus a few example words (saved to your library).
             </p>
-            <Button size="sm" onClick={generate} disabled={generating}>
-              {generating ? (
-                <>
-                  <GeometricLoader size={16} /> Generating…
-                </>
-              ) : (
-                <>
-                  <Sparkles className="h-4 w-4" /> Generate mnemonic
-                </>
-              )}
-            </Button>
+            <div className="flex items-center gap-3">
+              <Button size="sm" onClick={generate} disabled={generating}>
+                {generating ? (
+                  <>
+                    <GeometricLoader size={16} /> Generating…
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="h-4 w-4" /> Generate mnemonic
+                  </>
+                )}
+              </Button>
+              <CostHint
+                model={
+                  model === "gemini"
+                    ? MODEL_LABELS.geminiFlash
+                    : MODEL_LABELS.sonnet
+                }
+              />
+            </div>
           </div>
         )}
         {mnemonicError && (
           <p className="mt-2 text-xs text-accent">{mnemonicError}</p>
+        )}
+
+        {/* Freshly generated example words (also added to the library) */}
+        {genExamples.length > 0 && (
+          <div className="mt-4 border-t border-border/60 pt-3">
+            <p className="mb-2 text-xs font-medium text-muted">
+              Example words (added to your library)
+            </p>
+            <ul className="space-y-1.5">
+              {genExamples.map((w, i) => (
+                <li key={i} className="text-sm">
+                  <span className="font-jp text-base">{w.term}</span>
+                  {w.reading && (
+                    <span className="ml-2 font-jp text-sm text-muted">
+                      {w.reading}
+                    </span>
+                  )}
+                  {w.meaning && (
+                    <span className="ml-2 text-muted">— {w.meaning}</span>
+                  )}
+                  {w.example && (
+                    <p className="mt-0.5 font-jp text-xs text-muted">
+                      <Markdown>{w.example}</Markdown>
+                    </p>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
         )}
       </section>
 
@@ -278,6 +365,22 @@ export function KanjiDetail({
           </ul>
         )}
       </section>
+
+      <AskSensei
+        context={{
+          kind: "kanji",
+          char,
+          meanings: info?.meanings,
+          on: info?.on,
+          kun: info?.kun,
+        }}
+        contextKey={`kanji-${char}`}
+        suggestions={[
+          `How is ${char} used in words?`,
+          "Give me a way to remember this kanji.",
+          "What kanji look similar to this one?",
+        ]}
+      />
     </div>
   );
 }
