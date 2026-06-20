@@ -81,6 +81,7 @@ export default async function ReviewPage({
         cards={rows as ReviewCard[]}
         previews={buildPreviews(rows)}
         meta={buildMeta(rows)}
+        single
       />
     );
   }

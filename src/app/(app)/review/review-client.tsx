@@ -28,6 +28,11 @@ import { masteryInfo, type MasteryLevel } from "@/lib/mastery";
 import { sourceMeta } from "@/lib/source";
 import { cn } from "@/lib/utils";
 import { savePersonalNote, appendPersonalNote } from "./actions";
+import {
+  useReviewSession,
+  saveReviewSession,
+  clearReviewSession,
+} from "./use-review-session";
 import type { Rating, IntervalPreview } from "@/lib/srs";
 
 export type ReviewCard = {
@@ -70,6 +75,7 @@ export function ReviewClient({
   aheadCards = [],
   aheadPreviews = {},
   meta = {},
+  single = false,
 }: {
   cards: ReviewCard[];
   previews?: Record<string, IntervalPreview>;
@@ -77,10 +83,53 @@ export function ReviewClient({
   aheadCards?: ReviewCard[];
   aheadPreviews?: Record<string, IntervalPreview>;
   meta?: Record<string, CardMeta>;
+  /** Focused single-item review (from a library "Review" link): never persists
+   *  or resumes a session. */
+  single?: boolean;
 }) {
-  const [studyingAhead, setStudyingAhead] = useState(false);
-  const active = studyingAhead ? aheadCards : cards;
-  const activePreviews = studyingAhead ? aheadPreviews : previews;
+  // Resume an in-progress session if one was saved, so leaving and coming back
+  // keeps your place instead of restarting at item 1. sessionStorage clears when
+  // the tab closes, so a resumed batch is always from the current sitting.
+  const saved = useReviewSession();
+  const useSaved = !single && saved != null;
+
+  const activeMode: "due" | "ahead" = useSaved ? saved!.mode : "due";
+  const activeCards = useSaved ? saved!.cards : cards;
+  const activePreviews = useSaved ? saved!.previews : previews;
+  const activeMeta = useSaved ? saved!.meta : meta;
+  const startIndex = useSaved ? saved!.index : 0;
+  const startReviewed = useSaved ? saved!.reviewed : 0;
+  const activeTotalDue = useSaved ? saved!.totalDue : totalDue ?? cards.length;
+  // Stable across grades (so the card list doesn't remount mid-session); flips
+  // once when a fresh batch first persists (fresh -> resume).
+  const flashKey = single ? "single" : useSaved ? "resume" : "fresh";
+
+  function persist(index: number, reviewed: number) {
+    if (single) return;
+    saveReviewSession({
+      savedAt: useSaved ? saved!.savedAt : Date.now(),
+      mode: activeMode,
+      cards: activeCards,
+      previews: activePreviews,
+      meta: activeMeta,
+      index,
+      reviewed,
+      totalDue: activeTotalDue,
+    });
+  }
+
+  function startAhead() {
+    saveReviewSession({
+      savedAt: Date.now(),
+      mode: "ahead",
+      cards: aheadCards,
+      previews: aheadPreviews,
+      meta,
+      index: 0,
+      reviewed: 0,
+      totalDue: aheadCards.length,
+    });
+  }
 
   return (
     <div className="mx-auto max-w-lg py-6">
@@ -100,14 +149,18 @@ export function ReviewClient({
       </div>
       <PitchLegend className="mb-4" />
       <Flashcards
-        key={studyingAhead ? "ahead" : "due"}
-        cards={active}
+        key={flashKey}
+        cards={activeCards}
         previews={activePreviews}
-        meta={meta}
-        totalDue={studyingAhead ? aheadCards.length : totalDue ?? cards.length}
-        ahead={studyingAhead}
-        aheadAvailable={aheadCards.length}
-        onStudyAhead={() => setStudyingAhead(true)}
+        meta={activeMeta}
+        totalDue={activeTotalDue}
+        ahead={activeMode === "ahead"}
+        aheadAvailable={single ? 0 : aheadCards.length}
+        startIndex={startIndex}
+        startReviewed={startReviewed}
+        onStudyAhead={startAhead}
+        onProgress={persist}
+        onExit={single ? undefined : clearReviewSession}
       />
     </div>
   );
@@ -120,7 +173,11 @@ function Flashcards({
   totalDue,
   ahead,
   aheadAvailable,
+  startIndex = 0,
+  startReviewed = 0,
   onStudyAhead,
+  onProgress,
+  onExit,
 }: {
   cards: ReviewCard[];
   previews: Record<string, IntervalPreview>;
@@ -128,12 +185,19 @@ function Flashcards({
   totalDue: number;
   ahead: boolean;
   aheadAvailable: number;
+  /** Where to resume from when a saved session is restored. */
+  startIndex?: number;
+  startReviewed?: number;
   onStudyAhead: () => void;
+  /** Persist progress (new index/reviewed) after each grade. */
+  onProgress?: (index: number, reviewed: number) => void;
+  /** Clear the saved session when the learner leaves the finished batch. */
+  onExit?: () => void;
 }) {
   const pitchOn = usePitch();
-  const [index, setIndex] = useState(0);
+  const [index, setIndex] = useState(startIndex);
   const [revealed, setRevealed] = useState(false);
-  const [reviewed, setReviewed] = useState(0);
+  const [reviewed, setReviewed] = useState(startReviewed);
   const [showDetails, setShowDetails] = useState(false);
   // Personal notes, seeded from the cards and updated as the learner edits/saves.
   const [notes, setNotes] = useState<Record<string, string>>(() =>
@@ -192,15 +256,20 @@ function Flashcards({
               : " You're all caught up."}
         </p>
         <div className="mt-5 flex flex-wrap justify-center gap-2">
-          <Link href="/dashboard">
+          <Link href="/dashboard" onClick={() => onExit?.()}>
             <Button variant="outline">See progress</Button>
           </Link>
           {!ahead && remaining > 0 ? (
-            <Button onClick={() => window.location.assign("/review")}>
+            <Button
+              onClick={() => {
+                onExit?.();
+                window.location.assign("/review");
+              }}
+            >
               Keep studying ({remaining} due)
             </Button>
           ) : (
-            <Link href="/chat">
+            <Link href="/chat" onClick={() => onExit?.()}>
               <Button>Study something new</Button>
             </Link>
           )}
@@ -220,11 +289,14 @@ function Flashcards({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ itemId: card.id, rating }),
     }).catch(() => {});
-    setReviewed((n) => n + 1);
+    const nextIndex = index + 1;
+    const nextReviewed = reviewed + 1;
+    setReviewed(nextReviewed);
     setRevealed(false);
     setEditingNote(false);
     setShowDetails(false);
-    setIndex((i) => i + 1);
+    setIndex(nextIndex);
+    onProgress?.(nextIndex, nextReviewed);
   }
 
   async function saveNote(value: string) {
