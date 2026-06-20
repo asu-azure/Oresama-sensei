@@ -26,14 +26,14 @@ export default async function AppLayout({
     .or(`srs_due.is.null,srs_due.lte.${nowIso}`);
 
   return (
-    <div className="relative flex min-h-dvh flex-col">
+    <div className="relative flex min-h-dvh flex-col md:flex-row">
       <BackgroundParticles />
       <PixelBuddies />
       <SplashScreen />
       <Nav reviewDue={count ?? 0} />
-      <div className="relative z-10 mx-auto w-full max-w-4xl flex-1 px-4 pb-[env(safe-area-inset-bottom)]">
+      <main className="relative z-10 mx-auto w-full max-w-4xl flex-1 px-4 pb-[var(--bottom-nav)]">
         <PageTransition>{children}</PageTransition>
-      </div>
+      </main>
     </div>
   );
 }

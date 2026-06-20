@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   MessageCircle,
   BookImage,
@@ -17,7 +17,7 @@ import {
   Search,
   GraduationCap,
   PenLine,
-  Menu,
+  MoreHorizontal,
   X,
 } from "lucide-react";
 import { signOut } from "@/app/login/actions";
@@ -38,152 +38,219 @@ const links = [
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
+// The four destinations that get prime spots in the mobile bottom bar; the rest
+// live in the "More" sheet. (Desktop shows all of `links` in the sidebar.)
+const PRIMARY_HREFS = ["/chat", "/review", "/books", "/dashboard"];
+const primaryLinks = PRIMARY_HREFS.map(
+  (h) => links.find((l) => l.href === h)!,
+);
+const moreLinks = links.filter((l) => !PRIMARY_HREFS.includes(l.href));
+
+const ACCENT =
+  "linear-gradient(90deg, var(--pop-pink) 0%, var(--pop-yellow) 25%, var(--primary) 50%, var(--pop-cyan) 75%, var(--pop-purple) 100%)";
+
 export function Nav({ reviewDue = 0 }: { reviewDue?: number }) {
   const pathname = usePathname();
-  const [open, setOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
 
   const current = links.find((l) => pathname.startsWith(l.href));
+  const moreActive = moreLinks.some((l) => pathname.startsWith(l.href));
 
   return (
-    <header className="sticky top-0 z-30 border-b-2 border-border bg-surface/80 backdrop-blur-md [padding-top:env(safe-area-inset-top)]">
-      {/* Pop-art accent bar */}
-      <div
-        aria-hidden="true"
-        className="h-1 w-full"
-        style={{
-          background:
-            "linear-gradient(90deg, var(--pop-pink) 0%, var(--pop-yellow) 25%, var(--primary) 50%, var(--pop-cyan) 75%, var(--pop-purple) 100%)",
-        }}
-      />
-      <div className="mx-auto flex min-h-14 max-w-4xl items-center gap-2 py-1.5 pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))]">
-        <Link
-          href="/chat"
-          className="shrink-0 whitespace-nowrap font-jp text-base font-bold tracking-tight sm:text-lg"
-          onClick={() => setOpen(false)}
-        >
-          俺様先生
-        </Link>
+    <>
+      {/* ===== Desktop: left sidebar ===== */}
+      <aside className="sticky top-0 z-30 hidden h-dvh w-60 shrink-0 flex-col border-r-2 border-border bg-surface/80 backdrop-blur-md md:flex">
+        <div aria-hidden="true" className="h-1 w-full shrink-0" style={{ background: ACCENT }} />
+        <div className="flex min-h-0 flex-1 flex-col px-3 py-4">
+          <Link
+            href="/chat"
+            className="mb-4 px-2 font-jp text-xl font-bold tracking-tight"
+          >
+            俺様先生
+          </Link>
+          <nav className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto">
+            {links.map(({ href, label, icon: Icon }) => {
+              const active = pathname.startsWith(href);
+              const showBadge = href === "/review" && reviewDue > 0;
+              return (
+                <Link
+                  key={href}
+                  href={href}
+                  className={cn(
+                    "relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                    active ? "text-foreground" : "text-muted hover:text-foreground",
+                  )}
+                >
+                  {active && (
+                    <motion.span
+                      layoutId="nav-active-side"
+                      transition={{ type: "spring", stiffness: 400, damping: 32 }}
+                      className="absolute inset-0 -z-10 rounded-lg bg-surface-2"
+                    />
+                  )}
+                  <Icon className="h-4 w-4 shrink-0" />
+                  <span className="flex-1">{label}</span>
+                  {showBadge && <Badge value={reviewDue} />}
+                </Link>
+              );
+            })}
+          </nav>
+          <div className="mt-2 flex items-center justify-between border-t border-border pt-3">
+            <form action={signOut}>
+              <button
+                type="submit"
+                className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-muted transition-colors hover:bg-surface-2 hover:text-foreground"
+                title="Sign out"
+              >
+                <LogOut className="h-4 w-4" /> Sign out
+              </button>
+            </form>
+            <ThemeToggle />
+          </div>
+        </div>
+      </aside>
 
-        {/* Mobile: show the current page's name so you always know where you are. */}
-        <span className="flex min-w-0 flex-1 items-center gap-1.5 truncate text-sm font-medium text-muted md:hidden">
-          {current && <current.icon className="h-4 w-4 shrink-0 text-primary" />}
-          <span className="truncate">{current?.label ?? ""}</span>
-        </span>
+      {/* ===== Mobile: slim top bar (brand + page title + theme) ===== */}
+      <header className="sticky top-0 z-30 border-b-2 border-border bg-surface/80 backdrop-blur-md [padding-top:env(safe-area-inset-top)] md:hidden">
+        <div aria-hidden="true" className="h-1 w-full" style={{ background: ACCENT }} />
+        <div className="flex h-12 items-center gap-2 pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))]">
+          <Link
+            href="/chat"
+            className="shrink-0 whitespace-nowrap font-jp text-base font-bold tracking-tight"
+          >
+            俺様先生
+          </Link>
+          <span className="flex min-w-0 flex-1 items-center gap-1.5 truncate text-sm font-medium text-muted">
+            {current && <current.icon className="h-4 w-4 shrink-0 text-primary" />}
+            <span className="truncate">{current?.label ?? ""}</span>
+          </span>
+          <ThemeToggle />
+        </div>
+      </header>
 
-        {/* Desktop: the full labeled tab strip (wraps onto rows on md+). */}
-        <nav className="-mx-1 hidden min-w-0 flex-1 flex-wrap items-center gap-1 px-1 md:flex">
-          {links.map(({ href, label, icon: Icon }) => {
+      {/* ===== Mobile: fixed bottom tab bar ===== */}
+      <nav
+        className="fixed inset-x-0 bottom-0 z-30 border-t-2 border-border bg-surface/90 backdrop-blur-md md:hidden"
+        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+      >
+        <div className="mx-auto flex h-15 max-w-lg items-stretch">
+          {primaryLinks.map(({ href, label, icon: Icon }) => {
             const active = pathname.startsWith(href);
             const showBadge = href === "/review" && reviewDue > 0;
             return (
               <Link
                 key={href}
                 href={href}
+                onClick={() => setMoreOpen(false)}
                 className={cn(
-                  "relative flex shrink-0 items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
-                  active ? "text-foreground" : "text-muted hover:text-foreground",
+                  "relative flex flex-1 flex-col items-center justify-center gap-0.5 py-2 text-[10px] font-medium transition-colors",
+                  active ? "text-primary" : "text-muted",
                 )}
               >
                 {active && (
                   <motion.span
-                    layoutId="nav-active"
+                    layoutId="nav-active-bottom"
                     transition={{ type: "spring", stiffness: 400, damping: 32 }}
-                    className="absolute inset-0 -z-10 rounded-md bg-surface-2"
+                    className="absolute inset-x-3 top-1 h-0.5 rounded-full bg-primary"
                   />
                 )}
-                <Icon className="h-4 w-4" />
-                <span>{label}</span>
-                {showBadge && <Badge value={reviewDue} />}
+                <span className="relative">
+                  <Icon className="h-5 w-5" />
+                  {showBadge && (
+                    <span className="absolute -right-2 -top-1.5">
+                      <Badge value={reviewDue} />
+                    </span>
+                  )}
+                </span>
+                {label}
               </Link>
             );
           })}
-        </nav>
-
-        <ThemeToggle />
-
-        {/* Desktop sign-out */}
-        <form action={signOut} className="hidden shrink-0 md:block">
           <button
-            type="submit"
-            className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium text-muted transition-colors hover:bg-surface-2 hover:text-foreground"
-            title="Sign out"
+            onClick={() => setMoreOpen((o) => !o)}
+            className={cn(
+              "flex flex-1 flex-col items-center justify-center gap-0.5 py-2 text-[10px] font-medium transition-colors",
+              moreOpen || moreActive ? "text-primary" : "text-muted",
+            )}
+            aria-expanded={moreOpen}
           >
-            <LogOut className="h-4 w-4" />
-            <span className="hidden sm:inline">Sign out</span>
+            <MoreHorizontal className="h-5 w-5" />
+            More
           </button>
-        </form>
+        </div>
+      </nav>
 
-        {/* Mobile menu button */}
-        <button
-          onClick={() => setOpen((o) => !o)}
-          className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-foreground transition-colors hover:bg-surface-2 md:hidden"
-          aria-label={open ? "Close menu" : "Open menu"}
-          aria-expanded={open}
-        >
-          {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-          {!open && reviewDue > 0 && (
-            <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-primary" />
-          )}
-        </button>
-      </div>
-
-      {/* Mobile dropdown menu — overlays content (absolute) so nothing shifts. */}
-      {open && (
-        <>
-          {/* Backdrop closes the menu */}
-          <button
-            aria-hidden="true"
-            tabIndex={-1}
-            onClick={() => setOpen(false)}
-            className="fixed inset-0 z-10 cursor-default md:hidden"
-          />
-          <motion.nav
-            initial={{ opacity: 0, y: -8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.16, ease: "easeOut" }}
-            className="absolute inset-x-0 top-full z-20 mx-auto max-w-4xl px-2 pb-2 md:hidden"
-          >
-            <div className="grid grid-cols-2 gap-1 rounded-2xl border border-border bg-surface p-2 shadow-lg">
-              {links.map(({ href, label, icon: Icon }) => {
-                const active = pathname.startsWith(href);
-                const showBadge = href === "/review" && reviewDue > 0;
-                return (
-                  <Link
-                    key={href}
-                    href={href}
-                    onClick={() => setOpen(false)}
-                    className={cn(
-                      "flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors",
-                      active
-                        ? "bg-primary/10 text-primary"
-                        : "text-foreground hover:bg-surface-2",
-                    )}
-                  >
-                    <Icon className="h-4 w-4 shrink-0" />
-                    <span className="flex-1 truncate">{label}</span>
-                    {showBadge && <Badge value={reviewDue} />}
-                  </Link>
-                );
-              })}
-              <form action={signOut} className="col-span-2 mt-1">
+      {/* ===== Mobile: "More" sheet ===== */}
+      <AnimatePresence>
+        {moreOpen && (
+          <>
+            <motion.button
+              aria-hidden="true"
+              tabIndex={-1}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setMoreOpen(false)}
+              className="fixed inset-0 z-40 cursor-default bg-black/30 md:hidden"
+            />
+            <motion.div
+              initial={{ opacity: 0, y: 24 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 24 }}
+              transition={{ type: "spring", stiffness: 360, damping: 32 }}
+              className="fixed inset-x-0 bottom-0 z-50 rounded-t-2xl border border-border bg-background shadow-2xl md:hidden"
+              style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+            >
+              <div className="flex items-center gap-2 border-b border-border px-4 py-3">
+                <span className="text-sm font-medium">More</span>
                 <button
-                  type="submit"
-                  className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-medium text-muted transition-colors hover:bg-surface-2 hover:text-foreground"
+                  onClick={() => setMoreOpen(false)}
+                  className="ml-auto rounded-lg p-1.5 transition-colors hover:bg-surface-2"
+                  aria-label="Close"
                 >
-                  <LogOut className="h-4 w-4" /> Sign out
+                  <X className="h-4 w-4" />
                 </button>
-              </form>
-            </div>
-          </motion.nav>
-        </>
-      )}
-    </header>
+              </div>
+              <div className="grid grid-cols-2 gap-1 p-3">
+                {moreLinks.map(({ href, label, icon: Icon }) => {
+                  const active = pathname.startsWith(href);
+                  return (
+                    <Link
+                      key={href}
+                      href={href}
+                      onClick={() => setMoreOpen(false)}
+                      className={cn(
+                        "flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors",
+                        active
+                          ? "bg-primary/10 text-primary"
+                          : "text-foreground hover:bg-surface-2",
+                      )}
+                    >
+                      <Icon className="h-4 w-4 shrink-0" />
+                      <span className="flex-1 truncate">{label}</span>
+                    </Link>
+                  );
+                })}
+                <form action={signOut} className="col-span-2 mt-1">
+                  <button
+                    type="submit"
+                    className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-medium text-muted transition-colors hover:bg-surface-2 hover:text-foreground"
+                  >
+                    <LogOut className="h-4 w-4" /> Sign out
+                  </button>
+                </form>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+    </>
   );
 }
 
 function Badge({ value }: { value: number }) {
   return (
-    <span className="ml-0.5 inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold leading-none text-primary-foreground">
+    <span className="inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold leading-none text-primary-foreground">
       {value > 99 ? "99+" : value}
     </span>
   );

@@ -213,7 +213,7 @@ export function ChatClient({
   }
 
   return (
-    <div className="flex h-[calc(100dvh-3.5rem)] flex-col">
+    <div className="flex h-[calc(100dvh-var(--top-nav)-var(--bottom-nav))] flex-col">
       <div className="flex items-center justify-between py-3">
         <div className="flex items-center gap-2">
           <ConversationDrawer

@@ -86,6 +86,20 @@ html {
   }
 }
 
+/* Navigation bar heights. On mobile the nav is a sticky top bar + a fixed bottom
+   tab bar; on desktop (md+) it's an in-flow left sidebar, so both are 0. Used by
+   the chat full-height view, content bottom padding, and the Ask-Sensei bubble. */
+:root {
+  --top-nav: 0px;
+  --bottom-nav: 0px;
+}
+@media (max-width: 767.98px) {
+  :root {
+    --top-nav: calc(3.25rem + env(safe-area-inset-top));
+    --bottom-nav: calc(3.75rem + env(safe-area-inset-bottom));
+  }
+}
+
 body {
   background-color: var(--background);
   /* Faint graph-paper grid (classroom manuscript feel). Static, GPU-free,

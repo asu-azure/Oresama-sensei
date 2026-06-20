@@ -67,7 +67,7 @@ export function AskSensei({
           onClick={() => setOpen(true)}
           aria-label="Ask Sensei"
           className="fixed right-4 z-40 flex items-center gap-2 rounded-full bg-primary px-4 py-3 text-sm font-medium text-white shadow-lg shadow-primary/30 transition-transform hover:scale-105 active:scale-95"
-          style={{ bottom: "calc(1rem + env(safe-area-inset-bottom))" }}
+          style={{ bottom: "calc(1rem + var(--bottom-nav))" }}
         >
           <MessageCircle className="h-5 w-5" />
           <span className="hidden sm:inline">Ask Sensei</span>
