@@ -70,6 +70,21 @@ export function collectionKindForMaterial(
   );
 }
 
+/** The material type to pre-select when starting a lesson from a collection of
+ *  the given kind (reverse of collectionKindForMaterial). */
+export function materialForCollectionKind(
+  kind: string | null | undefined,
+): MaterialType {
+  switch (kind) {
+    case "series":
+      return "series";
+    case "game":
+      return "game";
+    default:
+      return "textbook";
+  }
+}
+
 const SOURCE_META: Record<SourceType, { label: string; emoji: string }> = {
   book: { label: "Book", emoji: "📖" },
   series: { label: "Series", emoji: "📚" },

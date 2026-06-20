@@ -6,6 +6,7 @@ import { Markdown } from "@/components/markdown";
 import { DeleteLessonButton } from "../delete-lesson-button";
 import { LessonPractice } from "../lesson-practice";
 import { LessonSourceEditor } from "../lesson-source-editor";
+import { LessonPager } from "../lesson-pager";
 import { listUserCollections } from "@/lib/collections";
 import { formatDate } from "@/lib/utils";
 import type { Lesson, Exercise } from "@/lib/types";
@@ -60,6 +61,34 @@ export default async function LessonDetailPage({
     user ? listUserCollections(supabase, user.id) : Promise.resolve([]),
   ]);
 
+  // Prev/next lessons within the same collection, by page order. Walk the
+  // collection's content pages and find the nearest DISTINCT lesson on either
+  // side of this lesson's page range.
+  let prevSibling: { id: string; page: number } | null = null;
+  let nextSibling: { id: string; page: number } | null = null;
+  if (lesson.collection_id) {
+    const { data: cps } = await supabase
+      .from("collection_pages")
+      .select("page_number,lesson_id")
+      .eq("collection_id", lesson.collection_id)
+      .not("lesson_id", "is", null)
+      .order("page_number", { ascending: true });
+    const rows = (cps ?? []) as { page_number: number; lesson_id: string }[];
+    // First page on which THIS lesson appears (fall back to its page_start).
+    const myPages = rows.filter((r) => r.lesson_id === lesson.id);
+    const myPage =
+      myPages[0]?.page_number ?? lesson.page_start ?? Number.MAX_SAFE_INTEGER;
+    for (const r of rows) {
+      if (r.lesson_id === lesson.id) continue;
+      if (r.page_number < myPage) {
+        // Keep the closest-below (rows are ascending, so last one wins).
+        prevSibling = { id: r.lesson_id, page: r.page_number };
+      } else if (r.page_number > myPage && !nextSibling) {
+        nextSibling = { id: r.lesson_id, page: r.page_number };
+      }
+    }
+  }
+
   return (
     <article className="space-y-6 py-4">
       <div>
@@ -88,6 +117,10 @@ export default async function LessonDetailPage({
           pageEnd={lesson.page_end}
           collections={collections}
         />
+      )}
+
+      {(prevSibling || nextSibling) && (
+        <LessonPager prev={prevSibling} next={nextSibling} />
       )}
 
       {imageUrls.length > 0 && (
@@ -132,6 +165,10 @@ export default async function LessonDetailPage({
             {lesson.source_text}
           </pre>
         </details>
+      )}
+
+      {(prevSibling || nextSibling) && (
+        <LessonPager prev={prevSibling} next={nextSibling} />
       )}
     </article>
   );

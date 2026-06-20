@@ -15,9 +15,16 @@ import {
   type MaterialType,
 } from "@/lib/source";
 import { listCollections } from "./collections-actions";
+import { createClient } from "@/lib/supabase/client";
 import type { CollectionOption } from "@/lib/collections";
 
 const MAX_IMAGES = 6;
+const MAX_BYTES = 12 * 1024 * 1024; // 12 MB per image (matches the API guard)
+const EXT: Record<string, string> = {
+  "image/png": "png",
+  "image/jpeg": "jpg",
+  "image/webp": "webp",
+};
 type OcrModel = "auto" | "gemini" | "claude";
 const OCR_OPTIONS: { value: OcrModel; label: string }[] = [
   { value: "auto", label: "Auto" },
@@ -39,21 +46,48 @@ type Pic = { file: File; url: string };
 
 const NEW_COLLECTION = "__new__";
 
-export function LessonUploader() {
+/** Remember the last-used book in a cookie so the server can pre-select it next
+ *  time (no effect / no hydration mismatch). "Add new" is never remembered. */
+function rememberBook(material: MaterialType, collectionId: string) {
+  if (typeof document === "undefined" || collectionId === NEW_COLLECTION) return;
+  const v = encodeURIComponent(JSON.stringify({ material, collectionId }));
+  document.cookie = `lastBook=${v}; path=/; max-age=${60 * 60 * 24 * 365}`;
+}
+
+export function LessonUploader({
+  initialMaterial = null,
+  initialCollectionId = null,
+  initialPage = null,
+  initialCollections = [],
+}: {
+  initialMaterial?: MaterialType | null;
+  initialCollectionId?: string | null;
+  initialPage?: string | null;
+  initialCollections?: CollectionOption[];
+} = {}) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const [pics, setPics] = useState<Pic[]>([]);
   const [lessonModel, setLessonModel] = useState<LessonModelChoice>("claude");
   const [ocrModel, setOcrModel] = useState<OcrModel>("gemini");
 
-  // Source / collection metadata
-  const [materialType, setMaterialType] = useState<MaterialType>("textbook");
-  const [collections, setCollections] = useState<CollectionOption[]>([]);
-  const [collectionId, setCollectionId] = useState<string>(NEW_COLLECTION);
+  // Source / collection metadata. Seeded from the server (URL prefill from a
+  // book page, or the remembered last book) so the right book is pre-selected.
+  const [materialType, setMaterialType] = useState<MaterialType>(
+    initialMaterial ?? "textbook",
+  );
+  const [collections, setCollections] =
+    useState<CollectionOption[]>(initialCollections);
+  const [collectionId, setCollectionId] = useState<string>(() => {
+    if (initialCollectionId) return initialCollectionId;
+    const kind = collectionKindForMaterial(initialMaterial ?? "textbook");
+    const first = initialCollections.find((c) => c.kind === kind);
+    return first ? first.id : NEW_COLLECTION;
+  });
   const [newTitle, setNewTitle] = useState("");
   const [newAuthor, setNewAuthor] = useState("");
   const [cover, setCover] = useState<Pic | null>(null);
-  const [pageStart, setPageStart] = useState("");
+  const [pageStart, setPageStart] = useState(initialPage ?? "");
   const [pageEnd, setPageEnd] = useState("");
   const coverInputRef = useRef<HTMLInputElement>(null);
 
@@ -70,7 +104,14 @@ export function LessonUploader() {
     }
     // Default to the most recent existing collection of this kind, else "new".
     const firstOfKind = list.find((c) => c.kind === kind);
-    setCollectionId(firstOfKind ? firstOfKind.id : NEW_COLLECTION);
+    const cid = firstOfKind ? firstOfKind.id : NEW_COLLECTION;
+    setCollectionId(cid);
+    rememberBook(m, cid);
+  }
+
+  function selectCollection(cid: string) {
+    setCollectionId(cid);
+    rememberBook(materialType, cid);
   }
 
   function pickCover(list: FileList | null) {
@@ -81,9 +122,9 @@ export function LessonUploader() {
   }
   const [article, setArticle] = useState("");
   const [busy, setBusy] = useState(false);
-  const [stage, setStage] = useState<"idle" | "reading" | "writing" | "done">(
-    "idle",
-  );
+  const [stage, setStage] = useState<
+    "idle" | "uploading" | "reading" | "writing" | "done"
+  >("idle");
   const [error, setError] = useState<string | null>(null);
   const [lessonId, setLessonId] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -99,9 +140,10 @@ export function LessonUploader() {
       setError("Please choose image files (PNG, JPG, or WebP).");
       return;
     }
-    // Load existing collections the first time pages appear, so the default
-    // material type ("Textbook") immediately offers the user's saved books.
-    if (pics.length === 0 && collectionKind) void pickMaterial(materialType);
+    // Lazy-load collections the first time pages appear ONLY if the server
+    // didn't already provide them (otherwise we'd clobber a prefilled selection).
+    if (pics.length === 0 && collectionKind && collections.length === 0)
+      void pickMaterial(materialType);
     setPics((prev) => {
       const next = [...prev];
       for (const f of incoming) {
@@ -144,30 +186,80 @@ export function LessonUploader() {
 
   async function generate() {
     if (pics.length === 0 || busy) return;
+
+    // Validate up front so a bad file fails before anything is uploaded.
+    for (const p of pics) {
+      if (!EXT[p.file.type]) {
+        setError("Please use PNG, JPG, or WebP images.");
+        return;
+      }
+      if (p.file.size > MAX_BYTES) {
+        setError("Each image must be under 12 MB.");
+        return;
+      }
+    }
+
     setBusy(true);
     setError(null);
     setArticle("");
-    setStage("reading");
+    setStage("uploading");
 
     try {
-      const fd = new FormData();
-      pics.forEach((p) => fd.append("images", p.file));
-      fd.append("lessonModel", lessonModel);
-      fd.append("ocrModel", ocrModel);
-      fd.append("materialType", materialType);
-      if (collectionKind) {
-        if (collectionId !== NEW_COLLECTION) {
-          fd.append("collectionId", collectionId);
-        } else if (newTitle.trim()) {
-          fd.append("collectionTitle", newTitle.trim());
-          if (newAuthor.trim()) fd.append("collectionAuthor", newAuthor.trim());
-          if (cover) fd.append("cover", cover.file);
-        }
-        if (pageStart.trim()) fd.append("pageStart", pageStart.trim());
-        if (pageEnd.trim()) fd.append("pageEnd", pageEnd.trim());
+      // Upload pages straight to Supabase Storage from the browser (scoped to
+      // the user's folder by RLS), then send only the small paths to the API.
+      // This bypasses the serverless request-body size limit that made
+      // multi-page uploads fail with "payload too large".
+      const supabase = createClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error("You need to be signed in to upload.");
+
+      const uploaded = await Promise.all(
+        pics.map(async (p) => {
+          const path = `${user.id}/${crypto.randomUUID()}.${EXT[p.file.type]}`;
+          const { error: upErr } = await supabase.storage
+            .from("lesson-images")
+            .upload(path, p.file, { contentType: p.file.type, upsert: false });
+          if (upErr) throw new Error(`Upload failed: ${upErr.message}`);
+          return { path, mime: p.file.type };
+        }),
+      );
+
+      let coverPath: string | null = null;
+      if (collectionKind && collectionId === NEW_COLLECTION && cover && EXT[cover.file.type]) {
+        const cp = `${user.id}/covers/${crypto.randomUUID()}.${EXT[cover.file.type]}`;
+        const { error: cErr } = await supabase.storage
+          .from("lesson-images")
+          .upload(cp, cover.file, { contentType: cover.file.type, upsert: false });
+        if (!cErr) coverPath = cp;
       }
 
-      const res = await fetch("/api/lesson", { method: "POST", body: fd });
+      const body: Record<string, unknown> = {
+        imagePaths: uploaded.map((u) => u.path),
+        mimeTypes: uploaded.map((u) => u.mime),
+        lessonModel,
+        ocrModel,
+        materialType,
+      };
+      if (collectionKind) {
+        if (collectionId !== NEW_COLLECTION) {
+          body.collectionId = collectionId;
+        } else if (newTitle.trim()) {
+          body.collectionTitle = newTitle.trim();
+          if (newAuthor.trim()) body.collectionAuthor = newAuthor.trim();
+          if (coverPath) body.coverPath = coverPath;
+        }
+        if (pageStart.trim()) body.pageStart = pageStart.trim();
+        if (pageEnd.trim()) body.pageEnd = pageEnd.trim();
+      }
+
+      setStage("reading");
+      const res = await fetch("/api/lesson", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
       if (!res.ok || !res.body) {
         const msg = await res.text().catch(() => "Something went wrong.");
         throw new Error(msg || "Something went wrong.");
@@ -310,7 +402,7 @@ export function LessonUploader() {
               </label>
               <select
                 value={collectionId}
-                onChange={(e) => setCollectionId(e.target.value)}
+                onChange={(e) => selectCollection(e.target.value)}
                 disabled={busy}
                 className="w-full rounded-lg border border-border bg-surface px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring"
               >
@@ -478,12 +570,21 @@ export function LessonUploader() {
 
       {error && <p className="text-sm text-accent">{error}</p>}
 
-      {(stage === "reading" || stage === "writing" || article) && (
+      {(stage === "uploading" ||
+        stage === "reading" ||
+        stage === "writing" ||
+        article) && (
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           className="rounded-2xl border border-border bg-surface p-5"
         >
+          {stage === "uploading" && (
+            <p className="flex items-center gap-2 text-sm text-muted">
+              <GeometricLoader size={20} />
+              Uploading {pics.length > 1 ? `${pics.length} pages` : "the page"}…
+            </p>
+          )}
           {stage === "reading" && (
             <p className="flex items-center gap-2 text-sm text-muted">
               <GeometricLoader size={20} />

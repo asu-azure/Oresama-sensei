@@ -99,6 +99,19 @@ export function schedule(
   };
 }
 
+/** FSRS-predicted probability (0–100) that the learner recalls this item right
+ *  now, given its stability and time elapsed. Returns null for brand-new items
+ *  (no reps yet), which have no meaningful score. Server-only (imports ts-fsrs). */
+export function retrievability(
+  row: SrsRow,
+  now: Date = new Date(),
+): number | null {
+  if ((row.srs_reps ?? 0) === 0) return null;
+  const r = f.get_retrievability(cardFromRow(row, now), now, false);
+  if (typeof r !== "number" || Number.isNaN(r)) return null;
+  return Math.round(r * 100);
+}
+
 export type IntervalPreview = Record<Rating, string>;
 
 function fmt(due: Date, now: Date): string {

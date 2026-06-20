@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Send, Loader2, MessageCircle } from "lucide-react";
+import { X, Send, Loader2, MessageCircle, BookmarkPlus, Check } from "lucide-react";
 import { Markdown } from "@/components/markdown";
 import { CostHint, MODEL_LABELS } from "@/components/cost-hint";
 import { cn } from "@/lib/utils";
@@ -20,28 +20,41 @@ const DEFAULT_SUGGESTIONS = [
  * saved word, a kanji, or a lesson). On mobile it's a bottom sheet whose close
  * button is inside the sheet — never trapped under the top nav.
  *
- * `contextKey` identifies the current item; when it changes the conversation
- * resets (via remount) so asking about a new card starts fresh.
+ * The conversation is kept PER `contextKey` (lifted out of the panel so it
+ * survives closing/reopening), and starts fresh only when `contextKey` changes
+ * (e.g. advancing to the next flashcard). When `onSaveToNote` is provided, each
+ * assistant reply gets a "Save to notes" button.
  */
 export function AskSensei({
   context,
   contextKey,
   suggestions,
+  onSaveToNote,
 }: {
   context: AskContext;
   contextKey?: string;
   suggestions?: string[];
+  onSaveToNote?: (content: string) => Promise<void> | void;
 }) {
   const [open, setOpen] = useState(false);
+  // Conversations keyed by contextKey so each card/exercise keeps its own thread
+  // even after the panel is closed; a new key (next card) is a clean slate.
+  const [convos, setConvos] = useState<Record<string, DiscussMessage[]>>({});
+  const key = contextKey ?? "static";
+  const messages = convos[key] ?? [];
+  const setMessages = (next: DiscussMessage[]) =>
+    setConvos((c) => ({ ...c, [key]: next }));
 
   return (
     <>
       <AnimatePresence>
         {open && (
           <AskPanel
-            key={contextKey ?? "static"}
             context={context}
+            messages={messages}
+            setMessages={setMessages}
             suggestions={suggestions}
+            onSaveToNote={onSaveToNote}
             onClose={() => setOpen(false)}
           />
         )}
@@ -66,16 +79,22 @@ export function AskSensei({
 
 function AskPanel({
   context,
+  messages,
+  setMessages,
   suggestions,
+  onSaveToNote,
   onClose,
 }: {
   context: AskContext;
+  messages: DiscussMessage[];
+  setMessages: (next: DiscussMessage[]) => void;
   suggestions?: string[];
+  onSaveToNote?: (content: string) => Promise<void> | void;
   onClose: () => void;
 }) {
-  const [messages, setMessages] = useState<DiscussMessage[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [savedKeys, setSavedKeys] = useState<Set<string>>(new Set());
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -114,6 +133,12 @@ function AskPanel({
     } finally {
       setLoading(false);
     }
+  }
+
+  async function saveToNote(content: string, idx: number) {
+    if (!onSaveToNote) return;
+    await onSaveToNote(content);
+    setSavedKeys((s) => new Set(s).add(`${idx}`));
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
@@ -184,7 +209,26 @@ function AskPanel({
             ) : (
               <div className="font-jp">
                 {m.content ? (
-                  <Markdown>{m.content}</Markdown>
+                  <>
+                    <Markdown>{m.content}</Markdown>
+                    {onSaveToNote && !loading && (
+                      <button
+                        onClick={() => saveToNote(m.content, i)}
+                        disabled={savedKeys.has(`${i}`)}
+                        className="mt-1.5 flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] text-muted transition-colors hover:bg-surface-2 hover:text-foreground disabled:opacity-60"
+                      >
+                        {savedKeys.has(`${i}`) ? (
+                          <>
+                            <Check className="h-3 w-3" /> Saved to notes
+                          </>
+                        ) : (
+                          <>
+                            <BookmarkPlus className="h-3 w-3" /> Save to notes
+                          </>
+                        )}
+                      </button>
+                    )}
+                  </>
                 ) : (
                   <Loader2 className="h-4 w-4 animate-spin text-muted" />
                 )}

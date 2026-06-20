@@ -79,65 +79,162 @@ export async function POST(request: Request) {
   } = await supabase.auth.getUser();
   if (!user) return new Response("Unauthorized", { status: 401 });
 
-  const form = await request.formData();
-  // Legacy "deep" flag maps to Opus; new "lessonModel" supersedes it.
-  const deep = form.get("deep") === "true";
-  const lessonModel = ((form.get("lessonModel") as LessonModelChoice) ||
-    (deep ? "opus" : "claude")) as LessonModelChoice;
-  const ocrModel = (form.get("ocrModel") as OcrModel) || "auto";
+  // The uploader now sends JSON with images ALREADY uploaded to Storage
+  // (bypassing the serverless body-size limit that broke multi-page uploads).
+  // We still support the legacy multipart/form-data path for safety.
+  const contentType = request.headers.get("content-type") ?? "";
+  const isJson = contentType.includes("application/json");
 
-  // Source attribution (where this material came from).
-  const materialType = ((form.get("materialType") as MaterialType) ||
-    "textbook") as MaterialType;
+  let lessonModel: LessonModelChoice;
+  let ocrModel: OcrModel;
+  let materialType: MaterialType;
+  let existingCollectionId: string | null;
+  let newCollectionTitle: string | null;
+  let newCollectionAuthor: string | null;
+  let pageStart: number | null;
+  let pageEnd: number | null;
+  // Per-page buffers + mimes (for OCR) and the final stored paths.
+  let buffers: Buffer[] = [];
+  let mimes: string[] = [];
+  let imagePaths: string[] = [];
+  // Cover: already-uploaded path (JSON) or a file to upload server-side (legacy).
+  let providedCoverPath: string | null = null;
+  let coverFile: File | null = null;
+
+  if (isJson) {
+    const json = (await request.json().catch(() => null)) as Record<
+      string,
+      unknown
+    > | null;
+    if (!json) return new Response("Invalid request body", { status: 400 });
+
+    const deep = json.deep === true || json.deep === "true";
+    lessonModel = ((json.lessonModel as LessonModelChoice) ||
+      (deep ? "opus" : "claude")) as LessonModelChoice;
+    ocrModel = (json.ocrModel as OcrModel) || "auto";
+    materialType = ((json.materialType as MaterialType) ||
+      "textbook") as MaterialType;
+    existingCollectionId = (json.collectionId as string)?.trim?.() || null;
+    newCollectionTitle = (json.collectionTitle as string)?.trim?.() || null;
+    newCollectionAuthor = (json.collectionAuthor as string)?.trim?.() || null;
+    providedCoverPath = (json.coverPath as string)?.trim?.() || null;
+    pageStart = parseIntOrNull(String(json.pageStart ?? ""));
+    pageEnd = parseIntOrNull(String(json.pageEnd ?? ""));
+
+    const paths = Array.isArray(json.imagePaths)
+      ? (json.imagePaths as unknown[]).filter(
+          (p): p is string => typeof p === "string" && p.length > 0,
+        )
+      : [];
+    const mimeTypes = Array.isArray(json.mimeTypes)
+      ? (json.mimeTypes as unknown[]).map((m) => String(m))
+      : [];
+    if (paths.length === 0) {
+      return new Response("No image provided", { status: 400 });
+    }
+    if (paths.length > MAX_IMAGES) {
+      return new Response(`Too many images (max ${MAX_IMAGES})`, { status: 413 });
+    }
+    // Only the user's own folder — RLS enforces this too, but fail fast.
+    if (paths.some((p) => !p.startsWith(`${user.id}/`))) {
+      return new Response("Forbidden image path", { status: 403 });
+    }
+    // Pull each page back from Storage for OCR.
+    try {
+      buffers = await Promise.all(
+        paths.map(async (p) => {
+          const { data, error } = await supabase.storage
+            .from("lesson-images")
+            .download(p);
+          if (error || !data) throw new Error(error?.message ?? "download failed");
+          return Buffer.from(await data.arrayBuffer());
+        }),
+      );
+    } catch (e) {
+      console.error("image download failed:", e);
+      return new Response("Couldn't read the uploaded images.", { status: 400 });
+    }
+    mimes = paths.map((p, i) => {
+      const ext = p.split(".").pop()?.toLowerCase();
+      return (
+        mimeTypes[i] ||
+        (ext === "png" ? "image/png" : ext === "webp" ? "image/webp" : "image/jpeg")
+      );
+    });
+    imagePaths = paths;
+  } else {
+    const form = await request.formData();
+    const deep = form.get("deep") === "true";
+    lessonModel = ((form.get("lessonModel") as LessonModelChoice) ||
+      (deep ? "opus" : "claude")) as LessonModelChoice;
+    ocrModel = (form.get("ocrModel") as OcrModel) || "auto";
+    materialType = ((form.get("materialType") as MaterialType) ||
+      "textbook") as MaterialType;
+    existingCollectionId = (form.get("collectionId") as string)?.trim() || null;
+    newCollectionTitle = (form.get("collectionTitle") as string)?.trim() || null;
+    newCollectionAuthor = (form.get("collectionAuthor") as string)?.trim() || null;
+    const cf = form.get("cover");
+    coverFile = cf instanceof File ? cf : null;
+    pageStart = parseIntOrNull(form.get("pageStart"));
+    pageEnd = parseIntOrNull(form.get("pageEnd"));
+
+    const raw = form.getAll("images");
+    const files = (raw.length ? raw : [form.get("image")]).filter(
+      (f): f is File => f instanceof File,
+    );
+    if (files.length === 0) {
+      return new Response("No image provided", { status: 400 });
+    }
+    if (files.length > MAX_IMAGES) {
+      return new Response(`Too many images (max ${MAX_IMAGES})`, { status: 413 });
+    }
+    for (const f of files) {
+      if (!EXT[f.type]) {
+        return new Response("Unsupported image type (use PNG, JPG, or WebP)", {
+          status: 415,
+        });
+      }
+      if (f.size > MAX_BYTES) {
+        return new Response("An image is too large (max 12 MB each)", {
+          status: 413,
+        });
+      }
+    }
+    buffers = await Promise.all(
+      files.map(async (f) => Buffer.from(await f.arrayBuffer())),
+    );
+    mimes = files.map((f) => f.type);
+    // Store every page image (private, scoped to the user's folder), in order.
+    imagePaths = (
+      await Promise.all(
+        files.map(async (f, i) => {
+          const path = `${user.id}/${crypto.randomUUID()}.${EXT[f.type]}`;
+          const { error } = await supabase.storage
+            .from("lesson-images")
+            .upload(path, buffers[i], { contentType: f.type, upsert: false });
+          if (error) {
+            console.error("image upload failed:", error.message);
+            return null;
+          }
+          return path;
+        }),
+      )
+    ).filter((p): p is string => p !== null);
+  }
+
   const sourceType = sourceTypeForMaterial(materialType);
   const collectionKind = collectionKindForMaterial(materialType);
-  const existingCollectionId =
-    (form.get("collectionId") as string)?.trim() || null;
-  const newCollectionTitle = (form.get("collectionTitle") as string)?.trim() || null;
-  const newCollectionAuthor = (form.get("collectionAuthor") as string)?.trim() || null;
-  const coverFile = form.get("cover");
-  const pageStart = parseIntOrNull(form.get("pageStart"));
-  const pageEnd = parseIntOrNull(form.get("pageEnd"));
-
-  // Accept one or many images (`images` from the multi-picker; `image` legacy).
-  const raw = form.getAll("images");
-  const files = (raw.length ? raw : [form.get("image")]).filter(
-    (f): f is File => f instanceof File,
-  );
-
-  if (files.length === 0) {
-    return new Response("No image provided", { status: 400 });
-  }
-  if (files.length > MAX_IMAGES) {
-    return new Response(`Too many images (max ${MAX_IMAGES})`, { status: 413 });
-  }
-  for (const f of files) {
-    if (!EXT[f.type]) {
-      return new Response("Unsupported image type (use PNG, JPG, or WebP)", {
-        status: 415,
-      });
-    }
-    if (f.size > MAX_BYTES) {
-      return new Response("An image is too large (max 12 MB each)", {
-        status: 413,
-      });
-    }
-  }
 
   // Read every page, in order, and stitch them into one source text.
-  const buffers = await Promise.all(
-    files.map(async (f) => Buffer.from(await f.arrayBuffer())),
-  );
-
   let pageText: string;
   let pages: string[] = [];
   try {
     pages = await Promise.all(
-      buffers.map((buf, i) => runOcr(buf.toString("base64"), files[i].type, ocrModel)),
+      buffers.map((buf, i) => runOcr(buf.toString("base64"), mimes[i], ocrModel)),
     );
     pageText = pages
       .map((t, i) =>
-        files.length > 1
+        buffers.length > 1
           ? `<page n="${i + 1}">\n${t.trim()}\n</page>`
           : t.trim(),
       )
@@ -157,28 +254,17 @@ export async function POST(request: Request) {
     );
   }
 
-  // Store EVERY page image (private, scoped to the user's folder), in order.
-  const imagePaths = (
-    await Promise.all(
-      files.map(async (f, i) => {
-        const path = `${user.id}/${crypto.randomUUID()}.${EXT[f.type]}`;
-        const { error } = await supabase.storage
-          .from("lesson-images")
-          .upload(path, buffers[i], { contentType: f.type, upsert: false });
-        if (error) {
-          console.error("image upload failed:", error.message);
-          return null;
-        }
-        return path;
-      }),
-    )
-  ).filter((p): p is string => p !== null);
-
-  // Resolve the collection (book/game/series), uploading a cover if provided.
+  // Resolve the collection (book/game/series). The cover is either an
+  // already-uploaded path (JSON) or a file to upload now (legacy form).
   let collectionId: string | null = null;
   if (collectionKind) {
-    let coverPath: string | null = null;
-    if (coverFile instanceof File && coverFile.size > 0 && EXT[coverFile.type]) {
+    let coverPath: string | null = providedCoverPath;
+    if (
+      !coverPath &&
+      coverFile instanceof File &&
+      coverFile.size > 0 &&
+      EXT[coverFile.type]
+    ) {
       coverPath = `${user.id}/covers/${crypto.randomUUID()}.${EXT[coverFile.type]}`;
       const buf = Buffer.from(await coverFile.arrayBuffer());
       const { error: coverErr } = await supabase.storage
@@ -250,7 +336,7 @@ export async function POST(request: Request) {
   const engine = resolveEngine(
     (profile as { ai_engine?: string } | null)?.ai_engine,
   );
-  const pageCount = files.length;
+  const pageCount = buffers.length;
   const system = buildLessonSystemPrompt(
     profile as Profile | null,
     recalled,

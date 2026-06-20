@@ -49,6 +49,11 @@ export interface KnowledgeItem {
   example: string | null;
   jlpt_level: string | null;
   notes: string | null;
+  /** Coarse grammatical class for the conjugation table (migration 0017).
+   *  e.g. 'godan verb' | 'ichidan verb' | 'suru verb' | 'i-adjective' | … */
+  part_of_speech: string | null;
+  /** The learner's own note, separate from AI `notes` (migration 0017). */
+  personal_note: string | null;
   source: string | null;
   /** Coarse attribution ('book' | 'game' | 'series' | 'internet' | 'real_world' | 'chat'). */
   source_type: string | null;
@@ -103,6 +108,8 @@ export interface ExtractedKnowledge {
   example?: string;
   jlpt_level?: string;
   notes?: string;
+  /** Coarse grammatical class for the conjugation table; see KnowledgeItem. */
+  part_of_speech?: string;
 }
 
 /** A knowledge item retrieved by vector search, with similarity score. */

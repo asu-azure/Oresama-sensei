@@ -181,7 +181,7 @@ export async function runGeminiLessonStream(opts: {
   const modelId = opts.model === "gemini-pro" ? GEMINI_PRO : GEMINI_FLASH;
   // Gemini Flash in particular tends to answer in Japanese; reinforce English.
   const englishDirective =
-    "\n\nIMPORTANT: Write the lesson body in ENGLISH. Keep the Japanese section headings as given, and use Japanese only for target words, grammar patterns, and example sentences — all explanations must be in English.";
+    "\n\nIMPORTANT: Write the lesson body in ENGLISH. Keep the Japanese section headings as given, and use Japanese only for target words, grammar patterns, and example sentences — all explanations must be in English.\n\nALSO: In the 重要語彙 section you MUST begin with a real GitHub-Flavored Markdown table (using | pipe characters and a |---| separator row) listing every key word with columns 語彙 / 読み方 / 意味, then the one-by-one detail below it. Do not replace the table with a bulleted or numbered list.";
   const res = await withRetry(
     () =>
       ai().models.generateContentStream({

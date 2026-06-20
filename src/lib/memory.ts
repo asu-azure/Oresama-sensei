@@ -96,6 +96,7 @@ export async function storeKnowledge(
           example: item.example || null,
           jlpt_level: item.jlpt_level || null,
           notes: item.notes || null,
+          part_of_speech: item.part_of_speech || null,
           source: attribution.source,
           source_type: attribution.source_type ?? null,
           collection_id: attribution.collection_id ?? null,

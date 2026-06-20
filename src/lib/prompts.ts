@@ -101,7 +101,15 @@ Sections:
 A 1–2 sentence description of what this material is about.
 
 ## 重要語彙 (Key Vocabulary)
-The most useful words (focus on N2–N1). For each: the word with <ruby> furigana, meaning, and a fresh natural example sentence tied to the learner's life/interests.
+START this section with a quick-reference GitHub-Flavored Markdown TABLE summarizing every key word, using real pipe characters, like:
+
+| 語彙 | 読み方 | 意味 |
+| --- | --- | --- |
+| <ruby>会議<rt>かいぎ</rt></ruby> | かいぎ | meeting |
+
+(The 語彙 column shows the word with <ruby> furigana; 読み方 is the plain kana reading; 意味 is the concise English meaning. One row per word.)
+
+THEN, below the table, go through the most useful words one by one (focus on N2–N1): for each, the word with <ruby> furigana, its meaning, and a fresh natural example sentence tied to the learner's life/interests.
 
 ## 文法ポイント (Grammar Points)
 Key grammar/expressions, each explained with nuance and a contextual example.
@@ -173,7 +181,9 @@ export function buildCollectionSummaryPrompt(profile: Profile | null): string {
 /** Instruction for the structured knowledge-extraction pass. */
 export const EXTRACTION_INSTRUCTION = `From the Japanese-learning content below, extract the discrete, reusable knowledge items worth remembering: vocabulary words, grammar points, and useful set expressions. Focus on items around JLPT N2–N1. Skip trivial/beginner items and anything that is not actually Japanese language to learn.
 
-For each item provide: type (vocab | grammar | expression), term (the word/grammar pattern/expression in Japanese), reading (kana reading; for grammar, the pattern reading or empty), meaning (concise English), example (one natural Japanese example sentence), jlpt_level (best guess like N2/N1, or empty), and notes (one short nuance note, optional).
+For each item provide: type (vocab | grammar | expression), term (the word/grammar pattern/expression in Japanese), reading (kana reading; for grammar, the pattern reading or empty), meaning (concise English), example (one natural Japanese example sentence), jlpt_level (best guess like N2/N1, or empty), notes (one short nuance note, optional), and part_of_speech.
+
+part_of_speech — the grammatical class, used to build a conjugation table. Use EXACTLY one of these lowercase labels when it applies: "godan verb" (五段/Group 1, e.g. 書く・話す・読む), "ichidan verb" (一段/Group 2, e.g. 食べる・見る), "suru verb" (する verbs, e.g. 勉強する), "kuru verb" (来る), "i-adjective" (e.g. 高い), "na-adjective" (e.g. 静か), "noun", "adverb", "particle", "expression", or "other". For non-vocab items or anything that doesn't conjugate, use "" or "expression"/"other". Be accurate about godan vs ichidan — it determines the conjugation.
 
 IMPORTANT: "term" and "reading" must be PLAIN text — no <ruby>/<rt> tags, no furigana, no parentheses. Put the kanji/kana word in "term" and its kana in "reading", separately. Use <ruby>漢字<rt>かんじ</rt></ruby> furigana markup ONLY inside "example".
 

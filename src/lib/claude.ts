@@ -248,6 +248,7 @@ const EXTRACTION_SCHEMA = {
           example: { type: "string" },
           jlpt_level: { type: "string" },
           notes: { type: "string" },
+          part_of_speech: { type: "string" },
         },
         required: [
           "type",
@@ -257,6 +258,7 @@ const EXTRACTION_SCHEMA = {
           "example",
           "jlpt_level",
           "notes",
+          "part_of_speech",
         ],
         additionalProperties: false,
       },
@@ -266,7 +268,7 @@ const EXTRACTION_SCHEMA = {
   additionalProperties: false,
 } as const;
 
-const EXTRACTION_JSON_HINT = `\n\nReturn ONLY valid JSON (no markdown fences) matching exactly:\n{"items":[{"type":"vocab|grammar|expression","term":"...","reading":"...","meaning":"...","example":"...","jlpt_level":"...","notes":"..."}]}\nWrite furigana as literal <ruby>漢字<rt>かんじ</rt></ruby> tags (do NOT HTML-escape them).`;
+const EXTRACTION_JSON_HINT = `\n\nReturn ONLY valid JSON (no markdown fences) matching exactly:\n{"items":[{"type":"vocab|grammar|expression","term":"...","reading":"...","meaning":"...","example":"...","jlpt_level":"...","notes":"...","part_of_speech":"..."}]}\nWrite furigana as literal <ruby>漢字<rt>かんじ</rt></ruby> tags (do NOT HTML-escape them).`;
 
 function parseExtraction(raw: string): ExtractedKnowledge[] {
   try {

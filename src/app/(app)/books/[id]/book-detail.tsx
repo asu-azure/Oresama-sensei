@@ -21,7 +21,7 @@ import {
   MASTERY_ORDER,
   type MasteryLevel,
 } from "@/lib/mastery";
-import { collectionEmoji } from "@/lib/source";
+import { collectionEmoji, materialForCollectionKind } from "@/lib/source";
 import { CostHint, MODEL_LABELS } from "@/components/cost-hint";
 import { cn } from "@/lib/utils";
 import { getBookPageImages } from "../../library/actions";
@@ -119,6 +119,26 @@ export function BookDetail({
 
   // Selected page panel
   const [selected, setSelected] = useState<number | null>(null);
+  // When on, tapping a page opens its status/edit panel instead of navigating.
+  const [editMode, setEditMode] = useState(false);
+
+  // Tapping a page: open its lesson, or start a new lesson for a blank page.
+  // In edit mode, open the status panel instead.
+  function onCellClick(n: number) {
+    if (editMode) {
+      setSelected(selected === n ? null : n);
+      return;
+    }
+    const page = pageMap.get(n);
+    if (page?.lesson_id) {
+      router.push(`/lessons/${page.lesson_id}`);
+    } else {
+      const material = materialForCollectionKind(collection.kind);
+      router.push(
+        `/lessons?collection=${collection.id}&page=${n}&material=${material}`,
+      );
+    }
+  }
 
   // Which page slots to render: 1..total_pages, or just the tracked pages.
   const slots = useMemo(() => {
@@ -324,7 +344,26 @@ export function BookDetail({
 
       {/* Page grid */}
       <section>
-        <h2 className="mb-2 text-sm font-semibold">Pages</h2>
+        <div className="mb-2 flex items-center gap-2">
+          <h2 className="text-sm font-semibold">Pages</h2>
+          <p className="text-xs text-muted">
+            {editMode ? "Tap a page to flag it" : "Tap a page to open its lesson"}
+          </p>
+          <button
+            onClick={() => {
+              setEditMode((e) => !e);
+              setSelected(null);
+            }}
+            className={cn(
+              "ml-auto rounded-full border px-2.5 py-1 text-xs transition-colors",
+              editMode
+                ? "border-primary bg-primary/10 text-primary"
+                : "border-border text-muted hover:bg-surface-2 hover:text-foreground",
+            )}
+          >
+            {editMode ? "Done" : "Edit pages"}
+          </button>
+        </div>
         {slots.length === 0 ? (
           <p className="text-sm text-muted">
             No pages tracked yet. Set a total page count above, or upload pages
@@ -403,7 +442,7 @@ export function BookDetail({
                           const cell = (
                             <button
                               id={`book-page-${n}`}
-                              onClick={() => setSelected(selected === n ? null : n)}
+                              onClick={() => onCellClick(n)}
                               className={cn(
                                 "flex h-9 w-9 items-center justify-center rounded-md text-xs font-medium transition-transform hover:scale-105",
                                 cellClasses(page),

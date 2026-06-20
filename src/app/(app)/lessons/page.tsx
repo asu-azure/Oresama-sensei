@@ -1,18 +1,56 @@
 import Link from "next/link";
+import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { LessonUploader } from "./lesson-uploader";
 import { LessonTextGenerator } from "./lesson-text-generator";
 import { SummaryGenerator } from "./summary-generator";
 import { DeleteLessonButton } from "./delete-lesson-button";
+import { listUserCollections } from "@/lib/collections";
 import { formatDate } from "@/lib/utils";
 import { sourceMeta, sourceTypeForMaterial, pageRefLabel } from "@/lib/source";
 import type { MaterialType } from "@/lib/source";
 
-export default async function LessonsPage() {
+export default async function LessonsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{
+    collection?: string;
+    page?: string;
+    material?: string;
+  }>;
+}) {
+  const sp = await searchParams;
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
+
+  // Collections for the uploader's picker (so a prefilled/remembered book shows
+  // its name without a client round-trip), plus the prefill itself.
+  const collections = user ? await listUserCollections(supabase, user.id) : [];
+
+  // Last-used book, remembered in a cookie by the uploader. URL params (from a
+  // book page's blank-page link) take precedence.
+  let lastMaterial: MaterialType | null = null;
+  let lastCollectionId: string | null = null;
+  const lastRaw = (await cookies()).get("lastBook")?.value;
+  if (lastRaw) {
+    try {
+      const o = JSON.parse(decodeURIComponent(lastRaw));
+      lastMaterial = (o.material as MaterialType) ?? null;
+      lastCollectionId = (o.collectionId as string) ?? null;
+    } catch {
+      /* ignore a malformed cookie */
+    }
+  }
+  const initialMaterial = (sp.material as MaterialType) || lastMaterial || null;
+  const wantCollectionId = sp.collection || lastCollectionId || null;
+  // Only keep a collection id that still exists (avoids a stale cookie/URL).
+  const initialCollectionId =
+    wantCollectionId && collections.some((c) => c.id === wantCollectionId)
+      ? wantCollectionId
+      : null;
+  const initialPage = sp.page || null;
 
   const { data: lessons } = await supabase
     .from("lessons")
@@ -43,7 +81,12 @@ export default async function LessonsPage() {
           Turn study material into a meaningful lesson, or review everything at once.
         </p>
         <div className="space-y-4">
-          <LessonUploader />
+          <LessonUploader
+            initialMaterial={initialMaterial}
+            initialCollectionId={initialCollectionId}
+            initialPage={initialPage}
+            initialCollections={collections}
+          />
           <LessonTextGenerator />
           <SummaryGenerator />
         </div>

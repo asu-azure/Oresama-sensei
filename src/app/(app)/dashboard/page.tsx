@@ -294,7 +294,9 @@ export default async function DashboardPage() {
                           }}
                         />
                       </div>
-                      <span className="text-[9px] text-muted">{d.label}</span>
+                      <span className="h-3 whitespace-nowrap text-[9px] leading-3 text-muted">
+                        {d.label}
+                      </span>
                     </div>
                   );
                 })}
