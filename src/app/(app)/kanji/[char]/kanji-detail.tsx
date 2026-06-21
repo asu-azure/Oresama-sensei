@@ -50,7 +50,15 @@ export function KanjiDetail({
   const router = useRouter();
   const searchParams = useSearchParams();
   const fromLevel = searchParams.get("from");
-  const backHref = fromLevel ? `/kanji?level=${fromLevel}` : "/kanji";
+  // Opened from a flashcard? Send "Back" to /review (resumes the same card via
+  // the saved session) instead of the kanji browser.
+  const fromReview = searchParams.get("ret") === "review";
+  const backHref = fromReview
+    ? "/review"
+    : fromLevel
+      ? `/kanji?level=${fromLevel}`
+      : "/kanji";
+  const backLabel = fromReview ? "Back to review" : "All kanji";
 
   const [mnemonic, setMnemonic] = useState<string | null>(initialMnemonic);
   const [genExamples, setGenExamples] = useState<MnemonicExample[]>([]);
@@ -89,7 +97,7 @@ export function KanjiDetail({
           href={backHref}
           className="inline-flex items-center gap-1.5 text-sm text-muted transition-colors hover:text-foreground"
         >
-          <ArrowLeft className="h-4 w-4" /> All kanji
+          <ArrowLeft className="h-4 w-4" /> {backLabel}
         </Link>
         <div className="flex flex-col items-end gap-1">
           <button

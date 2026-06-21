@@ -40,13 +40,11 @@ export default async function ChatPage({
     // column missing — keep default
   }
 
-  // Active conversation: ?c=<id> if it belongs to the user, else the most recent.
-  let activeId: string | null = null;
-  if (c && conversations.some((x) => x.id === c)) {
-    activeId = c;
-  } else if (conversations.length > 0) {
-    activeId = conversations[0].id;
-  }
+  // Open a fresh blank chat by default; only resume a specific conversation when
+  // ?c=<id> is given (e.g. tapping one in the drawer). Past chats stay reachable
+  // via the ConversationDrawer.
+  const activeId: string | null =
+    c && conversations.some((x) => x.id === c) ? c : null;
 
   let initialMessages: UiMessage[] = [];
   let hasMore = false;

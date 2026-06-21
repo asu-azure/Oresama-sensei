@@ -187,8 +187,11 @@ function AskPanel({
       animate={{ opacity: 1, y: -kbInset }}
       exit={{ opacity: 0, y: 24 }}
       transition={{ type: "spring", stiffness: 360, damping: 32 }}
-      className="fixed inset-x-0 bottom-0 z-50 flex max-h-[80vh] flex-col rounded-t-2xl border border-border bg-background shadow-2xl sm:inset-x-auto sm:right-4 sm:bottom-4 sm:w-[400px] sm:max-h-[70vh] sm:rounded-2xl"
-      style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+      // Sit ABOVE the fixed bottom tab bar. The panel lives inside <main>
+      // (relative z-10), so its z-50 can't beat the nav's z-30 — offsetting by
+      // --bottom-nav (which already includes the safe-area inset) keeps the input
+      // clear of the nav instead of hidden behind it.
+      className="fixed inset-x-0 bottom-[var(--bottom-nav)] z-50 flex max-h-[80vh] flex-col rounded-t-2xl border border-border bg-background shadow-2xl sm:inset-x-auto sm:right-4 sm:bottom-4 sm:w-[400px] sm:max-h-[70vh] sm:rounded-2xl"
     >
       {/* Header — X lives here, always reachable */}
       <div className="flex items-center gap-2 border-b border-border px-4 py-3">

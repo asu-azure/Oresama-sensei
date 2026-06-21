@@ -205,26 +205,76 @@ rt {
   100% { transform: translateX(106vw) scale(1) rotate(220deg); opacity: 0; }
 }
 
-/* "Hologram glitch" — a quick RGB-split + jitter that settles to clean text.
-   Used for the flashcard reveal/advance (applied via the .glitch-in class).
-   text-shadow drives the chromatic split; it only affects glyphs, not borders. */
+/* "Hologram glitch" — a bold RGB-split + sliced-jitter that settles to clean
+   text. Used for the flashcard reveal/advance (applied via the .glitch-in
+   class). text-shadow drives the chromatic split (glyphs only, not borders);
+   clip-path slices the block for a digital "tearing" look.
+   Tunables: bump the px offsets / duration here to dial intensity. */
 @keyframes glitch-in {
-  0%   { opacity: 0; transform: translate3d(-4px, 0, 0);
+  0%   { opacity: 0; transform: translate3d(-9px, 0, 0);
+         text-shadow: 5px 0 var(--pop-pink), -5px 0 var(--pop-cyan);
+         clip-path: inset(0 0 62% 0); }
+  10%  { opacity: 1; transform: translate3d(9px, 0, 0);
+         text-shadow: -7px 0 var(--pop-pink), 7px 0 var(--pop-cyan);
+         clip-path: inset(58% 0 0 0); }
+  22%  { transform: translate3d(-7px, 0, 0);
+         text-shadow: 7px 0 var(--pop-cyan), -7px 0 var(--pop-pink);
+         clip-path: inset(22% 0 42% 0); }
+  34%  { transform: translate3d(6px, 0, 0);
+         text-shadow: -5px 0 var(--pop-pink), 5px 0 var(--pop-cyan);
+         clip-path: inset(46% 0 8% 0); }
+  46%  { opacity: 0.5; transform: translate3d(-4px, 0, 0);
+         text-shadow: 4px 0 var(--pop-cyan), -4px 0 var(--pop-pink);
+         clip-path: inset(0 0 0 0); }
+  62%  { opacity: 1; transform: translate3d(3px, 0, 0);
          text-shadow: 2px 0 var(--pop-pink), -2px 0 var(--pop-cyan); }
-  15%  { opacity: 1; transform: translate3d(4px, 0, 0);
-         text-shadow: -3px 0 var(--pop-pink), 3px 0 var(--pop-cyan); }
-  30%  { transform: translate3d(-3px, 0, 0);
-         text-shadow: 3px 0 var(--pop-cyan), -3px 0 var(--pop-pink); }
-  45%  { opacity: 0.65; transform: translate3d(2px, 0, 0); }
-  60%  { opacity: 1; transform: translate3d(-1px, 0, 0);
-         text-shadow: 1px 0 var(--pop-pink), -1px 0 var(--pop-cyan); }
-  100% { opacity: 1; transform: translate3d(0, 0, 0); text-shadow: none; }
+  80%  { transform: translate3d(-1px, 0, 0); text-shadow: none; }
+  100% { opacity: 1; transform: translate3d(0, 0, 0); text-shadow: none;
+         clip-path: inset(0 0 0 0); }
 }
 .glitch-in {
-  animation: glitch-in 0.3s steps(3, end) both;
+  animation: glitch-in 0.42s steps(2, end) both;
 }
+
+/* Bright light bar that sweeps across a flashcard on reveal/advance. The element
+   is an absolute cover (.card-sweep); a skewed, blurred gradient strip slides
+   L→R via its ::before. pointer-events disabled so it never blocks taps.
+   Tunables: width / left range / blur / opacity below. */
+.card-sweep {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 5;
+}
+.card-sweep::before {
+  content: "";
+  position: absolute;
+  top: -12%;
+  bottom: -12%;
+  width: 42%;
+  left: -55%;
+  transform: skewX(-16deg);
+  filter: blur(3px);
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in srgb, var(--pop-cyan) 75%, transparent) 35%,
+    #ffffff 50%,
+    color-mix(in srgb, var(--pop-pink) 75%, transparent) 65%,
+    transparent 100%
+  );
+  animation: card-sweep 0.45s ease-out both;
+}
+@keyframes card-sweep {
+  0%   { left: -55%; opacity: 0; }
+  18%  { opacity: 0.9; }
+  100% { left: 115%; opacity: 0; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .glitch-in { animation: none; }
+  .card-sweep::before { animation: none; opacity: 0; }
 }
 
 /* ---------------------------------------------------------------------------

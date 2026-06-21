@@ -351,8 +351,16 @@ function Flashcards({
           animate={{ opacity: 1, x: 0 }}
           exit={{ opacity: 0, x: reduce ? 0 : 8 }}
           transition={{ duration: 0.18 }}
-          className="rounded-2xl border border-border bg-surface p-8 text-center"
+          className="relative overflow-hidden rounded-2xl border border-border bg-surface p-8 text-center"
         >
+          {/* Sweep light bar — re-fires on advance (card id) and on reveal. */}
+          {!reduce && (
+            <span
+              key={`sweep-${card.id}-${revealed}`}
+              aria-hidden
+              className="card-sweep"
+            />
+          )}
           <div className="mb-3 flex flex-wrap justify-center gap-2 text-xs">
             <span className="rounded-full bg-surface-2 px-2 py-0.5 text-muted">
               {card.type}
@@ -461,7 +469,7 @@ function Flashcards({
                   {cardMeta.kanji.map((k) => (
                     <Link
                       key={k.char}
-                      href={`/kanji/${encodeURIComponent(k.char)}`}
+                      href={`/kanji/${encodeURIComponent(k.char)}?ret=review`}
                       className="flex items-center gap-1 rounded-md border border-border bg-surface-2 px-2 py-0.5 transition-colors hover:bg-surface"
                     >
                       <span className="font-jp text-sm">{k.char}</span>
