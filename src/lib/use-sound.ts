@@ -55,24 +55,36 @@ function audio(): AudioContext | null {
   return ctx;
 }
 
-/** A short blip: a quick upward frequency sweep with a fast decay. */
-function blip(
-  freq: number,
-  dur: number,
-  type: OscillatorType = "triangle",
-  gain = 0.04,
-) {
+// A rounded "soft sine tick" — a pure sine through a low-pass filter with a
+// smooth (click-free) attack/release. Modern and lowkey, not chiptune.
+// Tunables: cutoff (warmth) and the per-sound freq/gain/dur below.
+function tone(opts: {
+  freq: number;
+  dur: number;
+  gain?: number;
+  glideTo?: number; // gentle downward glide reads softer than a rise
+  cutoff?: number;
+}) {
   const ac = audio();
   if (!ac) return;
+  const { freq, dur, gain = 0.05, glideTo, cutoff = 1500 } = opts;
   const now = ac.currentTime;
+
   const osc = ac.createOscillator();
-  const g = ac.createGain();
-  osc.type = type;
+  osc.type = "sine";
   osc.frequency.setValueAtTime(freq, now);
-  osc.frequency.exponentialRampToValueAtTime(freq * 1.5, now + dur);
-  g.gain.setValueAtTime(gain, now);
-  g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
-  osc.connect(g).connect(ac.destination);
+  if (glideTo) osc.frequency.exponentialRampToValueAtTime(glideTo, now + dur);
+
+  const lp = ac.createBiquadFilter();
+  lp.type = "lowpass";
+  lp.frequency.setValueAtTime(cutoff, now);
+
+  const g = ac.createGain();
+  g.gain.setValueAtTime(0.0001, now);
+  g.gain.exponentialRampToValueAtTime(gain, now + 0.008); // soft attack
+  g.gain.exponentialRampToValueAtTime(0.0001, now + dur); // smooth release
+
+  osc.connect(lp).connect(g).connect(ac.destination);
   osc.start(now);
   osc.stop(now + dur + 0.02);
 }
@@ -87,24 +99,28 @@ function vibrate(ms: number) {
   }
 }
 
-/** Soft click for taps/navigation. */
+/** Soft sine tick for taps/navigation. */
 export function playTap() {
   if (!enabled()) return;
-  blip(660, 0.05, "triangle", 0.035);
+  tone({ freq: 240, glideTo: 200, dur: 0.07, gain: 0.05, cutoff: 1500 });
   vibrate(8);
 }
 
-/** Two-note rising chirp for revealing a flashcard answer. */
+/** Gentle two-note swell for revealing a flashcard answer. */
 export function playReveal() {
   if (!enabled()) return;
-  blip(420, 0.09, "sawtooth", 0.035);
-  window.setTimeout(() => blip(880, 0.07, "triangle", 0.03), 45);
+  tone({ freq: 392, dur: 0.12, gain: 0.045, cutoff: 1800 });
+  window.setTimeout(
+    () => tone({ freq: 523, dur: 0.13, gain: 0.04, cutoff: 1900 }),
+    70,
+  );
   vibrate(12);
 }
 
-/** Crisp confirm blip for grading a card. */
+/** Soft rounded "tock" for grading a card (sine + a faint higher partial). */
 export function playGrade() {
   if (!enabled()) return;
-  blip(520, 0.06, "square", 0.03);
+  tone({ freq: 300, glideTo: 270, dur: 0.1, gain: 0.05, cutoff: 1400 });
+  tone({ freq: 600, dur: 0.07, gain: 0.018, cutoff: 2200 });
   vibrate(10);
 }

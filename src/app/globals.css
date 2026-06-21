@@ -278,6 +278,70 @@ rt {
 }
 
 /* ---------------------------------------------------------------------------
+   Pitch-accent contour (PitchAccent): an overline over HIGH morae + a vertical
+   downstep hook, drawn left→right like a lit fuse with a soft glow, colored by
+   accent type via the inline --pitch-color var. Low morae render no element.
+   Tunables: line thickness / reserve / glow strength below.
+--------------------------------------------------------------------------- */
+.pitch-mora {
+  position: relative;
+  display: inline-block;
+  padding-top: 0.34em; /* uniform top reserve → glyphs stay aligned + room for line */
+  line-height: 1;
+}
+.pitch-line,
+.pitch-drop {
+  position: absolute;
+  background: var(--pitch-color);
+  border-radius: 1px;
+  pointer-events: none;
+}
+.pitch-line {
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 0.13em;
+  transform-origin: left center;
+  animation:
+    pitch-draw 0.2s ease-out both,
+    pitch-glow 0.55s ease-out both;
+  animation-delay: var(--pitch-delay);
+}
+.pitch-drop {
+  top: 0;
+  right: 0;
+  width: 0.13em;
+  height: 0.72em;
+  transform-origin: top center;
+  animation:
+    pitch-draw-v 0.16s ease-out both,
+    pitch-glow 0.5s ease-out both;
+  animation-delay: var(--pitch-delay);
+}
+@keyframes pitch-draw {
+  from { transform: scaleX(0); }
+  to   { transform: scaleX(1); }
+}
+@keyframes pitch-draw-v {
+  from { transform: scaleY(0); }
+  to   { transform: scaleY(1); }
+}
+@keyframes pitch-glow {
+  0%   { box-shadow: 0 0 7px 1px var(--pitch-color); filter: brightness(1.7); }
+  55%  { box-shadow: 0 0 4px 0 var(--pitch-color); filter: brightness(1.2); }
+  100% { box-shadow: 0 0 2px 0 color-mix(in srgb, var(--pitch-color) 45%, transparent);
+         filter: brightness(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pitch-line,
+  .pitch-drop {
+    animation: none;
+    transform: none;
+    box-shadow: 0 0 2px 0 color-mix(in srgb, var(--pitch-color) 45%, transparent);
+  }
+}
+
+/* ---------------------------------------------------------------------------
    Pixel "buddies" — tiny characters that amble / sit / sleep along the bottom
 --------------------------------------------------------------------------- */
 @keyframes buddy-walk {
