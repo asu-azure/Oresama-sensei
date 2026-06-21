@@ -238,17 +238,17 @@ export function ChatClient({
 
   return (
     <div className="flex h-[calc(100dvh-var(--top-nav)-var(--bottom-nav))] flex-col">
-      <div className="flex items-center justify-between py-3">
-        <div className="flex items-center gap-2">
+      <div className="flex items-center justify-between gap-2 py-3">
+        <div className="flex min-w-0 items-center gap-2">
           <ConversationDrawer
             conversations={conversations}
             activeId={conversationId}
           />
-          <h1 className="text-sm font-medium text-muted">
+          <h1 className="hidden truncate text-sm font-medium text-muted sm:block">
             {messages.length > 0 ? "Conversation" : "Ask anything"}
           </h1>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 items-center gap-2">
           <label className="sr-only" htmlFor="chat-model">
             Tutor model
           </label>
@@ -266,8 +266,16 @@ export function ChatClient({
               </option>
             ))}
           </select>
-          <Button variant="outline" size="sm" onClick={newChat} disabled={busy}>
-            <Plus className="h-4 w-4" /> New chat
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={newChat}
+            disabled={busy}
+            title="New chat"
+            aria-label="New chat"
+          >
+            <Plus className="h-4 w-4" />
+            <span className="hidden sm:inline">New chat</span>
           </Button>
         </div>
       </div>
