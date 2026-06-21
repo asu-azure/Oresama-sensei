@@ -1,6 +1,8 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { summarizeNote } from "@/lib/claude";
+import { getAiEngine } from "@/lib/ai-engine";
 
 /** Save/replace the learner's personal note on a knowledge item. RLS scopes the
  *  write to the owner. */
@@ -52,4 +54,21 @@ export async function appendPersonalNote(
     .eq("id", itemId)
     .eq("user_id", user.id);
   return { ok: !error, note: next };
+}
+
+/** Summarize a tutor reply into one concise line, then append it to the item's
+ *  personal note (so "Save to notes" keeps a takeaway, not the whole answer). */
+export async function appendNoteSummary(
+  itemId: string,
+  content: string,
+): Promise<{ ok: boolean; note?: string }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false };
+
+  const engine = await getAiEngine(supabase, user.id);
+  const summary = await summarizeNote(content, engine);
+  return appendPersonalNote(itemId, summary);
 }

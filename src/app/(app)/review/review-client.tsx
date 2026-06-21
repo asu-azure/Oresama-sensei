@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import {
   Check,
   RotateCcw,
@@ -24,10 +24,11 @@ import { PitchAccent } from "@/components/pitch-accent";
 import { PitchToggle } from "@/components/pitch-toggle";
 import { PitchLegend } from "@/components/pitch-legend";
 import { usePitch } from "@/lib/use-pitch";
+import { playReveal, playGrade } from "@/lib/use-sound";
 import { masteryInfo, type MasteryLevel } from "@/lib/mastery";
 import { sourceMeta } from "@/lib/source";
 import { cn } from "@/lib/utils";
-import { savePersonalNote, appendPersonalNote } from "./actions";
+import { savePersonalNote, appendNoteSummary } from "./actions";
 import {
   useReviewSession,
   saveReviewSession,
@@ -47,6 +48,9 @@ export type ReviewCard = {
   personal_note: string | null;
 };
 
+/** One kanji from the card's term, with a short gloss, for the reveal breakdown. */
+export type KanjiGloss = { char: string; meaning: string };
+
 /** Source/history/strength shown in the collapsible "details" panel. */
 export type CardMeta = {
   sourceType: string | null;
@@ -59,6 +63,9 @@ export type CardMeta = {
   /** FSRS-predicted recall % right now, or null for a brand-new item. */
   retr: number | null;
   mastery: MasteryLevel;
+  /** Kanji in the term we have data for (char + primary meaning), for the
+   *  tappable "Kanji" breakdown on the answer side. */
+  kanji?: KanjiGloss[];
 };
 
 const RATINGS: { rating: Rating; label: string; cls: string }[] = [
@@ -195,6 +202,7 @@ function Flashcards({
   onExit?: () => void;
 }) {
   const pitchOn = usePitch();
+  const reduce = useReducedMotion();
   const [index, setIndex] = useState(startIndex);
   const [revealed, setRevealed] = useState(false);
   const [reviewed, setReviewed] = useState(startReviewed);
@@ -284,6 +292,7 @@ function Flashcards({
   const cardMeta = meta[card.id];
 
   function grade(rating: Rating) {
+    playGrade();
     fetch("/api/srs", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -306,7 +315,8 @@ function Flashcards({
   }
 
   async function onSaveToNote(content: string) {
-    const res = await appendPersonalNote(card.id, content);
+    // Save a concise 1-line summary of the reply (not the whole answer).
+    const res = await appendNoteSummary(card.id, content);
     if (res.ok && res.note != null) {
       setNotes((n) => ({ ...n, [card.id]: res.note! }));
     }
@@ -337,9 +347,9 @@ function Flashcards({
       <AnimatePresence mode="wait">
         <motion.div
           key={card.id}
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -8 }}
+          initial={{ opacity: 0, x: reduce ? 0 : -8 }}
+          animate={{ opacity: 1, x: 0 }}
+          exit={{ opacity: 0, x: reduce ? 0 : 8 }}
           transition={{ duration: 0.18 }}
           className="rounded-2xl border border-border bg-surface p-8 text-center"
         >
@@ -409,7 +419,12 @@ function Flashcards({
             </div>
           )}
 
-          <div className="font-jp text-3xl font-semibold">
+          <div
+            className={cn(
+              "font-jp text-3xl font-semibold",
+              !reduce && "glitch-in",
+            )}
+          >
             <RubyText>{card.term}</RubyText>
           </div>
           <div className="mt-2 flex justify-center">
@@ -417,7 +432,12 @@ function Flashcards({
           </div>
 
           {revealed ? (
-            <div className="mt-5 space-y-3 text-left">
+            <div
+              className={cn(
+                "mt-5 space-y-3 text-left",
+                !reduce && "glitch-in",
+              )}
+            >
               {showReading(card.term, card.reading) &&
                 (pitchOn ? (
                   <PitchAccent
@@ -433,6 +453,24 @@ function Flashcards({
                 <p className="font-jp text-sm text-muted">
                   <RubyText>{card.example}</RubyText>
                 </p>
+              )}
+
+              {cardMeta?.kanji && cardMeta.kanji.length > 0 && (
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="text-[11px] text-muted">Kanji:</span>
+                  {cardMeta.kanji.map((k) => (
+                    <Link
+                      key={k.char}
+                      href={`/kanji/${encodeURIComponent(k.char)}`}
+                      className="flex items-center gap-1 rounded-md border border-border bg-surface-2 px-2 py-0.5 transition-colors hover:bg-surface"
+                    >
+                      <span className="font-jp text-sm">{k.char}</span>
+                      {k.meaning && (
+                        <span className="text-[11px] text-muted">{k.meaning}</span>
+                      )}
+                    </Link>
+                  ))}
+                </div>
               )}
 
               <ConjugationTable
@@ -472,7 +510,13 @@ function Flashcards({
             </div>
           ) : (
             <div className="mt-8">
-              <Button onClick={() => setRevealed(true)} size="lg">
+              <Button
+                onClick={() => {
+                  setRevealed(true);
+                  playReveal();
+                }}
+                size="lg"
+              >
                 Show answer
               </Button>
             </div>

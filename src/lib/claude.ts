@@ -8,6 +8,8 @@ import {
   buildDeepDivePrompt,
   buildCoachPrompt,
   buildCollectionSummaryPrompt,
+  buildSnsSystemPrompt,
+  buildSnsUserMessage,
   OCR_PROMPT,
 } from "@/lib/prompts";
 import type {
@@ -17,6 +19,8 @@ import type {
   KnowledgeType,
   MapData,
   Profile,
+  SnsInputs,
+  SnsResult,
 } from "@/lib/types";
 import type { KanjiInfo, KanjiComponent } from "@/lib/kanji";
 import {
@@ -122,18 +126,92 @@ export async function runDiscussStream(opts: {
   return t && t.type === "text" ? t.text : "";
 }
 
-/** Stream a tutor answer. Returns a MessageStream; the caller pipes
- *  `.on("text", ...)` deltas to the browser and awaits `.finalMessage()`. */
-export function streamChat(system: string, messages: ChatTurn[]) {
-  return anthropicClient().messages.stream({
-    model: CHAT_MODEL,
+/** Which model answers the main chat tutor. Selectable per user (header dropdown,
+ *  persisted in profiles.chat_model); defaults to Gemini Flash for cost. */
+export type ChatModel = "gemini-flash" | "gemini-pro" | "sonnet" | "opus";
+export const DEFAULT_CHAT_MODEL: ChatModel = "gemini-flash";
+
+/** Coerce a stored/sent value into a ChatModel (default Gemini Flash; also the
+ *  fallback when migration 0018 hasn't run yet). */
+export function resolveChatModel(value: string | null | undefined): ChatModel {
+  return value === "gemini-pro" || value === "sonnet" || value === "opus"
+    ? value
+    : "gemini-flash";
+}
+
+/** Map a ChatModel to its CostHint label key. */
+export function chatModelLabelKey(
+  m: ChatModel,
+): "geminiFlash" | "geminiPro" | "sonnet" | "opus" {
+  return m === "gemini-flash"
+    ? "geminiFlash"
+    : m === "gemini-pro"
+      ? "geminiPro"
+      : m;
+}
+
+/** Stream a tutor answer with the chosen model, pushing text deltas to `onDelta`
+ *  and resolving with the full answer. Claude (Sonnet/Opus) uses the Anthropic
+ *  stream; Gemini (Flash/Pro) reuses the shared Gemini streamer — both share the
+ *  same onDelta shape so the chat route stays model-agnostic. */
+export async function runChatStream(opts: {
+  system: string;
+  messages: ChatTurn[];
+  model: ChatModel;
+  onDelta: (t: string) => void;
+}): Promise<string> {
+  if (opts.model === "gemini-flash" || opts.model === "gemini-pro") {
+    return runGeminiStream({
+      system: opts.system,
+      messages: opts.messages,
+      pro: opts.model === "gemini-pro",
+      onDelta: opts.onDelta,
+    });
+  }
+  const stream = anthropicClient().messages.stream({
+    model: opts.model === "opus" ? DEEP_LESSON_MODEL : CHAT_MODEL,
     max_tokens: 4096,
-    system,
+    system: opts.system,
     thinking: { type: "adaptive" },
     // medium effort balances quality and cost for conversational tutoring
     output_config: { effort: "medium" },
-    messages,
+    messages: opts.messages,
   });
+  stream.on("text", opts.onDelta);
+  const final = await stream.finalMessage();
+  const t = final.content.find((b) => b.type === "text");
+  return t && t.type === "text" ? t.text : "";
+}
+
+/** Compress a tutor reply into ONE concise study-note line worth keeping on a
+ *  flashcard. Cheap by design (Gemini Flash, or Haiku when engine="claude").
+ *  Falls back to a trimmed copy if the model returns nothing. */
+export async function summarizeNote(
+  content: string,
+  engine: AiEngine = "gemini",
+): Promise<string> {
+  const trimmed = content.trim();
+  if (trimmed.length <= 120) return trimmed;
+  const system =
+    "You compress a Japanese tutor's explanation into ONE short note line the learner keeps on a flashcard. Output a single line (~140 characters max), no preamble, no bullet, no quotes. Capture the single most useful takeaway. Write in English; keep any Japanese term with its reading as 漢字（かな）.";
+  const user = `Compress this into one memorable note line:\n\n${trimmed}`;
+  try {
+    if (engine === "gemini") {
+      const out = (await geminiText({ system, user })).trim();
+      return out || trimmed.slice(0, 140);
+    }
+    const res = await anthropicClient().messages.create({
+      model: COACH_MODEL,
+      max_tokens: 120,
+      system,
+      messages: [{ role: "user", content: user }],
+    });
+    const t = res.content.find((b) => b.type === "text");
+    const out = t && t.type === "text" ? t.text.trim() : "";
+    return out || trimmed.slice(0, 140);
+  } catch {
+    return trimmed.slice(0, 140);
+  }
 }
 
 // Lessons/summaries run inside one Vercel function with a 60s cap (Hobby plan),
@@ -1010,5 +1088,104 @@ export async function generateCoachNote(input: {
     };
   } catch {
     return { summary_md: "", focus_areas: [] };
+  }
+}
+
+// --- SNS communication assistant (natural X/Twitter phrasing) ---
+
+const SNS_SCHEMA = {
+  type: "object",
+  properties: {
+    options: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          japanese: { type: "string" },
+          thai: { type: "string" },
+          register: { type: "string" },
+          nuance: { type: "string" },
+        },
+        required: ["japanese", "thai", "register", "nuance"],
+        additionalProperties: false,
+      },
+    },
+    note: {
+      type: "object",
+      properties: {
+        kanji: { type: "string" },
+        grammar: { type: "string" },
+      },
+      required: ["kanji", "grammar"],
+      additionalProperties: false,
+    },
+    explanation: { type: "string" },
+  },
+  required: ["options", "note", "explanation"],
+  additionalProperties: false,
+} as const;
+
+const SNS_JSON_HINT = `\n\nReturn ONLY valid JSON (no markdown fences) matching exactly:\n{"options":[{"japanese":"...","thai":"...","register":"...","nuance":"..."}],"note":{"kanji":"...","grammar":"..."},"explanation":"..."}\nFor reply/compose return exactly 3 options and an empty "explanation". For explain mode, fill "explanation" and return 0–2 options. Write the "japanese" field with furigana in parentheses like 漢字（かんじ） — never <ruby> tags. Write thai/nuance/explanation/note in the learner's native language.`;
+
+/** Generate 3 natural Japanese SNS phrasings (or an explanation, in "explain"
+ *  mode) with native-language nuance notes. Structured output so it always
+ *  parses. Gemini by default (cheap), Claude when the engine is set to claude. */
+export async function generateSnsOptions(input: {
+  inputs: SnsInputs;
+  profile: Profile | null;
+  engine?: AiEngine;
+}): Promise<SnsResult> {
+  const system = buildSnsSystemPrompt(input.profile, input.inputs.mode);
+  const user = buildSnsUserMessage(input.inputs);
+
+  let rawJson: string;
+  if ((input.engine ?? "gemini") === "gemini") {
+    rawJson = await geminiStructured({
+      system,
+      user,
+      jsonHint: SNS_JSON_HINT,
+      pro: true, // conversational nuance benefits from Pro
+      english: false, // keep Thai translations/nuance
+    });
+  } else {
+    const res = await anthropicClient().messages.create({
+      model: CHAT_MODEL,
+      max_tokens: 1600,
+      output_config: { format: { type: "json_schema", schema: SNS_SCHEMA } },
+      system,
+      messages: [{ role: "user", content: user }],
+    });
+    const text = res.content.find((b) => b.type === "text");
+    if (!text || text.type !== "text") {
+      return { options: [], note: null, explanation: "" };
+    }
+    rawJson = text.text;
+  }
+
+  try {
+    const parsed = JSON.parse(rawJson) as Partial<SnsResult>;
+    const options = (parsed.options ?? [])
+      .filter((o) => o && o.japanese?.trim())
+      .slice(0, 3)
+      .map((o) => ({
+        japanese: o.japanese.trim(),
+        thai: (o.thai ?? "").trim(),
+        register: (o.register ?? "").trim(),
+        nuance: (o.nuance ?? "").trim(),
+      }));
+    const note =
+      parsed.note && (parsed.note.kanji?.trim() || parsed.note.grammar?.trim())
+        ? {
+            kanji: (parsed.note.kanji ?? "").trim(),
+            grammar: (parsed.note.grammar ?? "").trim(),
+          }
+        : null;
+    return {
+      options,
+      note,
+      explanation: (parsed.explanation ?? "").trim(),
+    };
+  } catch {
+    return { options: [], note: null, explanation: "" };
   }
 }

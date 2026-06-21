@@ -372,6 +372,16 @@ export function buildDiscussSystemPrompt(context: AskContext): string {
       context.excerpt ? `Excerpt:\n${context.excerpt.slice(0, 1500)}` : "",
     ].filter(Boolean);
     block = `<lesson>\n${lines.join("\n")}\n</lesson>`;
+  } else if (context.kind === "sns") {
+    intro = "helping refine a social-media (X/Twitter) message for";
+    const lines = [
+      context.mode ? `Mode: ${context.mode}` : "",
+      context.situation ? `Situation: ${context.situation}` : "",
+      context.draft ? `Current draft / what they want to say: ${context.draft}` : "",
+    ].filter(Boolean);
+    block =
+      `<sns>\n${lines.join("\n") || "(no extra context yet)"}\n</sns>\n` +
+      "Help them sound natural and friendly on Japanese SNS. When they ask to tweak a draft, keep their intent and as many of their own word choices as possible; suggest casual, native phrasings and explain nuance briefly. Offer alternatives when registers differ.";
   } else {
     intro = "chatting with";
     block = "";
@@ -381,5 +391,64 @@ export function buildDiscussSystemPrompt(context: AskContext): string {
 
 ${block}
 
-Answer their questions directly and helpfully — why an answer is right or wrong, whether something looks incorrect or ambiguous, nuance, usage, near-synonyms, or more examples. If something is genuinely wrong or ambiguous, say so clearly. Write your answer in ENGLISH (the learner's study language); use Japanese only for the words, patterns, and example sentences themselves, with <ruby>漢字<rt>かんじ</rt></ruby> markup for kanji. Keep answers short (2–4 sentences unless they truly need more).`;
+Answer their questions directly and helpfully — why an answer is right or wrong, whether something looks incorrect or ambiguous, nuance, usage, near-synonyms, or more examples. If something is genuinely wrong or ambiguous, say so clearly. Write your answer in ENGLISH (the learner's study language); use Japanese only for the words, patterns, and example sentences themselves. For furigana, write the reading in parentheses right after the kanji word, like 漢字（かんじ） — do NOT output <ruby> HTML tags. Keep answers short (2–4 sentences unless they truly need more).`;
+}
+
+// --- SNS communication assistant ---
+
+/** System prompt for the SNS assistant: a male, friendly, SNS-savvy helper that
+ *  drafts/refines natural Japanese for chatting with artists & fans on X, and
+ *  explains incoming messages. Adapted from the learner's own Thai gem prompt.
+ *  Explanations/translations are in the learner's NATIVE language (Thai) — this
+ *  is the one place we deliberately don't force English, since the goal is to
+ *  help them communicate, not study in English. */
+export function buildSnsSystemPrompt(
+  profile: Profile | null,
+  mode: string,
+): string {
+  const native = profile?.native_language || "Thai";
+  const persona = `You are a friendly, knowledgeable male assistant who helps the learner communicate naturally on Japanese social media (X/Twitter) with illustrators and fans. You respect the learner and their practice, keep a warm but not overly-eager tone, and you know modern Japanese net slang and SNS etiquette. The learner is around JLPT N3→N2; weave in useful N2 language, and don't shy away from N1+ when it's the natural choice.`;
+
+  const common = `Write all phrasings as NATURAL, casual social-media Japanese — the way a real person types a quick thought, not a textbook or a formal email. Avoid stiffness and over-politeness unless the situation calls for it. Match the requested register. For furigana, write the reading in parentheses right after the kanji, like 漢字（かんじ） — never output <ruby> HTML tags. Write every translation, nuance note and explanation in ${native} (the learner's native language), keeping only the Japanese phrasings themselves in Japanese.`;
+
+  if (mode === "explain") {
+    return `${persona}
+
+The learner pastes a Japanese message (a tweet, reply, or DM) they received or saw and wants to understand it — both the literal meaning and what's implied between the lines (tone, intent, jokes, slang, cultural context).
+
+In "explanation", give a clear ${native} explanation: the literal meaning first, then the nuance/subtext, tone, and any slang or references worth knowing. If a natural reply would help, include up to 2 short suggested replies in "options" (each with japanese / ${native} translation / register / nuance); otherwise return an empty options array. ${common}${LEARNER_CONTEXT}${profileBlock(profile)}`;
+  }
+
+  const task =
+    mode === "reply"
+      ? `The learner wants to REPLY to someone on X. Produce 3 natural Japanese replies that fit the situation and the relationship.`
+      : `The learner wants to POST something on X. Produce 3 natural Japanese ways to phrase it.`;
+
+  return `${persona}
+
+${task} Give exactly 3 distinct options that vary in tone/approach so the learner can choose. For each option provide: the Japanese phrasing, a ${native} translation, a short register label, and a one-line ${native} nuance note (when/why you'd use it). Keep options concise — this is a quick SNS message, not an essay.
+
+Also include a short "note" teaching aside: pick ONE useful kanji and ONE grammar point that appears in your options (or is relevant), each explained in one ${native} line. ${common}${LEARNER_CONTEXT}${profileBlock(profile)}`;
+}
+
+/** Build the user message describing what the learner wants help with. */
+export function buildSnsUserMessage(inputs: {
+  mode: string;
+  register: string;
+  posted?: string;
+  incoming?: string;
+  intent?: string;
+  extra?: string;
+}): string {
+  const lines: string[] = [`Mode: ${inputs.mode}`, `Register: ${inputs.register}`];
+  if (inputs.posted) lines.push(`What I posted / the situation: ${inputs.posted}`);
+  if (inputs.incoming)
+    lines.push(
+      inputs.mode === "explain"
+        ? `Message to explain: ${inputs.incoming}`
+        : `Their message I'm reacting to: ${inputs.incoming}`,
+    );
+  if (inputs.intent) lines.push(`What I want to say: ${inputs.intent}`);
+  if (inputs.extra) lines.push(`Extra notes: ${inputs.extra}`);
+  return lines.join("\n");
 }

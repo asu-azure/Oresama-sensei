@@ -239,6 +239,52 @@ The **data lives in Supabase (cloud)**, so chats/vocab/lessons sync automaticall
   `cleanRuby` strips stray backticks around ruby in `parseKanjiMnemonic`. **(e)** **iOS keyboard zoom**:
   `@media (pointer: coarse) { input,textarea,select { font-size:16px } }` in `globals.css` (touch only;
   no `maximum-scale`, pinch-zoom preserved). Run migration **0015** after 0011–0014.
+- ✅ v3.3 shipped (Ask-Sensei fixes + selectable chat model + SNS helper): **(a)** **Ask Sensei**
+  bottom-sheet now **lifts above the on-screen keyboard** (`useKeyboardInset` via `visualViewport`,
+  `useSyncExternalStore` so it's lint-clean) — fixes the iOS bug where the input was hidden behind the
+  keyboard and only the suggestion chips were tappable; the discuss prompt switched from `<ruby>` HTML
+  to **parenthetical furigana** 漢字（かんじ） (Gemini was HTML-escaping the tags) with a client-side
+  `decodeRubyEntities` (now in `src/lib/furigana.ts`) as defense; and **Save to notes** now stores a
+  cheap **1-line AI summary** (`summarizeNote` in `claude.ts` → `appendNoteSummary` in
+  `review/actions.ts`) instead of the whole reply. **(b)** Flashcard reveal shows a **tappable kanji
+  breakdown** (char + primary meaning, linking to `/kanji/[char]`) — computed server-side in
+  `review/page.tsx` (`kanjiGlosses` via `@/lib/kanji` `getInfo`; `buildMeta` is now async, stored in
+  `CardMeta.kanji`); resume-after-navigation already works via `use-review-session.ts`. **(c)** The
+  **main chat tutor is now model-selectable** — a header dropdown (Gemini Flash default / Pro / Sonnet /
+  Opus) persisted in `profiles.chat_model` (**migration 0018**). `streamChat` was replaced by
+  `runChatStream({model,onDelta})` in `claude.ts` (`ChatModel`/`resolveChatModel`; Claude via Anthropic
+  stream, Gemini via `runGeminiStream`); `/api/chat` takes a `model` body field (falls back to the saved
+  default), `chat-client` sends it + persists via `setChatModel` and the `CostHint` follows the choice.
+  OCR + lesson writing keep their own pickers. **(d)** New **SNS** tab (`/sns`) — a natural X/Twitter
+  communication helper: pick a **mode** (Reply / New post / Explain) + **tone**, give light context
+  (their message / what you want to say in Thai or rough JP), and get **3 natural Japanese phrasings**
+  each with a **Thai translation + nuance note** (+ a short ちょい学び kanji/grammar aside), or a Thai
+  **explanation** of a pasted tweet. `buildSnsSystemPrompt`/`buildSnsUserMessage` in `prompts.ts` adapt
+  the owner's Thai gem prompt (male, casual SNS-savvy, respects the user's word choices, N2 woven in but
+  **not capped — N1+ too**); explanations stay in **Thai** via a new `geminiStructured({english:false})`
+  flag. `generateSnsOptions` (structured, Gemini Pro / Claude) in `claude.ts`; `/api/sns` saves history
+  (`sns_interactions`, **migration 0019**) and **auto-extracts** vocab/grammar into the library
+  (`source_type:"sns"`, all levels). A refine chat reuses the **Ask Sensei** bubble via a new
+  `AskContext` `kind:"sns"`. Run migrations **0018**+**0019** after 0015.
+- ✅ v3.4 shipped (mobile UI/UX polish): **(a)** **Pitch-accent alignment** — marked morae no longer sit
+  ~3px lower; every mora now reserves a uniform transparent `border-t-[3px]` and only the overline
+  (top)/downstep (right) get color via new per-side classes (`over`/`drop`) in `ACCENT_TYPE_META`
+  (`pitch.ts`) — see `pitch-accent.tsx`. **(b)** **Dashboard 14-day chart** no longer overflows on
+  mobile: per-day columns got `min-w-0`, labels `truncate`, bars row `overflow-hidden`
+  (`dashboard/page.tsx`). **(c)** **Safe-area / Dynamic Island** — `appleWebApp.statusBarStyle` is now
+  **`black-translucent`** so the installed PWA paints edge-to-edge under the island (header keeps its
+  `env(safe-area-inset-top)` padding; mobile header bg made opaque). NOTE: Dynamic Island **Live
+  Activities are native-iOS-only (ActivityKit) — a PWA cannot use them**; re-add the home-screen app
+  after deploy for the status-bar change. **(d)** **Flashcard "hologram glitch"** transition — RGB-split
+  `glitch-in` CSS keyframe (`globals.css`) on reveal + card advance in `review-client.tsx`, gated by
+  `useReducedMotion()` (plain fade when reduced). **(e)** **Tap sounds + haptics** (default ON) — tiny
+  synthesized Web Audio blips + `navigator.vibrate`, no asset files (`src/lib/use-sound.ts`,
+  `useSyncExternalStore` flag like `use-pitch`); hooked into the shared **Button**, flashcard
+  reveal/grade, and nav taps; **SoundToggle** in Settings ("Device preferences"). **(f)** **Tap-registered
+  feedback** — each nav link shows a pending spinner via Next 16 **`useLinkStatus`** (`NavLinkSpinner`
+  in `nav.tsx`), and new **`loading.tsx`** skeletons added for `review/chat/books/lessons/settings/sns`
+  (reuse `GeometricLoader`). No DB migration. Settings AI-engine help text updated (chat now has its own
+  model picker).
 - ⏳ Next ideas (not built): library multi-select bulk source-tag (per-lesson editor covers backfill for
   now); per-page knowledge granularity (page color currently aggregates the whole lesson's items); a
   standalone personalized-lesson generator; Anki export; paginate

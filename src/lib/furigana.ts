@@ -26,6 +26,20 @@ export function stripFurigana(input: string): string {
     .replace(/<\/?(?:ruby|rt|rp)>/g, "");
 }
 
+/** Decode the HTML entities Gemini emits when it escapes `<ruby>` markup
+ *  (`&lt;ruby&gt;…` → `<ruby>…`). Client-safe mirror of the server helper in
+ *  gemini.ts. We deliberately do NOT decode `&quot;` (only matters inside JSON).
+ *  Run this on streamed Gemini text before rendering so furigana shows as ruby
+ *  instead of literal `<ruby>` tags. */
+export function decodeRubyEntities(input: string): string {
+  if (!input) return input;
+  return input
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&#0*39;|&apos;/g, "'")
+    .replace(/&amp;/g, "&");
+}
+
 /** Pull a kana reading out of ruby markup (the concatenated <rt> contents).
  *  Used to backfill a missing reading when a term arrived with embedded ruby. */
 export function readingFromRuby(input: string): string {

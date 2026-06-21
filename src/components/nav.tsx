@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
+import Link, { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -17,15 +17,32 @@ import {
   Search,
   GraduationCap,
   PenLine,
+  AtSign,
   MoreHorizontal,
+  Loader2,
   X,
 } from "lucide-react";
 import { signOut } from "@/app/login/actions";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { playTap } from "@/lib/use-sound";
 import { cn } from "@/lib/utils";
+
+/** Shows a spinner while THIS link's navigation is pending, so a tap registers
+ *  immediately even when the next page is still fetching. Must render inside a
+ *  <Link> (useLinkStatus reads that link's transition state). */
+function NavLinkSpinner({ className }: { className?: string }) {
+  const { pending } = useLinkStatus();
+  if (!pending) return null;
+  return (
+    <Loader2
+      className={cn("h-3.5 w-3.5 animate-spin text-primary", className)}
+    />
+  );
+}
 
 const links = [
   { href: "/chat", label: "Chat", icon: MessageCircle },
+  { href: "/sns", label: "SNS", icon: AtSign },
   { href: "/lessons", label: "Lessons", icon: BookImage },
   { href: "/books", label: "Books", icon: BookMarked },
   { href: "/review", label: "Review", icon: Brain },
@@ -76,6 +93,7 @@ export function Nav({ reviewDue = 0 }: { reviewDue?: number }) {
                 <Link
                   key={href}
                   href={href}
+                  onClick={playTap}
                   className={cn(
                     "relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
                     active ? "text-foreground" : "text-muted hover:text-foreground",
@@ -90,6 +108,7 @@ export function Nav({ reviewDue = 0 }: { reviewDue?: number }) {
                   )}
                   <Icon className="h-4 w-4 shrink-0" />
                   <span className="flex-1">{label}</span>
+                  <NavLinkSpinner />
                   {showBadge && <Badge value={reviewDue} />}
                 </Link>
               );
@@ -111,7 +130,7 @@ export function Nav({ reviewDue = 0 }: { reviewDue?: number }) {
       </aside>
 
       {/* ===== Mobile: slim top bar (brand + page title + theme) ===== */}
-      <header className="sticky top-0 z-30 border-b-2 border-border bg-surface/80 backdrop-blur-md [padding-top:env(safe-area-inset-top)] md:hidden">
+      <header className="sticky top-0 z-30 border-b-2 border-border bg-surface backdrop-blur-md [padding-top:env(safe-area-inset-top)] md:hidden">
         <div aria-hidden="true" className="h-1 w-full" style={{ background: ACCENT }} />
         <div className="flex h-12 items-center gap-2 pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))]">
           <Link
@@ -141,7 +160,10 @@ export function Nav({ reviewDue = 0 }: { reviewDue?: number }) {
               <Link
                 key={href}
                 href={href}
-                onClick={() => setMoreOpen(false)}
+                onClick={() => {
+                  playTap();
+                  setMoreOpen(false);
+                }}
                 className={cn(
                   "relative flex flex-1 flex-col items-center justify-center gap-0.5 py-2 text-[10px] font-medium transition-colors",
                   active ? "text-primary" : "text-muted",
@@ -161,6 +183,7 @@ export function Nav({ reviewDue = 0 }: { reviewDue?: number }) {
                       <Badge value={reviewDue} />
                     </span>
                   )}
+                  <NavLinkSpinner className="absolute -right-2.5 -top-2" />
                 </span>
                 {label}
               </Link>
@@ -218,7 +241,10 @@ export function Nav({ reviewDue = 0 }: { reviewDue?: number }) {
                     <Link
                       key={href}
                       href={href}
-                      onClick={() => setMoreOpen(false)}
+                      onClick={() => {
+                        playTap();
+                        setMoreOpen(false);
+                      }}
                       className={cn(
                         "flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors",
                         active
@@ -228,6 +254,7 @@ export function Nav({ reviewDue = 0 }: { reviewDue?: number }) {
                     >
                       <Icon className="h-4 w-4 shrink-0" />
                       <span className="flex-1 truncate">{label}</span>
+                      <NavLinkSpinner />
                     </Link>
                   );
                 })}

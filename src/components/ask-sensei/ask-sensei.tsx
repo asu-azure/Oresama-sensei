@@ -1,12 +1,40 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Send, Loader2, MessageCircle, BookmarkPlus, Check } from "lucide-react";
 import { Markdown } from "@/components/markdown";
 import { CostHint, MODEL_LABELS } from "@/components/cost-hint";
+import { decodeRubyEntities } from "@/lib/furigana";
 import { cn } from "@/lib/utils";
 import type { AskContext, DiscussMessage } from "@/lib/types";
+
+/** How much the on-screen keyboard currently overlaps the bottom of the layout
+ *  viewport. On iOS the soft keyboard doesn't push `position: fixed` elements up,
+ *  so without this the input at the bottom of the sheet ends up hidden behind the
+ *  keyboard (and it feels like you can only tap the suggestions). useSyncExternalStore
+ *  keeps it lint-clean (no setState-in-effect) and hydration-safe (server → 0). */
+function useKeyboardInset(): number {
+  return useSyncExternalStore(
+    (cb) => {
+      const vv = typeof window !== "undefined" ? window.visualViewport : null;
+      if (!vv) return () => {};
+      vv.addEventListener("resize", cb);
+      vv.addEventListener("scroll", cb);
+      return () => {
+        vv.removeEventListener("resize", cb);
+        vv.removeEventListener("scroll", cb);
+      };
+    },
+    () => {
+      const vv = window.visualViewport;
+      if (!vv) return 0;
+      const overlap = window.innerHeight - vv.height - vv.offsetTop;
+      return overlap > 1 ? Math.round(overlap) : 0;
+    },
+    () => 0,
+  );
+}
 
 const DEFAULT_SUGGESTIONS = [
   "Can you explain this more?",
@@ -96,6 +124,7 @@ function AskPanel({
   const [loading, setLoading] = useState(false);
   const [savedKeys, setSavedKeys] = useState<Set<string>>(new Set());
   const scrollRef = useRef<HTMLDivElement>(null);
+  const kbInset = useKeyboardInset();
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -153,7 +182,9 @@ function AskPanel({
   return (
     <motion.div
       initial={{ opacity: 0, y: 24 }}
-      animate={{ opacity: 1, y: 0 }}
+      // Lift the whole sheet by the keyboard overlap so the input stays visible
+      // above the on-screen keyboard (0 on desktop / when the keyboard is closed).
+      animate={{ opacity: 1, y: -kbInset }}
       exit={{ opacity: 0, y: 24 }}
       transition={{ type: "spring", stiffness: 360, damping: 32 }}
       className="fixed inset-x-0 bottom-0 z-50 flex max-h-[80vh] flex-col rounded-t-2xl border border-border bg-background shadow-2xl sm:inset-x-auto sm:right-4 sm:bottom-4 sm:w-[400px] sm:max-h-[70vh] sm:rounded-2xl"
@@ -210,7 +241,7 @@ function AskPanel({
               <div className="font-jp">
                 {m.content ? (
                   <>
-                    <Markdown>{m.content}</Markdown>
+                    <Markdown>{decodeRubyEntities(m.content)}</Markdown>
                     {onSaveToNote && !loading && (
                       <button
                         onClick={() => saveToNote(m.content, i)}

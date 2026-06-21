@@ -27,7 +27,11 @@ export const metadata: Metadata = {
   // meta so the app launches standalone with the right title.
   appleWebApp: {
     capable: true,
-    statusBarStyle: "default",
+    // "black-translucent" lets the standalone PWA paint edge-to-edge UNDER the
+    // status bar / Dynamic Island; the safe-area-inset padding on the header
+    // keeps content clear of it. (Owner must remove + re-add the home-screen app
+    // for a status-bar-style change to take effect.)
+    statusBarStyle: "black-translucent",
     title: "俺様先生",
   },
 };
