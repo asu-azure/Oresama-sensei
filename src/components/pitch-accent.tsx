@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { cn } from "@/lib/utils";
 import {
   lookupAccent,
@@ -9,10 +9,16 @@ import {
   ACCENT_TYPE_META,
 } from "@/lib/pitch";
 
+// How long (s) the draw of one mora's line waits behind the previous one, so the
+// overline "burns" left→right like a lit fuse.
+const STEP = 0.09;
+
 // Renders a kana reading with classic overline + downstep pitch-accent notation:
-// a line over the high morae, with a hook where the pitch falls. The overline is
-// colored by accent type (平板/頭高/中高/尾高) and a small type tag follows. Falls
-// back to the plain reading while loading or when the word isn't in the dictionary.
+// a line over the HIGH morae only, with a vertical hook where the pitch falls.
+// Each line is an explicit element (low morae get nothing — no stray lines), it
+// animates left→right with a soft glow, and is colored by accent type
+// (平板/頭高/中高/尾高). Falls back to the plain reading while loading or when the
+// word isn't in the dictionary.
 export function PitchAccent({
   term,
   reading,
@@ -43,6 +49,7 @@ export function PitchAccent({
   const pattern = pitchPattern(reading, accent);
   const type = accentType(reading, accent);
   const meta = ACCENT_TYPE_META[type];
+
   return (
     <span
       className={cn("inline-flex items-start font-jp", className)}
@@ -51,21 +58,25 @@ export function PitchAccent({
       {/* Force dark kana (not the inherited muted gray) so the colored
           overline/downstep clearly stands out. */}
       <span className="inline-flex items-start text-foreground">
-        {pattern.map((p, i) => (
-          // Every mora reserves the SAME 3px top border (transparent by default)
-          // so a high mora's overline doesn't push its glyph ~3px lower than its
-          // neighbours. Only the top (overline) / right (downstep hook) get color.
-          <span
-            key={i}
-            className={cn(
-              "border-t-[3px] border-solid border-t-transparent leading-snug",
-              p.high && meta.over,
-              p.drop && cn("border-r-[3px]", meta.drop),
-            )}
-          >
-            {p.mora}
-          </span>
-        ))}
+        {pattern.map((p, i) => {
+          // The line for a high mora draws after its left neighbours; the drop
+          // hook fires just after that mora's overline reaches it.
+          const lineStyle = {
+            "--pitch-color": meta.cssColor,
+            "--pitch-delay": `${i * STEP}s`,
+          } as CSSProperties;
+          const dropStyle = {
+            "--pitch-color": meta.cssColor,
+            "--pitch-delay": `${i * STEP + STEP}s`,
+          } as CSSProperties;
+          return (
+            <span key={i} className="pitch-mora">
+              {p.high && <span className="pitch-line" style={lineStyle} />}
+              {p.drop && <span className="pitch-drop" style={dropStyle} />}
+              {p.mora}
+            </span>
+          );
+        })}
       </span>
       {showTag && (
         <sup className={cn("ml-0.5 text-[9px] font-medium", meta.text)}>

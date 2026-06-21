@@ -60,6 +60,8 @@ export type AccentTypeMeta = {
   drop: string; // right-border color class for the downstep hook
   text: string; // tag + legend text color
   dot: string; // legend swatch background
+  /** Raw CSS color (Tailwind v4 theme var) for the drawn pitch line + its glow. */
+  cssColor: string;
 };
 
 /** Per-type colors + labels. Data-only (Tailwind class strings), mirroring the
@@ -73,6 +75,7 @@ export const ACCENT_TYPE_META: Record<AccentType, AccentTypeMeta> = {
     drop: "border-r-blue-500",
     text: "text-blue-600",
     dot: "bg-blue-500",
+    cssColor: "var(--color-blue-500)",
   },
   atamadaka: {
     jp: "頭高",
@@ -82,6 +85,7 @@ export const ACCENT_TYPE_META: Record<AccentType, AccentTypeMeta> = {
     drop: "border-r-rose-500",
     text: "text-rose-600",
     dot: "bg-rose-500",
+    cssColor: "var(--color-rose-500)",
   },
   nakadaka: {
     jp: "中高",
@@ -91,6 +95,7 @@ export const ACCENT_TYPE_META: Record<AccentType, AccentTypeMeta> = {
     drop: "border-r-amber-500",
     text: "text-amber-600",
     dot: "bg-amber-500",
+    cssColor: "var(--color-amber-500)",
   },
   odaka: {
     jp: "尾高",
@@ -100,6 +105,7 @@ export const ACCENT_TYPE_META: Record<AccentType, AccentTypeMeta> = {
     drop: "border-r-emerald-600",
     text: "text-emerald-700",
     dot: "bg-emerald-600",
+    cssColor: "var(--color-emerald-600)",
   },
 };
 

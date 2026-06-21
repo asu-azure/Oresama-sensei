@@ -285,6 +285,15 @@ The **data lives in Supabase (cloud)**, so chats/vocab/lessons sync automaticall
   in `nav.tsx`), and new **`loading.tsx`** skeletons added for `review/chat/books/lessons/settings/sns`
   (reuse `GeometricLoader`). No DB migration. Settings AI-engine help text updated (chat now has its own
   model picker).
+- ✅ v3.5 shipped (pitch render rewrite + modern sound): **(a)** `PitchAccent` (`pitch-accent.tsx`)
+  no longer draws the overline with per-mora transparent borders (low morae were falling back to a
+  visible border → "line over everything"); it now renders **explicit** `.pitch-line`/`.pitch-drop`
+  elements **only on high/drop morae**, so atamadaka shows the overline on mora 1 only. The line
+  **draws left→right** (`pitch-draw` keyframe, staggered `--pitch-delay`) with a soft fuse-like glow
+  (`pitch-glow`) colored by accent type via a new `cssColor` (`var(--color-*)`) field in
+  `ACCENT_TYPE_META`; reduced-motion shows a static line. Keyframes/classes in `globals.css`.
+  **(b)** UI sound (`src/lib/use-sound.ts`) swapped from chiptune oscillator sweeps to **soft sine
+  ticks** through a low-pass filter with a smooth envelope (tap/reveal/grade); on/off + haptics unchanged.
 - ⏳ Next ideas (not built): library multi-select bulk source-tag (per-lesson editor covers backfill for
   now); per-page knowledge granularity (page color currently aggregates the whole lesson's items); a
   standalone personalized-lesson generator; Anki export; paginate
