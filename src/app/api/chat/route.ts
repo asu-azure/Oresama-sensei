@@ -1,5 +1,10 @@
 import { createClient } from "@/lib/supabase/server";
-import { streamChat, extractKnowledge, type ChatTurn } from "@/lib/claude";
+import {
+  runChatStream,
+  resolveChatModel,
+  extractKnowledge,
+  type ChatTurn,
+} from "@/lib/claude";
 import { recallKnowledge, storeKnowledge, storeMessage } from "@/lib/memory";
 import { buildChatSystemPrompt } from "@/lib/prompts";
 import { computeInsights, statsDigest, type InsightItem } from "@/lib/insights";
@@ -12,7 +17,7 @@ export async function POST(request: Request) {
   } = await supabase.auth.getUser();
   if (!user) return new Response("Unauthorized", { status: 401 });
 
-  let body: { conversationId?: string; message?: string };
+  let body: { conversationId?: string; message?: string; model?: string };
   try {
     body = await request.json();
   } catch {
@@ -88,7 +93,12 @@ export async function POST(request: Request) {
     content: m.content,
   }));
 
-  const claudeStream = streamChat(system, turns);
+  // Per-request model from the header dropdown, falling back to the saved
+  // default (profiles.chat_model), then Gemini Flash. Degrades gracefully if
+  // migration 0018 hasn't run (column absent → default).
+  const model = resolveChatModel(
+    body.model ?? (profile as { chat_model?: string } | null)?.chat_model,
+  );
   const encoder = new TextEncoder();
   const convId: string = conversationId!; // guaranteed set above
 
@@ -97,19 +107,21 @@ export async function POST(request: Request) {
       let answer = "";
       let clientGone = false;
 
-      claudeStream.on("text", (delta) => {
-        answer += delta;
-        if (!clientGone) {
-          try {
-            controller.enqueue(encoder.encode(delta));
-          } catch {
-            clientGone = true;
-          }
-        }
-      });
-
       try {
-        await claudeStream.finalMessage();
+        answer = await runChatStream({
+          system,
+          messages: turns,
+          model,
+          onDelta: (delta) => {
+            if (!clientGone) {
+              try {
+                controller.enqueue(encoder.encode(delta));
+              } catch {
+                clientGone = true;
+              }
+            }
+          },
+        });
       } catch (e) {
         console.error("chat generation error:", e);
       }

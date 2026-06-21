@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { resolveChatModel } from "@/lib/claude";
 import { ChatClient, type UiMessage } from "./chat-client";
 import type { ConversationSummary } from "./conversation-drawer";
 
@@ -22,6 +23,22 @@ export default async function ChatPage({
     .eq("user_id", user!.id)
     .order("created_at", { ascending: false });
   const conversations = (convoRows ?? []) as ConversationSummary[];
+
+  // The learner's saved default chat model (degrades to Gemini Flash if the
+  // column / migration 0018 isn't present yet).
+  let chatModel = "gemini-flash";
+  try {
+    const { data: prof } = await supabase
+      .from("profiles")
+      .select("chat_model")
+      .eq("id", user!.id)
+      .maybeSingle();
+    chatModel = resolveChatModel(
+      (prof as { chat_model?: string } | null)?.chat_model,
+    );
+  } catch {
+    // column missing — keep default
+  }
 
   // Active conversation: ?c=<id> if it belongs to the user, else the most recent.
   let activeId: string | null = null;
@@ -66,6 +83,7 @@ export default async function ChatPage({
       initialHasMore={hasMore}
       initialOldestCursor={oldestCursor}
       conversations={conversations}
+      initialChatModel={chatModel}
     />
   );
 }

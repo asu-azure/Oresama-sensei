@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { Button } from "@/components/ui/button";
+import { SoundToggle } from "@/components/sound-toggle";
 import { updateProfile } from "./actions";
 import type { Profile } from "@/lib/types";
 
@@ -120,13 +121,22 @@ export default async function SettingsPage() {
           <p className="text-xs text-muted">
             Controls exercises, kanji mnemonics, deep-dives, the knowledge map,
             review summaries, the study coach, and the Ask Sensei helper. The main
-            chat tutor always uses Claude, and OCR + lesson writing keep their own
-            model pickers.
+            chat tutor has its own model picker in the chat header, and OCR +
+            lesson writing keep their own pickers.
           </p>
         </div>
 
         <Button type="submit">Save profile</Button>
       </form>
+
+      <div className="space-y-2 border-t border-border pt-6">
+        <h2 className="text-sm font-medium">Device preferences</h2>
+        <p className="text-xs text-muted">
+          Saved on this device. Tap sounds &amp; vibration give quick feedback
+          when you tap buttons and flip flashcards.
+        </p>
+        <SoundToggle />
+      </div>
     </div>
   );
 }

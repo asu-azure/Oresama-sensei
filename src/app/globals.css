@@ -205,6 +205,28 @@ rt {
   100% { transform: translateX(106vw) scale(1) rotate(220deg); opacity: 0; }
 }
 
+/* "Hologram glitch" — a quick RGB-split + jitter that settles to clean text.
+   Used for the flashcard reveal/advance (applied via the .glitch-in class).
+   text-shadow drives the chromatic split; it only affects glyphs, not borders. */
+@keyframes glitch-in {
+  0%   { opacity: 0; transform: translate3d(-4px, 0, 0);
+         text-shadow: 2px 0 var(--pop-pink), -2px 0 var(--pop-cyan); }
+  15%  { opacity: 1; transform: translate3d(4px, 0, 0);
+         text-shadow: -3px 0 var(--pop-pink), 3px 0 var(--pop-cyan); }
+  30%  { transform: translate3d(-3px, 0, 0);
+         text-shadow: 3px 0 var(--pop-cyan), -3px 0 var(--pop-pink); }
+  45%  { opacity: 0.65; transform: translate3d(2px, 0, 0); }
+  60%  { opacity: 1; transform: translate3d(-1px, 0, 0);
+         text-shadow: 1px 0 var(--pop-pink), -1px 0 var(--pop-cyan); }
+  100% { opacity: 1; transform: translate3d(0, 0, 0); text-shadow: none; }
+}
+.glitch-in {
+  animation: glitch-in 0.3s steps(3, end) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .glitch-in { animation: none; }
+}
+
 /* ---------------------------------------------------------------------------
    Pixel "buddies" — tiny characters that amble / sit / sleep along the bottom
 --------------------------------------------------------------------------- */

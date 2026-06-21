@@ -24,7 +24,8 @@ export type SourceType =
   | "internet"
   | "real_world"
   | "chat"
-  | "kanji";
+  | "kanji"
+  | "sns";
 
 /** Material types the learner explicitly picks when uploading photos. */
 export const UPLOAD_MATERIAL_TYPES: {
@@ -93,6 +94,7 @@ const SOURCE_META: Record<SourceType, { label: string; emoji: string }> = {
   real_world: { label: "Real world", emoji: "📷" },
   chat: { label: "Chat", emoji: "💬" },
   kanji: { label: "Kanji", emoji: "字" },
+  sns: { label: "SNS", emoji: "🐦" },
 };
 
 export function sourceMeta(s: SourceType | string | null | undefined): {

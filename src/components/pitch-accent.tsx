@@ -52,13 +52,15 @@ export function PitchAccent({
           overline/downstep clearly stands out. */}
       <span className="inline-flex items-start text-foreground">
         {pattern.map((p, i) => (
+          // Every mora reserves the SAME 3px top border (transparent by default)
+          // so a high mora's overline doesn't push its glyph ~3px lower than its
+          // neighbours. Only the top (overline) / right (downstep hook) get color.
           <span
             key={i}
             className={cn(
-              "leading-snug",
-              meta.border,
-              p.high && "border-t-[3px] border-solid",
-              p.drop && "border-r-[3px] border-solid",
+              "border-t-[3px] border-solid border-t-transparent leading-snug",
+              p.high && meta.over,
+              p.drop && cn("border-r-[3px]", meta.drop),
             )}
           >
             {p.mora}

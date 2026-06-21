@@ -94,13 +94,18 @@ export async function geminiStructured(opts: {
   user: string;
   jsonHint: string;
   pro?: boolean;
+  /** Append the "write explanations in English" directive (default true). Set
+   *  false where the output should stay in the learner's native language (e.g.
+   *  the SNS assistant, which writes Thai translations/nuance). */
+  english?: boolean;
 }): Promise<string> {
+  const langDirective = opts.english === false ? "" : ENGLISH_DIRECTIVE;
   const res = await withRetry(
     () =>
       ai().models.generateContent({
         model: opts.pro ? GEMINI_PRO : GEMINI_FLASH,
         config: {
-          systemInstruction: opts.system + ENGLISH_DIRECTIVE + opts.jsonHint,
+          systemInstruction: opts.system + langDirective + opts.jsonHint,
           responseMimeType: "application/json",
           temperature: 0.7,
         },

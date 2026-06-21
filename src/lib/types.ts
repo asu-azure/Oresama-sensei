@@ -224,7 +224,67 @@ export type AskContext =
       kun?: string[];
     }
   | { kind: "lesson"; title?: string | null; excerpt?: string | null }
+  | {
+      kind: "sns";
+      mode?: string;
+      situation?: string | null;
+      draft?: string | null;
+    }
   | { kind: "free" };
+
+// --- SNS communication assistant ---
+
+export type SnsMode = "reply" | "compose" | "explain";
+export type SnsRegister = "casual" | "friendly" | "polite";
+
+/** The lightweight context the learner gives the SNS assistant. */
+export interface SnsInputs {
+  mode: SnsMode;
+  register: SnsRegister;
+  /** What the learner already posted / the situation. */
+  posted?: string;
+  /** The message they're reacting to (their tweet to explain, or a reply). */
+  incoming?: string;
+  /** What they want to say (Thai or rough Japanese). */
+  intent?: string;
+  /** Anything else, free-form. */
+  extra?: string;
+}
+
+/** One natural Japanese phrasing option with a Thai gloss + nuance note. */
+export interface SnsOption {
+  /** Natural Japanese, furigana written as 漢字（かな） parentheses. */
+  japanese: string;
+  /** Thai translation. */
+  thai: string;
+  /** Register label (e.g. casual / friendly-polite). */
+  register: string;
+  /** Thai nuance / when-to-use note. */
+  nuance: string;
+}
+
+/** A tiny optional teaching aside (one kanji + one grammar point). */
+export interface SnsNote {
+  kanji: string;
+  grammar: string;
+}
+
+/** The assistant's response: phrasing options (+ optional explanation for
+ *  "explain" mode, where the learner pastes a tweet to decode). */
+export interface SnsResult {
+  options: SnsOption[];
+  note: SnsNote | null;
+  /** For "explain" mode: a Thai explanation of what the pasted text means
+   *  (literal + between-the-lines). Empty for reply/compose. */
+  explanation: string;
+}
+
+/** A saved SNS interaction (history). */
+export interface SnsInteraction extends SnsResult {
+  id: string;
+  inputs: SnsInputs;
+  created_at: string;
+}
 
 /** A saved practice test (the "test bank"). `exercises` replays for free. */
 export interface ReviewTest {

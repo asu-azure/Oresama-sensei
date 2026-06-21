@@ -11,14 +11,29 @@ import {
   ConversationDrawer,
   type ConversationSummary,
 } from "./conversation-drawer";
-import { loadOlderMessages } from "./actions";
+import { loadOlderMessages, setChatModel } from "./actions";
 import { cn } from "@/lib/utils";
+import type { ChatModel } from "@/lib/claude";
 
 export type UiMessage = {
   id: string;
   role: "user" | "assistant";
   content: string;
 };
+
+/** Chat model options for the header picker. Gemini Flash is the cheap default;
+ *  Pro/Sonnet/Opus trade cost for quality. (OCR + lessons keep their own pickers
+ *  — this only changes which model answers the tutor.) */
+const CHAT_MODELS: { value: ChatModel; label: string }[] = [
+  { value: "gemini-flash", label: MODEL_LABELS.geminiFlash },
+  { value: "gemini-pro", label: MODEL_LABELS.geminiPro },
+  { value: "sonnet", label: MODEL_LABELS.sonnet },
+  { value: "opus", label: MODEL_LABELS.opus },
+];
+
+function chatModelLabel(m: ChatModel): string {
+  return CHAT_MODELS.find((x) => x.value === m)?.label ?? MODEL_LABELS.geminiFlash;
+}
 
 const SUGGESTIONS = [
   "What do these difficult words mean? (paste a sentence or some words)",
@@ -34,15 +49,18 @@ export function ChatClient({
   initialHasMore,
   initialOldestCursor,
   conversations,
+  initialChatModel = "gemini-flash",
 }: {
   initialConversationId: string | null;
   initialMessages: UiMessage[];
   initialHasMore: boolean;
   initialOldestCursor: string | null;
   conversations: ConversationSummary[];
+  initialChatModel?: string;
 }) {
   const [conversationId, setConversationId] = useState(initialConversationId);
   const [messages, setMessages] = useState<UiMessage[]>(initialMessages);
+  const [model, setModel] = useState<ChatModel>(initialChatModel as ChatModel);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -169,7 +187,7 @@ export function ChatClient({
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ conversationId, message: content }),
+        body: JSON.stringify({ conversationId, message: content, model }),
       });
       if (!res.ok || !res.body) {
         throw new Error(
@@ -212,6 +230,12 @@ export function ChatClient({
     setOldestCursor(null);
   }
 
+  function changeModel(next: ChatModel) {
+    setModel(next);
+    // Remember it as the default for next time (best-effort).
+    setChatModel(next).catch(() => {});
+  }
+
   return (
     <div className="flex h-[calc(100dvh-var(--top-nav)-var(--bottom-nav))] flex-col">
       <div className="flex items-center justify-between py-3">
@@ -224,9 +248,28 @@ export function ChatClient({
             {messages.length > 0 ? "Conversation" : "Ask anything"}
           </h1>
         </div>
-        <Button variant="outline" size="sm" onClick={newChat} disabled={busy}>
-          <Plus className="h-4 w-4" /> New chat
-        </Button>
+        <div className="flex items-center gap-2">
+          <label className="sr-only" htmlFor="chat-model">
+            Tutor model
+          </label>
+          <select
+            id="chat-model"
+            value={model}
+            onChange={(e) => changeModel(e.target.value as ChatModel)}
+            disabled={busy}
+            title="Which AI model answers — your choice is remembered. OCR and lessons keep their own pickers."
+            className="rounded-lg border border-border bg-surface px-2 py-1.5 text-xs text-muted outline-none transition-colors hover:text-foreground focus:ring-2 focus:ring-ring disabled:opacity-50"
+          >
+            {CHAT_MODELS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+          <Button variant="outline" size="sm" onClick={newChat} disabled={busy}>
+            <Plus className="h-4 w-4" /> New chat
+          </Button>
+        </div>
       </div>
 
       <div ref={scrollRef} className="flex-1 space-y-4 overflow-y-auto pb-4">
@@ -367,7 +410,7 @@ export function ChatClient({
           </Button>
         </div>
         <div className="mt-1.5 flex justify-center">
-          <CostHint model={MODEL_LABELS.sonnet} />
+          <CostHint model={chatModelLabel(model)} />
         </div>
       </form>
     </div>

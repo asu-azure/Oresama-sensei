@@ -8,6 +8,7 @@ import {
 } from "@/lib/srs";
 import { masteryLevel } from "@/lib/mastery";
 import { pageRefLabel } from "@/lib/source";
+import { uniqueKanji, levelOf, getInfo } from "@/lib/kanji";
 
 const COLS =
   "id,type,term,reading,meaning,example,jlpt_level,part_of_speech,personal_note,srs_stability,srs_difficulty,srs_state,srs_interval,srs_reps,srs_lapses,srs_last_review,last_seen";
@@ -37,8 +38,21 @@ function buildPreviews(rows: Row[]): Record<string, IntervalPreview> {
   return out;
 }
 
+/** Kanji in a term we have data for, each with its primary English meaning, for
+ *  the tappable breakdown on the answer side. Data is bundled offline so this is
+ *  cheap; computed on the server so the client never blocks on a lazy import. */
+async function kanjiGlosses(term: string): Promise<{ char: string; meaning: string }[]> {
+  const chars = uniqueKanji(term).filter((c) => levelOf(c));
+  const out: { char: string; meaning: string }[] = [];
+  for (const c of chars) {
+    const info = await getInfo(c);
+    out.push({ char: c, meaning: info?.meanings?.[0] ?? "" });
+  }
+  return out;
+}
+
 /** Per-card source/history/strength metadata for the collapsible details panel. */
-function buildMeta(rows: Row[]): Record<string, CardMeta> {
+async function buildMeta(rows: Row[]): Promise<Record<string, CardMeta>> {
   const now = new Date();
   const out: Record<string, CardMeta> = {};
   for (const r of rows) {
@@ -52,6 +66,7 @@ function buildMeta(rows: Row[]): Record<string, CardMeta> {
       reps: r.srs_reps ?? 0,
       retr: retrievability(r, now),
       mastery: masteryLevel(r).level,
+      kanji: await kanjiGlosses(r.term),
     };
   }
   return out;
@@ -80,7 +95,7 @@ export default async function ReviewPage({
       <ReviewClient
         cards={rows as ReviewCard[]}
         previews={buildPreviews(rows)}
-        meta={buildMeta(rows)}
+        meta={await buildMeta(rows)}
         single
       />
     );
@@ -124,6 +139,11 @@ export default async function ReviewPage({
     aheadPreviews = buildPreviews(aheadRows);
   }
 
+  const [dueMeta, aheadMeta] = await Promise.all([
+    buildMeta(rows),
+    buildMeta(aheadRows),
+  ]);
+
   return (
     <ReviewClient
       cards={rows as ReviewCard[]}
@@ -131,7 +151,7 @@ export default async function ReviewPage({
       totalDue={count ?? rows.length}
       aheadCards={aheadCards}
       aheadPreviews={aheadPreviews}
-      meta={{ ...buildMeta(rows), ...buildMeta(aheadRows) }}
+      meta={{ ...dueMeta, ...aheadMeta }}
     />
   );
 }

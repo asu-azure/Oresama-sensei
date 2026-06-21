@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { resolveChatModel } from "@/lib/claude";
 import type { UiMessage } from "./chat-client";
 
 const PAGE_SIZE = 30;
@@ -50,6 +51,25 @@ export async function loadOlderMessages(
   }));
   const oldestCursor = page.length > 0 ? page[0].created_at : null;
   return { messages, oldestCursor, hasMore };
+}
+
+/** Remember the learner's chosen chat model as their default (the header
+ *  dropdown). Best-effort: degrades silently if migration 0018 hasn't run. */
+export async function setChatModel(model: string): Promise<{ ok: boolean }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false };
+  try {
+    const { error } = await supabase
+      .from("profiles")
+      .update({ chat_model: resolveChatModel(model) })
+      .eq("id", user.id);
+    return { ok: !error };
+  } catch {
+    return { ok: false };
+  }
 }
 
 /** Delete a conversation (messages cascade via FK) and return to a fresh chat. */

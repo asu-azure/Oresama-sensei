@@ -55,7 +55,9 @@ export function accentType(reading: string, accent: number): AccentType {
 export type AccentTypeMeta = {
   jp: string; // Japanese label (平板 etc.)
   en: string; // romanized label
-  border: string; // overline / hook color
+  border: string; // overline / hook color (all-sides class, used by legends)
+  over: string; // top-border color class for a HIGH mora's overline
+  drop: string; // right-border color class for the downstep hook
   text: string; // tag + legend text color
   dot: string; // legend swatch background
 };
@@ -67,6 +69,8 @@ export const ACCENT_TYPE_META: Record<AccentType, AccentTypeMeta> = {
     jp: "平板",
     en: "heiban",
     border: "border-blue-500",
+    over: "border-t-blue-500",
+    drop: "border-r-blue-500",
     text: "text-blue-600",
     dot: "bg-blue-500",
   },
@@ -74,6 +78,8 @@ export const ACCENT_TYPE_META: Record<AccentType, AccentTypeMeta> = {
     jp: "頭高",
     en: "atamadaka",
     border: "border-rose-500",
+    over: "border-t-rose-500",
+    drop: "border-r-rose-500",
     text: "text-rose-600",
     dot: "bg-rose-500",
   },
@@ -81,6 +87,8 @@ export const ACCENT_TYPE_META: Record<AccentType, AccentTypeMeta> = {
     jp: "中高",
     en: "nakadaka",
     border: "border-amber-500",
+    over: "border-t-amber-500",
+    drop: "border-r-amber-500",
     text: "text-amber-600",
     dot: "bg-amber-500",
   },
@@ -88,6 +96,8 @@ export const ACCENT_TYPE_META: Record<AccentType, AccentTypeMeta> = {
     jp: "尾高",
     en: "odaka",
     border: "border-emerald-600",
+    over: "border-t-emerald-600",
+    drop: "border-r-emerald-600",
     text: "text-emerald-700",
     dot: "bg-emerald-600",
   },

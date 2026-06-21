@@ -268,7 +268,7 @@ export default async function DashboardPage() {
                 )}
               </div>
             ) : (
-              <div className="flex h-32 items-end gap-1">
+              <div className="flex h-32 items-end gap-1 overflow-hidden">
                 {days.map((d, i) => {
                   const max = Math.max(
                     1,
@@ -277,7 +277,7 @@ export default async function DashboardPage() {
                   return (
                     <div
                       key={i}
-                      className="flex h-full flex-1 flex-col items-center gap-1"
+                      className="flex h-full min-w-0 flex-1 flex-col items-center gap-1"
                       title={`${d.label}: ${d.added} added, ${d.reviewed} reviewed`}
                     >
                       <div className="flex w-full flex-1 items-end justify-center gap-0.5">
@@ -294,7 +294,7 @@ export default async function DashboardPage() {
                           }}
                         />
                       </div>
-                      <span className="h-3 whitespace-nowrap text-[9px] leading-3 text-muted">
+                      <span className="h-3 w-full truncate text-center text-[9px] leading-3 text-muted">
                         {d.label}
                       </span>
                     </div>
