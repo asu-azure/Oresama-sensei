@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { X, Search, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -79,7 +80,9 @@ export function WebImageSearch({
     await onPick(h.url, credit);
   }
 
-  return (
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
     <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 p-4">
       <div className="flex max-h-[85vh] w-full max-w-md flex-col rounded-2xl border border-border bg-background p-4 shadow-2xl">
         <div className="mb-3 flex items-center gap-2">
@@ -183,6 +186,7 @@ export function WebImageSearch({
           credit.
         </p>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

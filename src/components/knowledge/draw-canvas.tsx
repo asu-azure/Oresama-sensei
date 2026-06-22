@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { X, Eraser, Trash2, Loader2, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -83,7 +84,9 @@ export function DrawCanvas({
     }, "image/png");
   }
 
-  return (
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
     <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 p-4">
       <div className="flex w-full max-w-sm flex-col rounded-2xl border border-border bg-background p-4 shadow-2xl">
         <div className="mb-3 flex items-center gap-2">
@@ -169,6 +172,7 @@ export function DrawCanvas({
           Save drawing
         </button>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
