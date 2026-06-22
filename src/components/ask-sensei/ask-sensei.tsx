@@ -65,6 +65,11 @@ export function AskSensei({
   onSaveToNote?: (content: string) => Promise<void> | void;
 }) {
   const [open, setOpen] = useState(false);
+  // Drag support for the floating bubble (so it can be moved off the flashcard
+  // buttons). constraintsRef bounds it to the viewport; draggingRef tells a real
+  // drag apart from a tap so dragging doesn't also open the panel.
+  const constraintsRef = useRef<HTMLDivElement>(null);
+  const draggingRef = useRef(false);
   // Conversations keyed by contextKey so each card/exercise keeps its own thread
   // even after the panel is closed; a new key (next card) is a clean slate.
   const [convos, setConvos] = useState<Record<string, DiscussMessage[]>>({});
@@ -89,17 +94,39 @@ export function AskSensei({
       </AnimatePresence>
 
       {!open && (
-        <motion.button
-          initial={{ opacity: 0, scale: 0.8 }}
-          animate={{ opacity: 1, scale: 1 }}
-          onClick={() => setOpen(true)}
-          aria-label="Ask Sensei"
-          className="fixed right-4 z-40 flex items-center gap-2 rounded-full bg-primary px-4 py-3 text-sm font-medium text-white shadow-lg shadow-primary/30 transition-transform hover:scale-105 active:scale-95"
-          style={{ bottom: "calc(1rem + var(--bottom-nav))" }}
+        <div
+          ref={constraintsRef}
+          className="pointer-events-none fixed inset-0 z-40"
         >
-          <MessageCircle className="h-5 w-5" />
-          <span className="hidden sm:inline">Ask Sensei</span>
-        </motion.button>
+          <motion.button
+            drag
+            dragConstraints={constraintsRef}
+            dragMomentum={false}
+            dragElastic={0.12}
+            onDragStart={() => {
+              draggingRef.current = true;
+            }}
+            onClick={() => {
+              // Swallow the click that fires at the end of a drag.
+              if (draggingRef.current) {
+                draggingRef.current = false;
+                return;
+              }
+              setOpen(true);
+            }}
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            whileDrag={{ scale: 1.1 }}
+            aria-label="Ask Sensei (drag to move)"
+            className="pointer-events-auto absolute right-4 flex cursor-grab touch-none items-center gap-2 rounded-full bg-primary px-4 py-3 text-sm font-medium text-white shadow-lg shadow-primary/30 active:cursor-grabbing"
+            style={{ bottom: "calc(1rem + var(--bottom-nav))" }}
+          >
+            <MessageCircle className="h-5 w-5" />
+            <span className="hidden sm:inline">Ask Sensei</span>
+          </motion.button>
+        </div>
       )}
     </>
   );
@@ -137,7 +164,7 @@ function AskPanel({
     const el = inputRef.current;
     if (!el) return;
     el.style.height = "auto";
-    el.style.height = `${Math.min(el.scrollHeight, 112)}px`;
+    el.style.height = `${Math.min(el.scrollHeight, 176)}px`;
   }, [input]);
 
   async function send(text: string) {
@@ -191,16 +218,15 @@ function AskPanel({
   return (
     <motion.div
       initial={{ opacity: 0, y: 24 }}
-      // Lift the whole sheet by the keyboard overlap so the input stays visible
-      // above the on-screen keyboard (0 on desktop / when the keyboard is closed).
-      animate={{ opacity: 1, y: -kbInset }}
+      animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: 24 }}
       transition={{ type: "spring", stiffness: 360, damping: 32 }}
-      // Sit ABOVE the fixed bottom tab bar. The panel lives inside <main>
-      // (relative z-10), so its z-50 can't beat the nav's z-30 — offsetting by
-      // --bottom-nav (which already includes the safe-area inset) keeps the input
-      // clear of the nav instead of hidden behind it.
-      className="fixed inset-x-0 bottom-[var(--bottom-nav)] z-50 flex max-h-[80vh] flex-col rounded-t-2xl border border-border bg-background shadow-2xl sm:inset-x-auto sm:right-4 sm:bottom-4 sm:w-[400px] sm:max-h-[70vh] sm:rounded-2xl"
+      // `--kb` = on-screen keyboard overlap (iOS doesn't push fixed elements up).
+      // We raise the sheet's BOTTOM by it (so the input clears the keyboard) and
+      // shrink its MAX-HEIGHT by it + the top nav, so the header (with the X) can
+      // never be pushed up behind the top bar — the old translateY approach did.
+      style={{ "--kb": `${kbInset}px` } as React.CSSProperties}
+      className="fixed inset-x-0 bottom-[calc(var(--bottom-nav)+var(--kb,0px))] z-50 flex max-h-[calc(100dvh-var(--top-nav)-var(--bottom-nav)-var(--kb,0px)-1rem)] flex-col rounded-t-2xl border border-border bg-background shadow-2xl sm:inset-x-auto sm:right-4 sm:bottom-4 sm:w-[440px] sm:max-h-[70vh] sm:rounded-2xl"
     >
       {/* Header — X lives here, always reachable */}
       <div className="flex items-center gap-2 border-b border-border px-4 py-3">
@@ -292,7 +318,7 @@ function AskPanel({
             disabled={loading}
             placeholder="Ask a question… (Enter to send)"
             rows={1}
-            className="max-h-28 flex-1 resize-none overflow-y-auto bg-transparent text-sm outline-none placeholder:text-muted disabled:opacity-50"
+            className="max-h-44 flex-1 resize-none overflow-y-auto bg-transparent text-sm outline-none placeholder:text-muted disabled:opacity-50"
           />
           <button
             onClick={() => send(input)}

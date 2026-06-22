@@ -326,6 +326,18 @@ The **data lives in Supabase (cloud)**, so chats/vocab/lessons sync automaticall
   splash never loads the large per-level kanji bundles; `俺` is outside the JLPT set so it was fetched once
   from the KanjiVG CDN (`04ffb.svg`) and inlined. The v3.6 navy `splash-grid` keyframe was removed. No DB
   change.
+- ✅ v3.8 shipped (Ask-Sensei UX + splash simplify): **(a)** **Close button always reachable** — the
+  Ask-Sensei panel (`ask-sensei.tsx`) no longer lifts the whole sheet with `translateY(-kbInset)` (which
+  shoved the header X up behind the top bar on a long reply). It now raises the sheet's **bottom** by the
+  keyboard overlap (`--kb` custom prop) and **shrinks max-height** by `--kb` + `--top-nav`, so the panel
+  top is pinned just below the top nav regardless of keyboard/content. **(b)** **Bigger input** — textarea
+  auto-grow cap 112→176px (`max-h-44`) and desktop panel 400→**440px** so multi-line drafts are readable.
+  **(c)** **Draggable bubble** — the floating Ask-Sensei button is now `drag`-gable (Framer, bounded to a
+  `constraintsRef` viewport box, `touch-none`); a `draggingRef` guard stops a drag from also opening the
+  panel. Resets per page mount (no persistence). **(d)** **Splash simplified** — per the owner the strokes
+  felt mismatched with the bold final glyphs; `splash-screen.tsx` now glitches the **whole title in at
+  once** (reuses `glitch-in` + `.splash-sweep` + glow + underline, theme-aware, reduced-motion safe). The
+  stroke-draw + `src/lib/splash-art.ts` (`SPLASH_STROKES`) were removed. No DB change.
 - ⏳ Next ideas (not built): an **SNS growth view** that aggregates `sns_corrections.errors[].type` over
   time (the error log is being collected now); library multi-select bulk source-tag (per-lesson editor covers backfill for
   now); per-page knowledge granularity (page color currently aggregates the whole lesson's items); a
