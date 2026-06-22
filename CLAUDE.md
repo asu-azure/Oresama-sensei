@@ -312,11 +312,20 @@ The **data lives in Supabase (cloud)**, so chats/vocab/lessons sync automaticall
   `lessonModel`; was hard-locked to Sonnet. `/api/lesson/text` already accepted the field. **(d)** **Chat
   starter questions fill the input** instead of auto-sending (`fillSuggestion` strips the trailing "(hint)"
   + focuses the textarea) — saves a wasted API call so you can attach your words first. **(e)** **Splash
-  redesign** — `splash-screen.tsx` is now a **neon cyber-grid boot** (perspective grid floor + scanlines +
-  white title with electric-blue glow, `splash-grid` keyframe in `globals.css`); palette is **splash-local
-  electric blue** (`#38bdf8`/`#22d3ee` on navy) — the app's green brand tokens are untouched. Reduced-motion
-  shows a static fade. **(f)** **Merge fix:** removed a duplicate `inputRef` declaration in `chat-client.tsx`
-  (a clean-but-wrong 3-way autostash merge had added it twice). Run migration **0020** after 0016–0019.
+  redesign (superseded by v3.7).** **(f)** **Merge fix:** removed a duplicate `inputRef` declaration in
+  `chat-client.tsx` (a clean-but-wrong 3-way autostash merge had added it twice). Run migration **0020**
+  after 0016–0019.
+- ✅ v3.7 shipped (splash redesign — stroke draw + RGB glitch): `splash-screen.tsx` rewritten to feel like
+  the **flashcard reveal**. Each title kanji 俺様先生 **draws its strokes one-by-one** (KanjiVG paths via the
+  `stroke-dashoffset` technique from `stroke-order.tsx`, scaled to a fixed ~0.46s per-char window), a
+  **box sweep** wipes the slot (new `.splash-sweep` in `globals.css`), then the crisp glyph **RGB-glitches**
+  in (reuses the flashcard `glitch-in` keyframe) as the stroke layer fades; finish with a rainbow+green
+  underline. **Theme-aware** (uses `--background`/`--primary`/`--foreground`/`--pop-*` tokens — green/white
+  in light, dark/neon-green in dark; rainbow accents in both) and **reduced-motion safe** (just a quick
+  glyph fade). Stroke paths are **hardcoded** in new `src/lib/splash-art.ts` (`SPLASH_STROKES`) so the
+  splash never loads the large per-level kanji bundles; `俺` is outside the JLPT set so it was fetched once
+  from the KanjiVG CDN (`04ffb.svg`) and inlined. The v3.6 navy `splash-grid` keyframe was removed. No DB
+  change.
 - ⏳ Next ideas (not built): an **SNS growth view** that aggregates `sns_corrections.errors[].type` over
   time (the error log is being collected now); library multi-select bulk source-tag (per-lesson editor covers backfill for
   now); per-page knowledge granularity (page color currently aggregates the whole lesson's items); a
