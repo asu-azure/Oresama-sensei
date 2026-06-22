@@ -16,6 +16,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { AskSensei } from "@/components/ask-sensei/ask-sensei";
 import { ConjugationTable } from "@/components/conjugation-table";
+import { ItemImage } from "@/components/knowledge/item-image";
 import { showReading, stripFurigana } from "@/lib/furigana";
 import { posLabel } from "@/lib/conjugation";
 import { RubyText } from "@/components/ruby-text";
@@ -66,6 +67,9 @@ export type CardMeta = {
   /** Kanji in the term we have data for (char + primary meaning), for the
    *  tappable "Kanji" breakdown on the answer side. */
   kanji?: KanjiGloss[];
+  /** Signed urls for the item's picture (shown on reveal), or null. */
+  image?: { thumb: string; full: string } | null;
+  imageSource?: string | null;
 };
 
 const RATINGS: { rating: Rating; label: string; cls: string }[] = [
@@ -462,6 +466,15 @@ function Flashcards({
                   <RubyText>{card.example}</RubyText>
                 </p>
               )}
+
+              <ItemImage
+                itemId={card.id}
+                term={stripFurigana(card.term)}
+                meaning={card.meaning}
+                reading={card.reading}
+                initial={cardMeta?.image ?? null}
+                initialSource={cardMeta?.imageSource ?? null}
+              />
 
               {cardMeta?.kanji && cardMeta.kanji.length > 0 && (
                 <div className="flex flex-wrap items-center gap-1.5">

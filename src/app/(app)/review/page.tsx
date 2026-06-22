@@ -11,7 +11,7 @@ import { pageRefLabel } from "@/lib/source";
 import { uniqueKanji, levelOf, getInfo } from "@/lib/kanji";
 
 const COLS =
-  "id,type,term,reading,meaning,example,jlpt_level,part_of_speech,personal_note,srs_stability,srs_difficulty,srs_state,srs_interval,srs_reps,srs_lapses,srs_last_review,last_seen";
+  "id,type,term,reading,meaning,example,jlpt_level,part_of_speech,personal_note,image_path,image_source,srs_stability,srs_difficulty,srs_state,srs_interval,srs_reps,srs_lapses,srs_last_review,last_seen";
 // Source/history fields + embedded collection & lesson titles for the details panel.
 const SELECT =
   COLS +
@@ -23,6 +23,8 @@ type Row = ReviewCard &
     source_type?: string | null;
     collection_id?: string | null;
     lesson_id?: string | null;
+    image_path?: string | null;
+    image_source?: string | null;
     collections?: { title: string } | null;
     lessons?: {
       title: string | null;
@@ -30,6 +32,24 @@ type Row = ReviewCard &
       page_end: number | null;
     } | null;
   };
+
+/** Sign an item's stored image path into {thumb, full} (mirrors signThumbs in
+ *  library/actions.ts). Returns null if signing fails. */
+async function signItemImage(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  path: string,
+): Promise<{ thumb: string; full: string } | null> {
+  const bucket = supabase.storage.from("lesson-images");
+  const [{ data: t }, { data: f }] = await Promise.all([
+    bucket.createSignedUrl(path, 3600, {
+      transform: { width: 1280, quality: 50, resize: "contain" },
+    }),
+    bucket.createSignedUrl(path, 3600),
+  ]);
+  const thumb = t?.signedUrl ?? f?.signedUrl ?? "";
+  const full = f?.signedUrl ?? t?.signedUrl ?? "";
+  return thumb ? { thumb, full } : null;
+}
 
 function buildPreviews(rows: Row[]): Record<string, IntervalPreview> {
   const now = new Date();
@@ -52,7 +72,10 @@ async function kanjiGlosses(term: string): Promise<{ char: string; meaning: stri
 }
 
 /** Per-card source/history/strength metadata for the collapsible details panel. */
-async function buildMeta(rows: Row[]): Promise<Record<string, CardMeta>> {
+async function buildMeta(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  rows: Row[],
+): Promise<Record<string, CardMeta>> {
   const now = new Date();
   const out: Record<string, CardMeta> = {};
   for (const r of rows) {
@@ -67,6 +90,8 @@ async function buildMeta(rows: Row[]): Promise<Record<string, CardMeta>> {
       retr: retrievability(r, now),
       mastery: masteryLevel(r).level,
       kanji: await kanjiGlosses(r.term),
+      image: r.image_path ? await signItemImage(supabase, r.image_path) : null,
+      imageSource: r.image_source ?? null,
     };
   }
   return out;
@@ -95,7 +120,7 @@ export default async function ReviewPage({
       <ReviewClient
         cards={rows as ReviewCard[]}
         previews={buildPreviews(rows)}
-        meta={await buildMeta(rows)}
+        meta={await buildMeta(supabase, rows)}
         single
       />
     );
@@ -140,8 +165,8 @@ export default async function ReviewPage({
   }
 
   const [dueMeta, aheadMeta] = await Promise.all([
-    buildMeta(rows),
-    buildMeta(aheadRows),
+    buildMeta(supabase, rows),
+    buildMeta(supabase, aheadRows),
   ]);
 
   return (

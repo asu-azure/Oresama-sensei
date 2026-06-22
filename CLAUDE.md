@@ -49,7 +49,7 @@ Two core features:
 - `supabase/migrations/0001_init.sql` — schema, pgvector, RLS, `match_knowledge`, storage, profile trigger.
 
 ## Running it
-1. Supabase project → run the SQL files in `supabase/migrations/` (0001–0020) in order in the SQL editor.
+1. Supabase project → run the SQL files in `supabase/migrations/` (0001–0021) in order in the SQL editor.
 2. `.env.local` (NOT committed) with: `NEXT_PUBLIC_SUPABASE_URL`,
    `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`. See `.env.example`.
 3. `npm install` → `npm run dev` → http://localhost:3000. Restart dev after editing `.env.local`
@@ -338,6 +338,21 @@ The **data lives in Supabase (cloud)**, so chats/vocab/lessons sync automaticall
   felt mismatched with the bold final glyphs; `splash-screen.tsx` now glitches the **whole title in at
   once** (reuses `glitch-in` + `.splash-sweep` + glow + underline, theme-aware, reduced-motion safe). The
   stroke-draw + `src/lib/splash-art.ts` (`SPLASH_STROKES`) were removed. No DB change.
+- ✅ v3.9 shipped (images on knowledge items): a vocab/grammar item can carry **one picture** (a visual
+  memory aid) shown on the **flashcard reveal** and in the **library/search** rows, added three ways:
+  **Upload** from device, **Draw** a doodle (`draw-canvas.tsx`, HTML5 canvas → PNG), or **Find online**
+  (`web-image-search.tsx` → Openverse, free CC-licensed, via proxy `GET /api/items/image-search`; **uses
+  no AI tokens**). "Find online" shows **keyword chips** (English meaning default + Japanese term/reading,
+  built locally from the item — no AI) plus an editable box for a custom keyword. The
+  shared control is `src/components/knowledge/item-image.tsx` (current image via `ImagePreview` lightbox +
+  an Upload/Draw/Find/Remove menu), used by `review-client` (on reveal), `library-client`, and
+  `search-client`. Bytes go to the existing private **`lesson-images`** bucket under `<uid>/items/...`;
+  server actions in **`src/lib/item-image-actions.ts`** (`uploadItemImage`/`setItemImageFromUrl`/
+  `removeItemImage`/`getItemImageUrls`) handle upload/download/sign/remove (web picks are **downloaded
+  into storage** so they persist privately, with a stored attribution `image_source`). Migration **0021**
+  adds `knowledge_items.image_path` + `image_source` (degrades gracefully). Review signs urls server-side
+  in `buildMeta`; library/search sign **lazily** when a row expands (`getItemImageUrls`). Known limit:
+  deleting an item doesn't delete its storage object (orphan; fine for one user). Run migration **0021**.
 - ⏳ Next ideas (not built): an **SNS growth view** that aggregates `sns_corrections.errors[].type` over
   time (the error log is being collected now); library multi-select bulk source-tag (per-lesson editor covers backfill for
   now); per-page knowledge granularity (page color currently aggregates the whole lesson's items); a

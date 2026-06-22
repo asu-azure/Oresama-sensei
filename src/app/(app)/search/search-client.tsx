@@ -21,6 +21,7 @@ import { SpeakButton } from "@/components/speak-button";
 import { KanjiChips } from "@/components/kanji/kanji-chips";
 import { ImagePreview } from "@/components/image-preview";
 import { DeepDiveSection } from "@/components/knowledge/deep-dive-section";
+import { ItemImage } from "@/components/knowledge/item-image";
 import { PitchAccent } from "@/components/pitch-accent";
 import { PitchToggle } from "@/components/pitch-toggle";
 import { PitchLegend } from "@/components/pitch-legend";
@@ -38,6 +39,7 @@ export type SearchItem = {
   example: string | null;
   jlpt_level: string | null;
   lesson_id: string | null;
+  image_path: string | null;
 };
 
 export function SearchClient({
@@ -284,6 +286,13 @@ export function SearchClient({
                             </Link>
                           </div>
                           <KanjiChips term={it.term} />
+                          <ItemImage
+                            itemId={it.id}
+                            term={stripFurigana(it.term)}
+                            meaning={it.meaning}
+                            reading={it.reading}
+                            lazyPath={it.image_path}
+                          />
                           <DeepDiveSection
                             itemId={it.id}
                             initialExplanation={

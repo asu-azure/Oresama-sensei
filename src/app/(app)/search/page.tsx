@@ -11,7 +11,7 @@ export default async function SearchPage() {
   // Load the user's items once; matching runs live in the browser (free, instant).
   const { data } = await supabase
     .from("knowledge_items")
-    .select("id,type,term,reading,meaning,example,jlpt_level,lesson_id")
+    .select("id,type,term,reading,meaning,example,jlpt_level,lesson_id,image_path")
     .eq("user_id", user!.id)
     .order("last_seen", { ascending: false })
     .limit(5000);
