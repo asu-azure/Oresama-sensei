@@ -49,7 +49,7 @@ Two core features:
 - `supabase/migrations/0001_init.sql` — schema, pgvector, RLS, `match_knowledge`, storage, profile trigger.
 
 ## Running it
-1. Supabase project → run the SQL files in `supabase/migrations/` (0001–0015) in order in the SQL editor.
+1. Supabase project → run the SQL files in `supabase/migrations/` (0001–0020) in order in the SQL editor.
 2. `.env.local` (NOT committed) with: `NEXT_PUBLIC_SUPABASE_URL`,
    `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`. See `.env.example`.
 3. `npm install` → `npm run dev` → http://localhost:3000. Restart dev after editing `.env.local`
@@ -294,7 +294,31 @@ The **data lives in Supabase (cloud)**, so chats/vocab/lessons sync automaticall
   `ACCENT_TYPE_META`; reduced-motion shows a static line. Keyframes/classes in `globals.css`.
   **(b)** UI sound (`src/lib/use-sound.ts`) swapped from chiptune oscillator sweeps to **soft sine
   ticks** through a low-pass filter with a smooth envelope (tap/reveal/grade); on/off + haptics unchanged.
-- ⏳ Next ideas (not built): library multi-select bulk source-tag (per-lesson editor covers backfill for
+- ✅ v3.6 shipped (SNS reliability + feedback loop, futuristic splash, chat UX): **(a)** **SNS helper
+  reliability** — `generateSnsOptions` (`claude.ts`) no longer silently returns empty on a bad model
+  response: it now runs a **fast primary** (Gemini **Flash**, or Claude Sonnet when engine=claude) and,
+  if that comes back with zero options/explanation, **retries once on the other engine's stronger tier**
+  (Gemini **Pro** / Claude Sonnet); parse failures are now `console.error`'d (was a silent `catch`). The
+  502 "try rephrasing" only fires when **both** attempts fail. Refactored into `runSnsAttempt` +
+  `parseSnsResult` + `isEmptySns`. **(b)** **"Edit & check" teacher feedback** — each SNS option now has
+  an inline editor (`sns-client.tsx`, pre-filled with the option's furigana-stripped Japanese); submitting
+  calls **`POST /api/sns/review`** → `reviewSnsDraft` (`claude.ts`, same fast+fallback pattern,
+  `SNS_REVIEW_SCHEMA`/`buildSnsReviewSystemPrompt` in `prompts.ts`) which returns a corrected version,
+  1–5 naturalness rating, an encouraging note, and **tagged errors** (`{type,wrong,right,note}`). Each
+  check is logged to a **learner error corpus** — new table **`sns_corrections`** (migration **0020**,
+  best-effort insert, degrades if unrun). New types `SnsReview`/`SnsError`/`SnsCorrection` in `types.ts`.
+  **(c)** **"Save chat as lesson" is now model-selectable** — `saveAsLesson` (`chat-client.tsx`) gained a
+  small dropdown (Quick Gemini Flash / Quick+ Gemini Pro / Standard Sonnet / Deep Opus) sent as
+  `lessonModel`; was hard-locked to Sonnet. `/api/lesson/text` already accepted the field. **(d)** **Chat
+  starter questions fill the input** instead of auto-sending (`fillSuggestion` strips the trailing "(hint)"
+  + focuses the textarea) — saves a wasted API call so you can attach your words first. **(e)** **Splash
+  redesign** — `splash-screen.tsx` is now a **neon cyber-grid boot** (perspective grid floor + scanlines +
+  white title with electric-blue glow, `splash-grid` keyframe in `globals.css`); palette is **splash-local
+  electric blue** (`#38bdf8`/`#22d3ee` on navy) — the app's green brand tokens are untouched. Reduced-motion
+  shows a static fade. **(f)** **Merge fix:** removed a duplicate `inputRef` declaration in `chat-client.tsx`
+  (a clean-but-wrong 3-way autostash merge had added it twice). Run migration **0020** after 0016–0019.
+- ⏳ Next ideas (not built): an **SNS growth view** that aggregates `sns_corrections.errors[].type` over
+  time (the error log is being collected now); library multi-select bulk source-tag (per-lesson editor covers backfill for
   now); per-page knowledge granularity (page color currently aggregates the whole lesson's items); a
   standalone personalized-lesson generator; Anki export; paginate
   `/dashboard` and `/map` (still fetch all items — covered for now by `loading.tsx`); real

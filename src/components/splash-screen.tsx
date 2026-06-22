@@ -5,16 +5,13 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 
 const TITLE = "俺様先生";
 
-const CONFETTI = [
-  { color: "#ff3366", x: 0,   y: -70,  size: 12, delay: 0.25 },
-  { color: "#ffd600", x: 60,  y: -50,  size: 10, delay: 0.28 },
-  { color: "#00bcd4", x: 75,  y: 10,   size: 14, delay: 0.22 },
-  { color: "#ff6b35", x: 40,  y: 70,   size: 8,  delay: 0.30 },
-  { color: "#a855f7", x: -55, y: 60,   size: 10, delay: 0.26 },
-  { color: "#16a34a", x: -80, y: -10,  size: 16, delay: 0.20 },
-];
+// Splash-local palette — deliberately NOT the app's green brand tokens, so the
+// entrance reads as a bright, futuristic "boot". The rest of the app stays green.
+const NEON = "#38bdf8"; // electric blue
+const NEON_BRIGHT = "#22d3ee"; // cyan accent
+const BG = "#020617"; // deep navy
 
-/** Brief entrance splash shown once per full app load. */
+/** Brief entrance splash shown once per full app load — a neon cyber-grid boot. */
 export function SplashScreen() {
   const reduce = useReducedMotion();
   const [show, setShow] = useState(true);
@@ -32,41 +29,64 @@ export function SplashScreen() {
           initial={{ opacity: 1 }}
           exit={{ opacity: 0, scale: 1.05 }}
           transition={{ duration: 0.4, ease: "easeInOut" }}
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-background"
+          className="fixed inset-0 z-[100] flex items-center justify-center overflow-hidden"
+          style={{ background: BG }}
           aria-hidden="true"
         >
-          {/* Green glow blob */}
+          {/* Perspective neon grid floor */}
+          <div
+            className="pointer-events-none absolute inset-x-0 bottom-0 h-1/2"
+            style={{ perspective: "320px", perspectiveOrigin: "50% 0%" }}
+          >
+            <div
+              className={reduce ? undefined : "splash-grid"}
+              style={{
+                position: "absolute",
+                inset: "-50% -50% 0 -50%",
+                transform: "rotateX(72deg)",
+                transformOrigin: "50% 100%",
+                backgroundImage:
+                  `linear-gradient(${NEON}55 1px, transparent 1px),` +
+                  `linear-gradient(90deg, ${NEON}55 1px, transparent 1px)`,
+                backgroundSize: "40px 40px",
+                maskImage: "linear-gradient(to top, #000 8%, transparent 78%)",
+                WebkitMaskImage:
+                  "linear-gradient(to top, #000 8%, transparent 78%)",
+              }}
+            />
+          </div>
+
+          {/* Radial blue glow behind the title */}
           <motion.div
             initial={{ opacity: 0, scale: 0.75 }}
-            animate={{ opacity: 0.5, scale: 1 }}
+            animate={{ opacity: 0.55, scale: 1 }}
             transition={{ duration: 0.7, ease: "easeOut" }}
-            className="pointer-events-none absolute h-72 w-72 rounded-full blur-3xl"
-            style={{ background: "#16a34a" }}
+            className="pointer-events-none absolute h-80 w-80 rounded-full blur-3xl"
+            style={{ background: `${NEON}40` }}
           />
 
-          <div className="relative flex flex-col items-center gap-3">
-            {/* Confetti burst dots */}
-            {!reduce &&
-              CONFETTI.map((dot, i) => (
-                <motion.div
-                  key={i}
-                  initial={{ x: 0, y: 0, opacity: 1, scale: 0 }}
-                  animate={{ x: dot.x, y: dot.y, opacity: 0, scale: 1 }}
-                  transition={{
-                    delay: dot.delay,
-                    duration: 0.55,
-                    ease: "easeOut",
-                  }}
-                  className="pointer-events-none absolute rounded-full"
-                  style={{
-                    width: dot.size,
-                    height: dot.size,
-                    background: dot.color,
-                  }}
-                />
-              ))}
+          {/* Glowing horizon line */}
+          <motion.div
+            initial={{ scaleX: 0, opacity: 0 }}
+            animate={{ scaleX: 1, opacity: 1 }}
+            transition={{ duration: 0.6, ease: "easeOut" }}
+            className="pointer-events-none absolute inset-x-0 top-1/2 h-px"
+            style={{
+              background: `linear-gradient(90deg, transparent, ${NEON_BRIGHT}, transparent)`,
+              boxShadow: `0 0 18px ${NEON}`,
+            }}
+          />
 
-            {/* Title characters */}
+          {/* Faint scanlines */}
+          <div
+            className="pointer-events-none absolute inset-0 opacity-20"
+            style={{
+              backgroundImage: `repeating-linear-gradient(to bottom, transparent 0, transparent 2px, ${NEON}22 3px)`,
+            }}
+          />
+
+          {/* Title */}
+          <div className="relative flex flex-col items-center gap-4">
             <div className="flex">
               {TITLE.split("").map((ch, i) => (
                 <motion.span
@@ -74,20 +94,24 @@ export function SplashScreen() {
                   initial={
                     reduce
                       ? { opacity: 0 }
-                      : { opacity: 0, y: 26, scale: 0.5, rotate: -10 }
+                      : { opacity: 0, y: 22, scale: 0.6 }
                   }
-                  animate={{ opacity: 1, y: 0, scale: 1, rotate: 0 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
                   transition={
                     reduce
                       ? { duration: 0.25, delay: i * 0.04 }
                       : {
                           type: "spring",
-                          stiffness: 460,
-                          damping: 17,
-                          delay: 0.07 * i,
+                          stiffness: 440,
+                          damping: 18,
+                          delay: 0.08 * i,
                         }
                   }
-                  className="font-jp text-5xl font-bold tracking-tight text-foreground sm:text-6xl"
+                  className="font-jp text-5xl font-bold tracking-tight sm:text-6xl"
+                  style={{
+                    color: "#ffffff",
+                    textShadow: `0 0 8px ${NEON_BRIGHT}, 0 0 22px ${NEON}, 0 0 40px ${NEON}`,
+                  }}
                 >
                   {ch}
                 </motion.span>
@@ -103,7 +127,11 @@ export function SplashScreen() {
                 duration: 0.4,
                 ease: "easeOut",
               }}
-              className="h-1 w-32 origin-left rounded-full bg-primary"
+              className="h-0.5 w-40 origin-center rounded-full"
+              style={{
+                background: `linear-gradient(90deg, transparent, ${NEON_BRIGHT}, transparent)`,
+                boxShadow: `0 0 12px ${NEON}`,
+              }}
             />
           </div>
         </motion.div>

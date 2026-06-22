@@ -125,11 +125,20 @@ function AskPanel({
   const [savedKeys, setSavedKeys] = useState<Set<string>>(new Set());
   const scrollRef = useRef<HTMLDivElement>(null);
   const kbInset = useKeyboardInset();
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [messages]);
+
+  // Auto-grow the input box to fit the typed text (capped, then it scrolls).
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 112)}px`;
+  }, [input]);
 
   async function send(text: string) {
     const content = text.trim();
@@ -276,14 +285,14 @@ function AskPanel({
       <div className="border-t border-border px-3 py-3">
         <div className="flex items-end gap-2 rounded-2xl border border-border bg-surface px-3 py-2">
           <textarea
+            ref={inputRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             disabled={loading}
             placeholder="Ask a question… (Enter to send)"
             rows={1}
-            className="flex-1 resize-none bg-transparent text-sm outline-none placeholder:text-muted disabled:opacity-50"
-            style={{ maxHeight: "6rem" }}
+            className="max-h-28 flex-1 resize-none overflow-y-auto bg-transparent text-sm outline-none placeholder:text-muted disabled:opacity-50"
           />
           <button
             onClick={() => send(input)}

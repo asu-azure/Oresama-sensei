@@ -6,14 +6,14 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Send, Plus, Loader2, Sparkles, BookPlus } from "lucide-react";
 import { Markdown } from "@/components/markdown";
 import { Button } from "@/components/ui/button";
-import { CostHint, MODEL_LABELS } from "@/components/cost-hint";
+import { CostHint, MODEL_LABELS, lessonModelLabel } from "@/components/cost-hint";
 import {
   ConversationDrawer,
   type ConversationSummary,
 } from "./conversation-drawer";
 import { loadOlderMessages, setChatModel } from "./actions";
 import { cn } from "@/lib/utils";
-import type { ChatModel } from "@/lib/claude";
+import type { ChatModel, LessonModelChoice } from "@/lib/claude";
 
 export type UiMessage = {
   id: string;
@@ -41,6 +41,14 @@ const SUGGESTIONS = [
   "Show example sentences using this kanji and a few similar kanji.",
   "What's the nuance between two similar words or grammar points?",
   "Teach me natural expressions for chatting with artists on X.",
+];
+
+/** Model options for "Save as lesson" — mirrors the lesson uploader picker. */
+const LESSON_MODELS: { value: LessonModelChoice; label: string }[] = [
+  { value: "gemini", label: "Quick (Gemini Flash)" },
+  { value: "gemini-pro", label: "Quick+ (Gemini Pro)" },
+  { value: "claude", label: "Standard (Claude Sonnet)" },
+  { value: "opus", label: "Deep (Claude Opus)" },
 ];
 
 export function ChatClient({
@@ -74,7 +82,16 @@ export function ChatClient({
   const prependingRef = useRef(false);
   const prevScrollHeight = useRef<number | null>(null);
   const router = useRouter();
+
+  // Auto-grow the input box to fit the typed text (capped, then it scrolls).
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
+  }, [input]);
   const [savingLessonId, setSavingLessonId] = useState<string | null>(null);
+  const [lessonModel, setLessonModel] = useState<LessonModelChoice>("claude");
 
   // Turn a chat answer (plus the question that prompted it) into a Lesson by
   // reusing the text-lesson pipeline (restructure + extract + exercises).
@@ -98,7 +115,7 @@ export function ChatClient({
       const res = await fetch("/api/lesson/text", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, kind: "chat" }),
+        body: JSON.stringify({ text, kind: "chat", lessonModel }),
       });
       if (!res.ok) {
         throw new Error(
@@ -162,6 +179,14 @@ export function ChatClient({
     } finally {
       setLoadingOlder(false);
     }
+  }
+
+  // Tapping a starter question fills the input (so you can attach your words /
+  // edit it) instead of sending immediately — avoids a wasted API call. The
+  // trailing "(hint)" is stripped so the box holds just the editable question.
+  function fillSuggestion(s: string) {
+    setInput(s.replace(/\s*\([^)]*\)\s*$/, "").trim());
+    inputRef.current?.focus();
   }
 
   async function send(text: string) {
@@ -312,7 +337,7 @@ export function ChatClient({
               {SUGGESTIONS.map((s) => (
                 <button
                   key={s}
-                  onClick={() => send(s)}
+                  onClick={() => fillSuggestion(s)}
                   className="rounded-xl border border-border bg-surface px-4 py-3 text-left text-sm transition-colors hover:bg-surface-2"
                 >
                   {s}
@@ -347,7 +372,23 @@ export function ChatClient({
                     <>
                       <Markdown>{m.content}</Markdown>
                       {!busy && (
-                        <div className="mt-2 flex justify-end border-t border-border/60 pt-1.5">
+                        <div className="mt-2 flex flex-wrap items-center justify-end gap-2 border-t border-border/60 pt-1.5">
+                          <select
+                            aria-label="Lesson writer model"
+                            value={lessonModel}
+                            onChange={(e) =>
+                              setLessonModel(e.target.value as LessonModelChoice)
+                            }
+                            disabled={savingLessonId === m.id}
+                            title="Which model writes the lesson when you save this answer."
+                            className="rounded-lg border border-border bg-surface px-1.5 py-1 text-[11px] text-muted outline-none transition-colors hover:text-foreground focus:ring-2 focus:ring-ring disabled:opacity-50"
+                          >
+                            {LESSON_MODELS.map((o) => (
+                              <option key={o.value} value={o.value}>
+                                {o.label}
+                              </option>
+                            ))}
+                          </select>
                           <button
                             onClick={() => saveAsLesson(m)}
                             disabled={savingLessonId === m.id}
@@ -361,7 +402,7 @@ export function ChatClient({
                             )}
                             Save as lesson
                             <CostHint
-                              model={MODEL_LABELS.sonnet}
+                              model={lessonModelLabel(lessonModel)}
                               className="ml-1"
                             />
                           </button>

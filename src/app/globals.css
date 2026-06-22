@@ -189,6 +189,17 @@ rt {
   100% { transform: translate(0, 0)      rotate(180deg); }
 }
 
+/* Splash-screen neon grid scroll — the floor lines drift toward the viewer.
+   The element also carries a rotateX() transform inline; we only animate the
+   background position so the 3D transform is preserved. */
+@keyframes splash-grid {
+  from { background-position: 0 0; }
+  to   { background-position: 0 40px; }
+}
+.splash-grid {
+  animation: splash-grid 0.6s linear infinite;
+}
+
 /* One-shot flash-wipe for page transitions — now a slim bright bar. Fades fully
    out at the end so it never lingers as a stuck line on tall screens. */
 @keyframes pop-wipe {

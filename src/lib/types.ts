@@ -286,6 +286,48 @@ export interface SnsInteraction extends SnsResult {
   created_at: string;
 }
 
+/** One tagged mistake in the learner's own SNS draft — the learner-corpus unit. */
+export interface SnsError {
+  /** A short category, e.g. particle / politeness / word-choice / grammar /
+   *  spelling / naturalness. */
+  type: string;
+  /** The problematic fragment from the learner's draft. */
+  wrong: string;
+  /** The corrected fragment. */
+  right: string;
+  /** One-line why, in the learner's native language. */
+  note: string;
+}
+
+/** Teacher feedback on the learner's OWN edited SNS draft. */
+export interface SnsReview {
+  /** A natural, corrected version (furigana as 漢字（かな） parentheses). */
+  corrected: string;
+  /** Was the draft already natural (no real fixes needed)? */
+  natural: boolean;
+  /** Naturalness rating 1–5. */
+  rating: number;
+  /** Short encouraging teacher note in the learner's native language. */
+  feedback: string;
+  /** Tagged mistakes (may be empty when the draft is already good). */
+  errors: SnsError[];
+}
+
+/** A stored correction row (learner error log) — see migration 0020. */
+export interface SnsCorrection {
+  id: string;
+  /** The learner's own version. */
+  draft: string;
+  /** The teacher's fixed version. */
+  corrected: string;
+  /** The AI suggestion they started from, if any. */
+  original: string | null;
+  rating: number | null;
+  errors: SnsError[];
+  feedback: string | null;
+  created_at: string;
+}
+
 /** A saved practice test (the "test bank"). `exercises` replays for free. */
 export interface ReviewTest {
   id: string;

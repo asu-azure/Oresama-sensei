@@ -2,7 +2,15 @@
 
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { AtSign, Loader2, Copy, Check, Sparkles, History } from "lucide-react";
+import {
+  AtSign,
+  Loader2,
+  Copy,
+  Check,
+  Sparkles,
+  History,
+  Pencil,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Markdown } from "@/components/markdown";
 import { RubyText } from "@/components/ruby-text";
@@ -15,6 +23,7 @@ import type {
   SnsRegister,
   SnsResult,
   SnsInteraction,
+  SnsReview,
 } from "@/lib/types";
 
 const MODES: { value: SnsMode; label: string; hint: string }[] = [
@@ -51,12 +60,21 @@ export function SnsClient({
   const [copied, setCopied] = useState<number | null>(null);
   const [showHistory, setShowHistory] = useState(false);
 
+  // "Edit & check" — the learner edits one option to their taste and gets
+  // teacher feedback on their OWN version (which is then logged for growth).
+  const [editIdx, setEditIdx] = useState<number | null>(null);
+  const [editText, setEditText] = useState("");
+  const [reviewBusy, setReviewBusy] = useState(false);
+  const [review, setReview] = useState<SnsReview | null>(null);
+  const [reviewError, setReviewError] = useState<string | null>(null);
+
   const hasInput = !!(posted.trim() || incoming.trim() || intent.trim());
 
   async function generate() {
     if (busy || !hasInput) return;
     setBusy(true);
     setError(null);
+    resetEditor();
     const inputs = { mode, register, posted, incoming, intent };
     try {
       const res = await fetch("/api/sns", {
@@ -99,6 +117,52 @@ export function SnsClient({
     );
   }
 
+  function resetEditor() {
+    setEditIdx(null);
+    setEditText("");
+    setReview(null);
+    setReviewError(null);
+  }
+
+  // Open the inline editor for an option, pre-filled with its Japanese (furigana
+  // stripped so it's easy to edit), or close it if it's already open.
+  function toggleEditor(idx: number, japanese: string) {
+    if (editIdx === idx) {
+      resetEditor();
+      return;
+    }
+    setEditIdx(idx);
+    setEditText(plainJa(japanese));
+    setReview(null);
+    setReviewError(null);
+  }
+
+  async function checkDraft(original: string) {
+    const draft = editText.trim();
+    if (reviewBusy || !draft) return;
+    setReviewBusy(true);
+    setReviewError(null);
+    setReview(null);
+    try {
+      const res = await fetch("/api/sns/review", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ draft, original, situation, register }),
+      });
+      if (!res.ok) {
+        throw new Error(
+          (await res.text().catch(() => "")) || "Couldn't review that.",
+        );
+      }
+      const data = (await res.json()) as SnsReview & { id: string | null };
+      setReview(data);
+    } catch (e) {
+      setReviewError(e instanceof Error ? e.message : "Couldn't review that.");
+    } finally {
+      setReviewBusy(false);
+    }
+  }
+
   function loadFromHistory(it: SnsInteraction) {
     setMode(it.inputs.mode);
     setRegister(it.inputs.register);
@@ -110,6 +174,7 @@ export function SnsClient({
       note: it.note,
       explanation: it.explanation,
     });
+    resetEditor();
     setShowHistory(false);
   }
 
@@ -272,6 +337,116 @@ export function SnsClient({
                 )}
                 {o.nuance && <span>{o.nuance}</span>}
               </div>
+
+              <button
+                onClick={() => toggleEditor(i, o.japanese)}
+                className="mt-3 flex items-center gap-1 text-xs text-primary transition-colors hover:underline"
+              >
+                <Pencil className="h-3.5 w-3.5" />
+                {editIdx === i ? "Close" : "Edit & check my version"}
+              </button>
+
+              {editIdx === i && (
+                <div className="mt-3 border-t border-border pt-3">
+                  <p className="mb-1.5 text-xs text-muted">
+                    Tweak it to your taste, then let Sensei check it.
+                  </p>
+                  <textarea
+                    value={editText}
+                    onChange={(e) => setEditText(e.target.value)}
+                    rows={2}
+                    className="w-full resize-none rounded-xl border border-border bg-surface px-3 py-2 font-jp text-sm outline-none focus:ring-2 focus:ring-ring"
+                  />
+                  <div className="mt-2 flex items-center justify-between gap-2">
+                    <Button
+                      onClick={() => checkDraft(o.japanese)}
+                      disabled={reviewBusy || !editText.trim()}
+                    >
+                      {reviewBusy ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Check className="h-4 w-4" />
+                      )}
+                      Check my version
+                    </Button>
+                    <CostHint model={MODEL_LABELS.engine} />
+                  </div>
+
+                  {reviewError && (
+                    <p className="mt-2 text-sm text-accent">{reviewError}</p>
+                  )}
+
+                  {review && (
+                    <div className="mt-3 space-y-3">
+                      <div className="rounded-xl border border-primary/30 bg-primary/5 p-3">
+                        <div className="mb-1 flex items-center justify-between gap-2">
+                          <span className="text-xs font-medium text-primary">
+                            {review.natural
+                              ? "Natural ✨"
+                              : "Sensei's version"}
+                          </span>
+                          <span className="text-xs text-muted">
+                            {"★".repeat(review.rating)}
+                            {"☆".repeat(Math.max(0, 5 - review.rating))}
+                          </span>
+                        </div>
+                        <p className="font-jp text-base leading-relaxed">
+                          <RubyText>{review.corrected}</RubyText>
+                        </p>
+                        <button
+                          onClick={() => copy(plainJa(review.corrected), -1)}
+                          className="mt-2 flex items-center gap-1 text-xs text-muted transition-colors hover:text-foreground"
+                          title="Copy corrected Japanese"
+                        >
+                          {copied === -1 ? (
+                            <Check className="h-3.5 w-3.5 text-emerald-600" />
+                          ) : (
+                            <Copy className="h-3.5 w-3.5" />
+                          )}
+                          Copy
+                        </button>
+                      </div>
+
+                      {review.feedback && (
+                        <div className="text-sm">
+                          <Markdown>{review.feedback}</Markdown>
+                        </div>
+                      )}
+
+                      {review.errors.length > 0 && (
+                        <ul className="space-y-2">
+                          {review.errors.map((err, k) => (
+                            <li
+                              key={k}
+                              className="rounded-xl border border-border bg-surface-2 p-2.5 text-sm"
+                            >
+                              <div className="mb-1 flex items-center gap-2">
+                                <span className="rounded-full bg-accent/10 px-2 py-0.5 text-[10px] uppercase tracking-wide text-accent">
+                                  {err.type}
+                                </span>
+                              </div>
+                              <p className="font-jp">
+                                <span className="text-accent line-through">
+                                  {stripFurigana(furiganaToRuby(err.wrong))}
+                                </span>
+                                {" → "}
+                                <span className="text-emerald-600">
+                                  {stripFurigana(furiganaToRuby(err.right))}
+                                </span>
+                              </p>
+                              {err.note && (
+                                <p className="mt-0.5 text-xs text-muted">
+                                  {err.note}
+                                </p>
+                              )}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
             </motion.div>
           ))}
 

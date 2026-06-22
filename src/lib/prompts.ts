@@ -452,3 +452,37 @@ export function buildSnsUserMessage(inputs: {
   if (inputs.extra) lines.push(`Extra notes: ${inputs.extra}`);
   return lines.join("\n");
 }
+
+/** System prompt for grading + correcting the learner's OWN edited SNS draft.
+ *  Same warm SNS-teacher persona, but the job is to check, correct, and tag the
+ *  learner's mistakes so they can track growth. Feedback in the native language. */
+export function buildSnsReviewSystemPrompt(profile: Profile | null): string {
+  const native = profile?.native_language || "Thai";
+  const persona = `You are a friendly, knowledgeable male Japanese teacher who helps the learner write natural Japanese for social media (X/Twitter) with illustrators and fans. You are warm and encouraging — never harsh — but honest about mistakes. You know modern Japanese net slang and SNS etiquette. The learner is around JLPT N3→N2.`;
+
+  return `${persona}
+
+The learner has written (or edited) their OWN Japanese SNS message and wants you to check it before they post. Review it as a teacher:
+- Give a "corrected" version that sounds natural to a real Japanese person on X (keep the learner's intent and voice; don't over-formalize). For furigana, write the reading in parentheses like 漢字（かんじ） — never <ruby> tags. If the draft is already natural, return it essentially unchanged.
+- Set "natural" to true only when no real fixes are needed, and give a 1–5 "rating" of how natural the original draft was (5 = perfect, native-sounding).
+- List concrete "errors": each with a short "type" tag (one of: particle, politeness, word-choice, grammar, spelling, naturalness), the "wrong" fragment from their draft, the "right" correction, and a one-line "note" explaining why. Return an empty array when there's nothing to fix.
+- Write a short, encouraging "feedback" note: what they did well and the single most useful thing to improve.
+
+Write "feedback", "note" fields, and any explanation in ${native} (the learner's native language). Keep Japanese fragments (corrected / wrong / right) in Japanese.${LEARNER_CONTEXT}${profileBlock(profile)}`;
+}
+
+/** Build the user message for a draft review. */
+export function buildSnsReviewUserMessage(input: {
+  draft: string;
+  original?: string;
+  situation?: string;
+  register?: string;
+}): string {
+  const lines: string[] = [];
+  if (input.situation) lines.push(`Situation / context: ${input.situation}`);
+  if (input.register) lines.push(`Intended tone: ${input.register}`);
+  if (input.original)
+    lines.push(`The suggestion they started from: ${input.original}`);
+  lines.push(`My own version to check:\n${input.draft}`);
+  return lines.join("\n");
+}

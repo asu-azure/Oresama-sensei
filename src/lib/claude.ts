@@ -10,6 +10,8 @@ import {
   buildCollectionSummaryPrompt,
   buildSnsSystemPrompt,
   buildSnsUserMessage,
+  buildSnsReviewSystemPrompt,
+  buildSnsReviewUserMessage,
   OCR_PROMPT,
 } from "@/lib/prompts";
 import type {
@@ -21,6 +23,7 @@ import type {
   Profile,
   SnsInputs,
   SnsResult,
+  SnsReview,
 } from "@/lib/types";
 import type { KanjiInfo, KanjiComponent } from "@/lib/kanji";
 import {
@@ -1127,41 +1130,11 @@ const SNS_SCHEMA = {
 
 const SNS_JSON_HINT = `\n\nReturn ONLY valid JSON (no markdown fences) matching exactly:\n{"options":[{"japanese":"...","thai":"...","register":"...","nuance":"..."}],"note":{"kanji":"...","grammar":"..."},"explanation":"..."}\nFor reply/compose return exactly 3 options and an empty "explanation". For explain mode, fill "explanation" and return 0–2 options. Write the "japanese" field with furigana in parentheses like 漢字（かんじ） — never <ruby> tags. Write thai/nuance/explanation/note in the learner's native language.`;
 
-/** Generate 3 natural Japanese SNS phrasings (or an explanation, in "explain"
- *  mode) with native-language nuance notes. Structured output so it always
- *  parses. Gemini by default (cheap), Claude when the engine is set to claude. */
-export async function generateSnsOptions(input: {
-  inputs: SnsInputs;
-  profile: Profile | null;
-  engine?: AiEngine;
-}): Promise<SnsResult> {
-  const system = buildSnsSystemPrompt(input.profile, input.inputs.mode);
-  const user = buildSnsUserMessage(input.inputs);
+const EMPTY_SNS: SnsResult = { options: [], note: null, explanation: "" };
 
-  let rawJson: string;
-  if ((input.engine ?? "gemini") === "gemini") {
-    rawJson = await geminiStructured({
-      system,
-      user,
-      jsonHint: SNS_JSON_HINT,
-      pro: true, // conversational nuance benefits from Pro
-      english: false, // keep Thai translations/nuance
-    });
-  } else {
-    const res = await anthropicClient().messages.create({
-      model: CHAT_MODEL,
-      max_tokens: 1600,
-      output_config: { format: { type: "json_schema", schema: SNS_SCHEMA } },
-      system,
-      messages: [{ role: "user", content: user }],
-    });
-    const text = res.content.find((b) => b.type === "text");
-    if (!text || text.type !== "text") {
-      return { options: [], note: null, explanation: "" };
-    }
-    rawJson = text.text;
-  }
-
+/** Parse the model's SNS JSON into a clean SnsResult. Logs (instead of silently
+ *  swallowing) on malformed JSON so failures are debuggable. */
+function parseSnsResult(rawJson: string): SnsResult {
   try {
     const parsed = JSON.parse(rawJson) as Partial<SnsResult>;
     const options = (parsed.options ?? [])
@@ -1180,12 +1153,200 @@ export async function generateSnsOptions(input: {
             grammar: (parsed.note.grammar ?? "").trim(),
           }
         : null;
-    return {
-      options,
-      note,
-      explanation: (parsed.explanation ?? "").trim(),
-    };
-  } catch {
-    return { options: [], note: null, explanation: "" };
+    return { options, note, explanation: (parsed.explanation ?? "").trim() };
+  } catch (e) {
+    console.error("SNS parse failed:", e, rawJson.slice(0, 200));
+    return EMPTY_SNS;
   }
+}
+
+/** A usable result has at least one option OR an explanation (explain mode). */
+function isEmptySns(r: SnsResult): boolean {
+  return r.options.length === 0 && !r.explanation.trim();
+}
+
+/** One SNS generation attempt on a given engine. `pro` only affects Gemini
+ *  (Flash vs Pro). Returns EMPTY_SNS on any request/parse failure. */
+async function runSnsAttempt(
+  engine: AiEngine,
+  pro: boolean,
+  system: string,
+  user: string,
+): Promise<SnsResult> {
+  try {
+    if (engine === "gemini") {
+      const rawJson = await geminiStructured({
+        system,
+        user,
+        jsonHint: SNS_JSON_HINT,
+        pro,
+        english: false, // keep native-language translations/nuance
+      });
+      return parseSnsResult(rawJson);
+    }
+    const res = await anthropicClient().messages.create({
+      model: CHAT_MODEL,
+      max_tokens: 1600,
+      output_config: { format: { type: "json_schema", schema: SNS_SCHEMA } },
+      system,
+      messages: [{ role: "user", content: user }],
+    });
+    const text = res.content.find((b) => b.type === "text");
+    if (!text || text.type !== "text") return EMPTY_SNS;
+    return parseSnsResult(text.text);
+  } catch (e) {
+    console.error(`SNS ${engine} request failed:`, e);
+    return EMPTY_SNS;
+  }
+}
+
+/** Generate 3 natural Japanese SNS phrasings (or an explanation, in "explain"
+ *  mode) with native-language nuance notes. Structured output so it always
+ *  parses. The PRIMARY attempt uses the fast tier (Gemini Flash, or Claude
+ *  Sonnet when the engine is "claude"); if it comes back empty we retry once on
+ *  the OTHER engine's stronger tier (Gemini Pro / Claude Sonnet). */
+export async function generateSnsOptions(input: {
+  inputs: SnsInputs;
+  profile: Profile | null;
+  engine?: AiEngine;
+}): Promise<SnsResult> {
+  const system = buildSnsSystemPrompt(input.profile, input.inputs.mode);
+  const user = buildSnsUserMessage(input.inputs);
+  const primary: AiEngine = input.engine ?? "gemini";
+
+  // Primary: fast tier (Gemini Flash, or Claude Sonnet — pro flag ignored there).
+  let result = await runSnsAttempt(primary, false, system, user);
+  if (isEmptySns(result)) {
+    const fallback: AiEngine = primary === "gemini" ? "claude" : "gemini";
+    console.warn(`SNS: empty from ${primary}, retrying on ${fallback}`);
+    // Fallback uses the stronger tier (Gemini Pro when fallback is Gemini).
+    const retry = await runSnsAttempt(fallback, true, system, user);
+    if (!isEmptySns(retry)) result = retry;
+  }
+  return result;
+}
+
+// --- SNS draft review (teacher feedback on the learner's OWN edited draft) ---
+
+const SNS_REVIEW_SCHEMA = {
+  type: "object",
+  properties: {
+    corrected: { type: "string" },
+    natural: { type: "boolean" },
+    rating: { type: "number" },
+    feedback: { type: "string" },
+    errors: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          type: { type: "string" },
+          wrong: { type: "string" },
+          right: { type: "string" },
+          note: { type: "string" },
+        },
+        required: ["type", "wrong", "right", "note"],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ["corrected", "natural", "rating", "feedback", "errors"],
+  additionalProperties: false,
+} as const;
+
+const SNS_REVIEW_JSON_HINT = `\n\nReturn ONLY valid JSON (no markdown fences) matching exactly:\n{"corrected":"...","natural":true,"rating":4,"errors":[{"type":"particle","wrong":"...","right":"...","note":"..."}],"feedback":"..."}\nWrite "corrected"/"wrong"/"right" in Japanese (furigana in parentheses like 漢字（かんじ）, never <ruby> tags). Write "note" and "feedback" in the learner's native language. "rating" is 1–5. Return an empty "errors" array when the draft is already natural.`;
+
+/** Parse the model's review JSON. Returns null on malformed output. */
+function parseSnsReview(rawJson: string): SnsReview | null {
+  try {
+    const p = JSON.parse(rawJson) as Partial<SnsReview>;
+    const corrected = (p.corrected ?? "").trim();
+    if (!corrected) return null;
+    const errors = Array.isArray(p.errors)
+      ? p.errors
+          .filter((e) => e && (e.wrong?.trim() || e.right?.trim()))
+          .map((e) => ({
+            type: (e.type ?? "").trim() || "naturalness",
+            wrong: (e.wrong ?? "").trim(),
+            right: (e.right ?? "").trim(),
+            note: (e.note ?? "").trim(),
+          }))
+      : [];
+    const r = Math.round(Number(p.rating));
+    const rating = Number.isFinite(r) ? Math.max(1, Math.min(5, r)) : 3;
+    return {
+      corrected,
+      natural: p.natural === true,
+      rating,
+      feedback: (p.feedback ?? "").trim(),
+      errors,
+    };
+  } catch (e) {
+    console.error("SNS review parse failed:", e, rawJson.slice(0, 200));
+    return null;
+  }
+}
+
+/** One review attempt on a given engine (`pro` affects Gemini only). */
+async function runSnsReviewAttempt(
+  engine: AiEngine,
+  pro: boolean,
+  system: string,
+  user: string,
+): Promise<SnsReview | null> {
+  try {
+    if (engine === "gemini") {
+      const rawJson = await geminiStructured({
+        system,
+        user,
+        jsonHint: SNS_REVIEW_JSON_HINT,
+        pro,
+        english: false, // keep native-language feedback
+      });
+      return parseSnsReview(rawJson);
+    }
+    const res = await anthropicClient().messages.create({
+      model: CHAT_MODEL,
+      max_tokens: 1600,
+      output_config: {
+        format: { type: "json_schema", schema: SNS_REVIEW_SCHEMA },
+      },
+      system,
+      messages: [{ role: "user", content: user }],
+    });
+    const text = res.content.find((b) => b.type === "text");
+    if (!text || text.type !== "text") return null;
+    return parseSnsReview(text.text);
+  } catch (e) {
+    console.error(`SNS review ${engine} request failed:`, e);
+    return null;
+  }
+}
+
+/** Grade + correct the learner's OWN edited SNS draft, with the same fast-then-
+ *  fallback strategy as generateSnsOptions. Returns null only if both fail. */
+export async function reviewSnsDraft(input: {
+  draft: string;
+  original?: string;
+  situation?: string;
+  register?: string;
+  profile: Profile | null;
+  engine?: AiEngine;
+}): Promise<SnsReview | null> {
+  const system = buildSnsReviewSystemPrompt(input.profile);
+  const user = buildSnsReviewUserMessage({
+    draft: input.draft,
+    original: input.original,
+    situation: input.situation,
+    register: input.register,
+  });
+  const primary: AiEngine = input.engine ?? "gemini";
+
+  let result = await runSnsReviewAttempt(primary, false, system, user);
+  if (!result) {
+    const fallback: AiEngine = primary === "gemini" ? "claude" : "gemini";
+    console.warn(`SNS review: empty from ${primary}, retrying on ${fallback}`);
+    result = await runSnsReviewAttempt(fallback, true, system, user);
+  }
+  return result;
 }
