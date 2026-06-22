@@ -341,9 +341,15 @@ The **data lives in Supabase (cloud)**, so chats/vocab/lessons sync automaticall
 - ✅ v3.9 shipped (images on knowledge items): a vocab/grammar item can carry **one picture** (a visual
   memory aid) shown on the **flashcard reveal** and in the **library/search** rows, added three ways:
   **Upload** from device, **Draw** a doodle (`draw-canvas.tsx`, HTML5 canvas → PNG), or **Find online**
-  (`web-image-search.tsx` → Openverse, free CC-licensed, via proxy `GET /api/items/image-search`; **uses
-  no AI tokens**). "Find online" shows **keyword chips** (English meaning default + Japanese term/reading,
-  built locally from the item — no AI) plus an editable box for a custom keyword. The
+  (`web-image-search.tsx` via proxy `GET /api/items/image-search`; **uses no AI tokens**). The proxy is
+  **multi-source with automatic fallback**: **Pixabay** → **Openverse**. A provider with no env key
+  returns `[]` (skipped); one that errors throws and the next is tried; Openverse (no key) is the
+  always-available final fallback. Optional key in `.env.local`: `PIXABAY_KEY` — see `.env.example`.
+  (Google Programmable Search was evaluated but dropped: Google deprecated whole-web custom search
+  engines, so they can only search fixed site lists now.) The response includes the `source` used (shown
+  in the modal footer). "Find online" shows
+  **keyword chips** (English meaning default + Japanese term/reading, built locally from the item — no AI)
+  plus an editable box for a custom keyword. The
   shared control is `src/components/knowledge/item-image.tsx` (current image via `ImagePreview` lightbox +
   an Upload/Draw/Find/Remove menu), used by `review-client` (on reveal), `library-client`, and
   `search-client`. Bytes go to the existing private **`lesson-images`** bucket under `<uid>/items/...`;

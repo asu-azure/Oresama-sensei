@@ -36,6 +36,7 @@ export function WebImageSearch({
   const [query, setQuery] = useState(initialQuery);
   const [active, setActive] = useState(initialQuery);
   const [results, setResults] = useState<Hit[]>([]);
+  const [source, setSource] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [picking, setPicking] = useState<string | null>(null);
 
@@ -48,10 +49,15 @@ export function WebImageSearch({
       const res = await fetch(
         `/api/items/image-search?q=${encodeURIComponent(term)}`,
       );
-      const data = (await res.json()) as { results?: Hit[] };
+      const data = (await res.json()) as {
+        results?: Hit[];
+        source?: string | null;
+      };
       setResults(data.results ?? []);
+      setSource(data.source ?? null);
     } catch {
       setResults([]);
+      setSource(null);
     } finally {
       setLoading(false);
     }
@@ -182,8 +188,12 @@ export function WebImageSearch({
         </div>
 
         <p className="mt-3 text-[10px] leading-tight text-muted">
-          Images from Openverse (CC-licensed). The one you pick is saved with its
-          credit.
+          {source === "pixabay"
+            ? "Images from Pixabay. "
+            : source === "openverse"
+              ? "Images from Openverse (CC-licensed). "
+              : "Searches Pixabay, then Openverse. "}
+          The one you pick is saved with its credit (personal study use).
         </p>
       </div>
     </div>,
