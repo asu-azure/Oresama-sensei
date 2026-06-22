@@ -3,7 +3,12 @@
 // FSRS state via `healthBuckets`/`retentionForecast` (src/lib/srs.ts) and passes
 // them in. Hand-rolled SVG to match the project's no-charting-lib convention.
 
+import { cn } from "@/lib/utils";
 import type { ForecastPoint, HealthBuckets } from "@/lib/srs";
+
+// Horizontal reference lines / y-axis labels. 90% is the FSRS target retention,
+// so it's emphasized.
+const TICKS = [1, 0.9, 0.75, 0.5, 0.25, 0];
 
 const SEGMENTS: { key: keyof HealthBuckets; label: string; color: string }[] = [
   { key: "strong", label: "Strong", color: "var(--color-emerald-600)" },
@@ -95,34 +100,57 @@ export function ForgettingCurve({
       <p className="mt-4 mb-1 text-[11px] text-muted">
         If you stop reviewing, average recall drops like this over 30 days:
       </p>
-      <svg
-        viewBox={`0 0 ${W} ${H}`}
-        className="h-24 w-full"
-        preserveAspectRatio="none"
-        role="img"
-        aria-label="Projected average recall over the next 30 days"
-      >
-        {/* 90% target line */}
-        <line
-          x1={PAD}
-          x2={W - PAD}
-          y1={yPct(0.9)}
-          y2={yPct(0.9)}
-          stroke="var(--color-border)"
-          strokeWidth={1}
-          strokeDasharray="3 3"
-        />
-        <path d={area} fill="var(--color-primary)" opacity={0.12} />
-        <path
-          d={line}
-          fill="none"
-          stroke="var(--color-primary)"
-          strokeWidth={2}
-          strokeLinejoin="round"
-          strokeLinecap="round"
-        />
-      </svg>
-      <div className="mt-1 flex justify-between text-[10px] text-muted">
+      <div className="flex gap-1.5">
+        {/* y-axis labels (HTML, so they don't stretch with the SVG) */}
+        <div className="relative h-24 w-8 shrink-0">
+          {TICKS.map((r) => (
+            <span
+              key={r}
+              className={cn(
+                "absolute right-0 -translate-y-1/2 text-[9px] tabular-nums",
+                r === 0.9 ? "font-medium text-foreground" : "text-muted",
+              )}
+              style={{ top: yPct(r) }}
+            >
+              {Math.round(r * 100)}%
+            </span>
+          ))}
+        </div>
+        <svg
+          viewBox={`0 0 ${W} ${H}`}
+          className="h-24 w-full"
+          preserveAspectRatio="none"
+          role="img"
+          aria-label="Projected average recall over the next 30 days"
+        >
+          {/* reference grid; 90% (FSRS target) is dashed + emphasized */}
+          {TICKS.map((r) => (
+            <line
+              key={r}
+              x1={PAD}
+              x2={W - PAD}
+              y1={yPct(r)}
+              y2={yPct(r)}
+              stroke="var(--color-border)"
+              strokeWidth={1}
+              vectorEffect="non-scaling-stroke"
+              strokeDasharray={r === 0.9 ? "3 3" : undefined}
+              opacity={r === 0.9 ? 1 : 0.45}
+            />
+          ))}
+          <path d={area} fill="var(--color-primary)" opacity={0.12} />
+          <path
+            d={line}
+            fill="none"
+            stroke="var(--color-primary)"
+            strokeWidth={2}
+            vectorEffect="non-scaling-stroke"
+            strokeLinejoin="round"
+            strokeLinecap="round"
+          />
+        </svg>
+      </div>
+      <div className="ml-[38px] mt-1 flex justify-between text-[10px] text-muted">
         <span>now</span>
         <span>in 2 weeks</span>
         <span>in 30 days</span>

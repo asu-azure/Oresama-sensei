@@ -29,7 +29,7 @@ import { playReveal, playGrade } from "@/lib/use-sound";
 import { masteryInfo, type MasteryLevel } from "@/lib/mastery";
 import { sourceMeta } from "@/lib/source";
 import { cn } from "@/lib/utils";
-import { savePersonalNote, appendNoteSummary } from "./actions";
+import { savePersonalNote, appendPersonalNote } from "./actions";
 import {
   useReviewSession,
   saveReviewSession,
@@ -319,8 +319,9 @@ function Flashcards({
   }
 
   async function onSaveToNote(content: string) {
-    // Save a concise 1-line summary of the reply (not the whole answer).
-    const res = await appendNoteSummary(card.id, content);
+    // Save the tutor's reply verbatim — no AI summarizing (free, keeps the full
+    // answer the learner wanted to keep).
+    const res = await appendPersonalNote(card.id, content);
     if (res.ok && res.note != null) {
       setNotes((n) => ({ ...n, [card.id]: res.note! }));
     }

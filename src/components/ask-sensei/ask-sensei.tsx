@@ -150,6 +150,7 @@ function AskPanel({
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [savedKeys, setSavedKeys] = useState<Set<string>>(new Set());
+  const [savingKeys, setSavingKeys] = useState<Set<string>>(new Set());
   const scrollRef = useRef<HTMLDivElement>(null);
   const kbInset = useKeyboardInset();
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -202,8 +203,20 @@ function AskPanel({
 
   async function saveToNote(content: string, idx: number) {
     if (!onSaveToNote) return;
-    await onSaveToNote(content);
-    setSavedKeys((s) => new Set(s).add(`${idx}`));
+    const k = `${idx}`;
+    // Register the tap immediately with a "Saving…" spinner, then flip to
+    // "Saved" once the note is persisted.
+    setSavingKeys((s) => new Set(s).add(k));
+    try {
+      await onSaveToNote(content);
+      setSavedKeys((s) => new Set(s).add(k));
+    } finally {
+      setSavingKeys((s) => {
+        const n = new Set(s);
+        n.delete(k);
+        return n;
+      });
+    }
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
@@ -283,12 +296,19 @@ function AskPanel({
                     {onSaveToNote && !loading && (
                       <button
                         onClick={() => saveToNote(m.content, i)}
-                        disabled={savedKeys.has(`${i}`)}
+                        disabled={
+                          savedKeys.has(`${i}`) || savingKeys.has(`${i}`)
+                        }
                         className="mt-1.5 flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] text-muted transition-colors hover:bg-surface-2 hover:text-foreground disabled:opacity-60"
                       >
                         {savedKeys.has(`${i}`) ? (
                           <>
                             <Check className="h-3 w-3" /> Saved to notes
+                          </>
+                        ) : savingKeys.has(`${i}`) ? (
+                          <>
+                            <Loader2 className="h-3 w-3 animate-spin text-primary" />{" "}
+                            Saving…
                           </>
                         ) : (
                           <>

@@ -52,7 +52,7 @@ export function PitchAccent({
 
   return (
     <span
-      className={cn("inline-flex items-start font-jp", className)}
+      className={cn("inline-flex flex-wrap items-start font-jp", className)}
       title={`pitch accent: ${accent} (${meta.en})`}
     >
       {/* Force dark kana (not the inherited muted gray) so the colored
@@ -79,9 +79,19 @@ export function PitchAccent({
         })}
       </span>
       {showTag && (
-        <sup className={cn("ml-0.5 text-[9px] font-medium", meta.text)}>
+        // A plain span (not <sup>): the superscript shift pushed this tiny CJK
+        // label up where it got clipped. self-start keeps the "accent type" tag
+        // up by the overline; leading-[1.5] + whitespace-nowrap keep 平板/頭高/…
+        // fully legible, and the parent's flex-wrap lets it drop below a long
+        // reading instead of being cut off by the card's overflow-hidden.
+        <span
+          className={cn(
+            "ml-1 shrink-0 self-start whitespace-nowrap text-[10px] font-medium leading-[1.5]",
+            meta.text,
+          )}
+        >
           {meta.jp}
-        </sup>
+        </span>
       )}
     </span>
   );
