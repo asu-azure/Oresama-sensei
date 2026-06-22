@@ -2,7 +2,9 @@ import Link from "next/link";
 import { BookOpen, Brain, MessageCircle, Layers } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { computeInsights, type InsightItem } from "@/lib/insights";
+import { healthBuckets, retentionForecast } from "@/lib/srs";
 import { StudyNext } from "@/components/insights/study-next";
+import { ForgettingCurve } from "@/components/insights/forgetting-curve";
 import {
   CoachNote,
   type CoachNoteData,
@@ -88,18 +90,118 @@ function Bars({
   );
 }
 
+/** Aggregate review history: reviews-per-day bars + a stability-trend line that
+ *  shows your library getting sturdier over time (the macro view of all those
+ *  per-item sawteeth). */
+function ReviewHistory({
+  days,
+  total,
+}: {
+  days: { label: string; count: number; avgStability: number | null }[];
+  total: number;
+}) {
+  const maxCount = Math.max(1, ...days.map((d) => d.count));
+  const stabilities = days
+    .map((d) => d.avgStability)
+    .filter((s): s is number => s != null);
+  const maxStab = Math.max(1, ...stabilities);
+
+  // Stability trend as an SVG polyline over the same 30 columns (only points on
+  // days that had reviews; carried as a faint line).
+  const pts = days
+    .map((d, i) =>
+      d.avgStability == null
+        ? null
+        : {
+            x: (i / Math.max(1, days.length - 1)) * 100,
+            y: 100 - (d.avgStability / maxStab) * 100,
+          },
+    )
+    .filter((p): p is { x: number; y: number } => p != null);
+  const trend = pts
+    .map((p, i) => `${i === 0 ? "M" : "L"}${p.x.toFixed(1)} ${p.y.toFixed(1)}`)
+    .join(" ");
+
+  if (total === 0) {
+    return (
+      <p className="text-sm text-muted">
+        Your review history starts building here as you practice. Each review is
+        logged so you can watch your memory strengthen over time.
+      </p>
+    );
+  }
+
+  return (
+    <div>
+      <div className="relative h-32">
+        {/* stability trend line, behind the bars */}
+        {pts.length >= 2 && (
+          <svg
+            viewBox="0 0 100 100"
+            preserveAspectRatio="none"
+            className="pointer-events-none absolute inset-0 h-full w-full"
+          >
+            <path
+              d={trend}
+              fill="none"
+              stroke="var(--color-accent)"
+              strokeWidth={1.5}
+              vectorEffect="non-scaling-stroke"
+              strokeLinejoin="round"
+            />
+          </svg>
+        )}
+        <div className="flex h-full items-end gap-0.5 overflow-hidden">
+          {days.map((d, i) => (
+            <div
+              key={i}
+              className="flex h-full min-w-0 flex-1 flex-col items-center justify-end"
+              title={`${d.label}: ${d.count} reviews${
+                d.avgStability != null
+                  ? ` · avg stability ${d.avgStability.toFixed(1)}d`
+                  : ""
+              }`}
+            >
+              <div
+                className="w-full rounded-t bg-primary/70"
+                style={{
+                  height: `${Math.max(d.count > 0 ? 6 : 0, (d.count / maxCount) * 100)}%`,
+                }}
+              />
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted">
+        <span className="flex items-center gap-1">
+          <span className="h-2 w-2 rounded-sm bg-primary/70" /> reviews / day
+        </span>
+        <span className="flex items-center gap-1">
+          <span className="h-0.5 w-3 rounded-sm bg-accent" /> avg stability trend
+        </span>
+        <span className="ml-auto">{total} reviews logged</span>
+      </div>
+    </div>
+  );
+}
+
 export default async function DashboardPage() {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const nowMs = new Date().getTime();
+  const now = new Date();
+  const nowMs = now.getTime();
+  const historySince = new Date(nowMs - 29 * 86_400_000)
+    .toISOString()
+    .slice(0, 10);
   const [
     { data: itemsRaw },
     { data: lessonsRaw },
     { count: questionCount },
     { data: coachRow },
+    { data: reviewLogRaw },
   ] = await Promise.all([
     supabase
       .from("knowledge_items")
@@ -118,12 +220,50 @@ export default async function DashboardPage() {
       .select("summary_md,focus_areas,generated_at")
       .eq("user_id", user!.id)
       .maybeSingle(),
+    // Aggregate "sawtooth" history. Degrades to [] if migration 0022 is missing.
+    supabase
+      .from("review_log")
+      .select("reviewed_at,stability_after")
+      .eq("user_id", user!.id)
+      .gte("reviewed_at", historySince)
+      .order("reviewed_at", { ascending: true }),
   ]);
 
   const items = (itemsRaw ?? []) as Item[];
   const lessons = (lessonsRaw ?? []) as { kind: string }[];
   const insights = computeInsights(items as InsightItem[], new Date(nowMs));
   const coachInitial = (coachRow as CoachNoteData | null) ?? null;
+
+  // Forgetting curve: current memory-health + 30-day decay forecast (pure local
+  // FSRS math, $0). Sawtooth aggregate: reviews per day + stability trend.
+  const buckets = healthBuckets(items, now);
+  const forecast = retentionForecast(items, 30, now);
+  const reviewLog = (reviewLogRaw ?? []) as {
+    reviewed_at: string;
+    stability_after: number;
+  }[];
+  const histByDay: Record<string, { count: number; stabilitySum: number }> = {};
+  for (const r of reviewLog) {
+    const k = r.reviewed_at.slice(0, 10);
+    const e = (histByDay[k] ??= { count: 0, stabilitySum: 0 });
+    e.count++;
+    e.stabilitySum += r.stability_after ?? 0;
+  }
+  const historyDays: {
+    label: string;
+    count: number;
+    avgStability: number | null;
+  }[] = [];
+  for (let d = 29; d >= 0; d--) {
+    const key = new Date(nowMs - d * 86_400_000).toISOString().slice(0, 10);
+    const e = histByDay[key];
+    historyDays.push({
+      label: d === 0 ? "Today" : key.slice(5),
+      count: e?.count ?? 0,
+      avgStability: e ? e.stabilitySum / e.count : null,
+    });
+  }
+  const historyTotal = reviewLog.length;
 
   const dueNow = items.filter(
     (i) => !i.srs_due || new Date(i.srs_due).getTime() <= nowMs,
@@ -219,6 +359,15 @@ export default async function DashboardPage() {
             <StudyNext insights={insights} />
             <CoachNote initial={coachInitial} />
           </div>
+
+          <ForgettingCurve buckets={buckets} forecast={forecast} />
+
+          <section className="rounded-2xl border border-border bg-surface p-5">
+            <h2 className="mb-3 text-sm font-medium text-muted">
+              Review history · last 30 days
+            </h2>
+            <ReviewHistory days={historyDays} total={historyTotal} />
+          </section>
 
           <div className="grid gap-4 sm:grid-cols-2">
             <section className="rounded-2xl border border-border bg-surface p-5">

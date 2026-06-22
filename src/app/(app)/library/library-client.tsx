@@ -30,6 +30,7 @@ import { SpeakButton } from "@/components/speak-button";
 import { KanjiChips } from "@/components/kanji/kanji-chips";
 import { ImagePreview } from "@/components/image-preview";
 import { DeepDiveSection } from "@/components/knowledge/deep-dive-section";
+import { MemoryHistory } from "@/components/insights/sawtooth-chart";
 import { ItemImage } from "@/components/knowledge/item-image";
 import { PitchAccent } from "@/components/pitch-accent";
 import { PitchToggle } from "@/components/pitch-toggle";
@@ -525,6 +526,7 @@ export function LibraryClient({
                         }
                         initialExamples={explanations[it.id]?.examples ?? []}
                       />
+                      <MemoryHistory itemId={it.id} reps={it.srs_reps} />
                     </div>
                   </motion.div>
                 )}

@@ -49,7 +49,7 @@ Two core features:
 - `supabase/migrations/0001_init.sql` — schema, pgvector, RLS, `match_knowledge`, storage, profile trigger.
 
 ## Running it
-1. Supabase project → run the SQL files in `supabase/migrations/` (0001–0021) in order in the SQL editor.
+1. Supabase project → run the SQL files in `supabase/migrations/` (0001–0022) in order in the SQL editor.
 2. `.env.local` (NOT committed) with: `NEXT_PUBLIC_SUPABASE_URL`,
    `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`. See `.env.example`.
 3. `npm install` → `npm run dev` → http://localhost:3000. Restart dev after editing `.env.local`
@@ -359,6 +359,25 @@ The **data lives in Supabase (cloud)**, so chats/vocab/lessons sync automaticall
   adds `knowledge_items.image_path` + `image_source` (degrades gracefully). Review signs urls server-side
   in `buildMeta`; library/search sign **lazily** when a row expands (`getItemImageUrls`). Known limit:
   deleting an item doesn't delete its storage object (orphan; fine for one user). Run migration **0021**.
+- ✅ v4.0 shipped (forgetting curve + sawtooth history): **(a)** a **forgetting-curve** section on
+  `/dashboard` (`ForgettingCurve` in `src/components/insights/forgetting-curve.tsx`) — a current
+  **memory-health** distribution bar (strong ≥85% / fading 60–84% / weak <60% / new) plus a **30-day
+  decay forecast** line ("if you stop reviewing, average recall drops like this"). Both are pure local
+  FSRS math (**$0**, no model call): new `healthBuckets` (buckets the existing `retrievability()`) and
+  `retentionForecast` (averages `ts-fsrs` `get_retrievability` at future dates) in `src/lib/srs.ts`.
+  **(b)** **Per-review history is now logged** — previously every review **overwrote** the `srs_*` state
+  on `knowledge_items` (no history anywhere), so the classic SRS **sawtooth** was impossible. New table
+  **`review_log`** (migration **0022**): `/api/srs` inserts one row per grade (rating, retrievability
+  *before*, stability before/after, elapsed days, interval) **best-effort** — a missing table or insert
+  error never breaks a review. History is **forward-only** ("from now on"); the past can't be
+  reconstructed. **(c)** **Per-item sawtooth** drill-in: expand a word in `/library` → **Memory history**
+  (`MemoryHistory` in `src/components/insights/sawtooth-chart.tsx`) lazy-loads its log via
+  `loadItemHistory` (`library/actions.ts`) and draws recall snapping to ~100% on each review then decaying
+  (`buildSawtooth` in `src/lib/review-history.ts`, a shared **no-ts-fsrs** module using the
+  `R(t)=0.9^(t/S)` approximation so the client never imports the server-only scheduler). **(d)** an
+  **aggregate review-history** chart on `/dashboard` (reviews/day bars + an avg-**stability** trend line)
+  showing the library getting sturdier overall. Both history views degrade to friendly empty-states until
+  data accrues. Run migration **0022**.
 - ⏳ Next ideas (not built): an **SNS growth view** that aggregates `sns_corrections.errors[].type` over
   time (the error log is being collected now); library multi-select bulk source-tag (per-lesson editor covers backfill for
   now); per-page knowledge granularity (page color currently aggregates the whole lesson's items); a

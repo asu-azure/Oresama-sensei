@@ -6,8 +6,32 @@ import { LIBRARY_COLS } from "./columns";
 import { generateDeepDive, resolveEngine, type DeepDiveExample } from "@/lib/claude";
 import { recallKnowledge } from "@/lib/memory";
 import type { Profile } from "@/lib/types";
+import type { ReviewLogRow } from "@/lib/review-history";
 
 const DAY_MS = 86_400_000;
+
+/** All logged review events for one item, oldest first — powers the per-item
+ *  "sawtooth" chart. Returns [] if the user is signed out or migration 0022
+ *  hasn't been run yet (degrades gracefully). */
+export async function loadItemHistory(
+  itemId: string,
+): Promise<ReviewLogRow[]> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return [];
+  const { data, error } = await supabase
+    .from("review_log")
+    .select(
+      "reviewed_at,rating,elapsed_days,retrievability,stability_before,stability_after,interval_after",
+    )
+    .eq("user_id", user.id)
+    .eq("item_id", itemId)
+    .order("reviewed_at", { ascending: true });
+  if (error) return []; // table missing or other issue → no history yet
+  return (data ?? []) as ReviewLogRow[];
+}
 
 /** Cached "deep dive" for a saved item — generates + caches on first request
  *  (or when `force`). Degrades gracefully if migration 0008 isn't run yet. */
