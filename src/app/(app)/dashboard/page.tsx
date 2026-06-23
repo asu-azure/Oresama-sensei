@@ -32,6 +32,32 @@ const TYPE_LABEL: Record<string, string> = {
   expression: "Expressions",
 };
 
+const ITEM_COLUMNS =
+  "type,jlpt_level,created_at,times_seen,srs_due,srs_reps,srs_lapses,srs_stability,srs_difficulty,srs_interval,srs_last_review,term,reading";
+
+/** Fetch ALL knowledge items, paging past Supabase/PostgREST's default 1000-row
+ *  cap so every dashboard aggregate reflects the full library (not just the
+ *  first 1000). Mirrors the manual `.range()` pattern in library/actions.ts. */
+async function fetchAllItems(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+): Promise<Item[]> {
+  const PAGE = 1000;
+  const all: Item[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data } = await supabase
+      .from("knowledge_items")
+      .select(ITEM_COLUMNS)
+      .eq("user_id", userId)
+      .order("created_at", { ascending: true })
+      .range(from, from + PAGE - 1);
+    if (!data || data.length === 0) break;
+    all.push(...(data as Item[]));
+    if (data.length < PAGE) break;
+  }
+  return all;
+}
+
 function StatCard({
   icon,
   label,
@@ -197,39 +223,37 @@ export default async function DashboardPage() {
     .toISOString()
     .slice(0, 10);
   const [
-    { data: itemsRaw },
-    { data: lessonsRaw },
-    { count: questionCount },
-    { data: coachRow },
-    { data: reviewLogRaw },
+    items,
+    [
+      { data: lessonsRaw },
+      { count: questionCount },
+      { data: coachRow },
+      { data: reviewLogRaw },
+    ],
   ] = await Promise.all([
-    supabase
-      .from("knowledge_items")
-      .select(
-        "type,jlpt_level,created_at,times_seen,srs_due,srs_reps,srs_lapses,srs_stability,srs_difficulty,srs_interval,srs_last_review,term,reading",
-      )
-      .eq("user_id", user!.id),
-    supabase.from("lessons").select("kind").eq("user_id", user!.id),
-    supabase
-      .from("messages")
-      .select("id", { count: "exact", head: true })
-      .eq("user_id", user!.id)
-      .eq("role", "user"),
-    supabase
-      .from("learner_insights")
-      .select("summary_md,focus_areas,generated_at")
-      .eq("user_id", user!.id)
-      .maybeSingle(),
-    // Aggregate "sawtooth" history. Degrades to [] if migration 0022 is missing.
-    supabase
-      .from("review_log")
-      .select("reviewed_at,stability_after")
-      .eq("user_id", user!.id)
-      .gte("reviewed_at", historySince)
-      .order("reviewed_at", { ascending: true }),
+    fetchAllItems(supabase, user!.id),
+    Promise.all([
+      supabase.from("lessons").select("kind").eq("user_id", user!.id),
+      supabase
+        .from("messages")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", user!.id)
+        .eq("role", "user"),
+      supabase
+        .from("learner_insights")
+        .select("summary_md,focus_areas,generated_at")
+        .eq("user_id", user!.id)
+        .maybeSingle(),
+      // Aggregate "sawtooth" history. Degrades to [] if migration 0022 missing.
+      supabase
+        .from("review_log")
+        .select("reviewed_at,stability_after")
+        .eq("user_id", user!.id)
+        .gte("reviewed_at", historySince)
+        .order("reviewed_at", { ascending: true }),
+    ]),
   ]);
 
-  const items = (itemsRaw ?? []) as Item[];
   const lessons = (lessonsRaw ?? []) as { kind: string }[];
   const insights = computeInsights(items as InsightItem[], new Date(nowMs));
   const coachInitial = (coachRow as CoachNoteData | null) ?? null;

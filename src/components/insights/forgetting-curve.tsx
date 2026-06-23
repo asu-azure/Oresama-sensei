@@ -102,7 +102,7 @@ export function ForgettingCurve({
       </p>
       <div className="flex gap-1.5">
         {/* y-axis labels (HTML, so they don't stretch with the SVG) */}
-        <div className="relative h-24 w-8 shrink-0">
+        <div className="relative h-48 w-8 shrink-0">
           {TICKS.map((r) => (
             <span
               key={r}
@@ -110,7 +110,7 @@ export function ForgettingCurve({
                 "absolute right-0 -translate-y-1/2 text-[9px] tabular-nums",
                 r === 0.9 ? "font-medium text-foreground" : "text-muted",
               )}
-              style={{ top: yPct(r) }}
+              style={{ top: `${(yPct(r) / H) * 100}%` }}
             >
               {Math.round(r * 100)}%
             </span>
@@ -118,7 +118,7 @@ export function ForgettingCurve({
         </div>
         <svg
           viewBox={`0 0 ${W} ${H}`}
-          className="h-24 w-full"
+          className="h-48 w-full"
           preserveAspectRatio="none"
           role="img"
           aria-label="Projected average recall over the next 30 days"
