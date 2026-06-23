@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { fetchAllRows } from "@/lib/fetch-all";
 import { LibraryClient, type LibraryItem } from "./library-client";
 import { LIBRARY_COLS } from "./columns";
 import { loadExplanations } from "./explanations";
@@ -26,23 +27,29 @@ export default async function LibraryPage() {
   //  1. the most recent PAGE_SIZE items (rest stream in via infinite scroll)
   //  2. a few small columns for EVERY item, to build the calendar heat-map,
   //     the DB-wide mastery counts, and the full list of source types.
-  const [{ data: recent }, { data: stats }] = await Promise.all([
+  const [{ data: recent }, stats] = await Promise.all([
     supabase
       .from("knowledge_items")
       .select(LIBRARY_COLS)
       .eq("user_id", user!.id)
       .order("created_at", { ascending: false })
       .limit(PAGE_SIZE),
-    supabase
-      .from("knowledge_items")
-      .select(
-        "created_at,source_type,srs_reps,srs_lapses,srs_difficulty,srs_stability,srs_interval",
-      )
-      .eq("user_id", user!.id),
+    // Small columns for EVERY item — paged past the 1000-row cap so the total,
+    // calendar, mastery legend, and source list reflect the whole library.
+    fetchAllRows<StatRow>((from, to) =>
+      supabase
+        .from("knowledge_items")
+        .select(
+          "created_at,source_type,srs_reps,srs_lapses,srs_difficulty,srs_stability,srs_interval",
+        )
+        .eq("user_id", user!.id)
+        .order("id")
+        .range(from, to),
+    ),
   ]);
 
   const items = (recent ?? []) as unknown as LibraryItem[];
-  const allStats = (stats ?? []) as StatRow[];
+  const allStats = stats;
 
   // Items added per UTC day -> { "YYYY-MM-DD": count } (matches dashboard bucketing).
   const dayCounts: Record<string, number> = {};

@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { fetchAllRows } from "@/lib/fetch-all";
 import { pageMastery } from "@/lib/mastery";
 import { BookDetail, type BookItem, type GridPage } from "./book-detail";
 import type { Collection } from "@/lib/types";
@@ -23,19 +24,20 @@ export default async function BookDetailPage({
   if (!collRaw) notFound();
   const collection = collRaw as Collection;
 
-  const [{ data: pagesRaw }, { data: lessonsRaw }, { data: itemsRaw }] =
-    await Promise.all([
-      supabase
-        .from("collection_pages")
-        .select("page_number,status,lesson_id,image_path")
-        .eq("user_id", user!.id)
-        .eq("collection_id", id)
-        .order("page_number", { ascending: true }),
-      supabase
-        .from("lessons")
-        .select("id,title")
-        .eq("user_id", user!.id)
-        .eq("collection_id", id),
+  const [{ data: pagesRaw }, { data: lessonsRaw }, items] = await Promise.all([
+    supabase
+      .from("collection_pages")
+      .select("page_number,status,lesson_id,image_path")
+      .eq("user_id", user!.id)
+      .eq("collection_id", id)
+      .order("page_number", { ascending: true }),
+    supabase
+      .from("lessons")
+      .select("id,title")
+      .eq("user_id", user!.id)
+      .eq("collection_id", id),
+    // Paged past the 1000-row cap so a large collection shows all its items.
+    fetchAllRows<BookItem>((from, to) =>
       supabase
         .from("knowledge_items")
         .select(
@@ -43,8 +45,11 @@ export default async function BookDetailPage({
         )
         .eq("user_id", user!.id)
         .eq("collection_id", id)
-        .order("created_at", { ascending: false }),
-    ]);
+        .order("created_at", { ascending: false })
+        .order("id")
+        .range(from, to),
+    ),
+  ]);
 
   const pageRows = (pagesRaw ?? []) as {
     page_number: number;
@@ -53,7 +58,6 @@ export default async function BookDetailPage({
     image_path: string | null;
   }[];
   const lessons = (lessonsRaw ?? []) as { id: string; title: string | null }[];
-  const items = (itemsRaw ?? []) as BookItem[];
 
   let coverUrl: string | null = null;
   if (collection.cover_path) {

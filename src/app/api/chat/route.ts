@@ -6,6 +6,7 @@ import {
   type ChatTurn,
 } from "@/lib/claude";
 import { recallKnowledge, storeKnowledge, storeMessage } from "@/lib/memory";
+import { fetchAllRows } from "@/lib/fetch-all";
 import { buildChatSystemPrompt } from "@/lib/prompts";
 import { computeInsights, statsDigest, type InsightItem } from "@/lib/insights";
 import type { Profile } from "@/lib/types";
@@ -62,7 +63,7 @@ export async function POST(request: Request) {
   // Load context: profile, recalled knowledge, recent turns, and a live
   // progress snapshot (plain SQL — no embeddings, no LLM) so Sensei knows the
   // learner's current strengths/weaknesses.
-  const [{ data: profile }, recalled, { data: history }, { data: allItems }] =
+  const [{ data: profile }, recalled, { data: history }, allItems] =
     await Promise.all([
       supabase.from("profiles").select("*").eq("id", user.id).maybeSingle(),
       recallKnowledge(supabase, message, 8),
@@ -72,17 +73,21 @@ export async function POST(request: Request) {
         .eq("conversation_id", conversationId)
         .order("created_at", { ascending: true })
         .limit(20),
-      supabase
-        .from("knowledge_items")
-        .select(
-          "type,jlpt_level,term,srs_reps,srs_lapses,srs_stability,srs_difficulty,srs_interval,srs_due,created_at",
-        )
-        .eq("user_id", user.id),
+      // Whole library — paged past the 1000-row cap so the progress digest
+      // reflects every item, not just the first 1000.
+      fetchAllRows<InsightItem>((from, to) =>
+        supabase
+          .from("knowledge_items")
+          .select(
+            "type,jlpt_level,term,srs_reps,srs_lapses,srs_stability,srs_difficulty,srs_interval,srs_due,created_at",
+          )
+          .eq("user_id", user.id)
+          .order("id")
+          .range(from, to),
+      ),
     ]);
 
-  const digest = statsDigest(
-    computeInsights((allItems ?? []) as InsightItem[]),
-  );
+  const digest = statsDigest(computeInsights(allItems));
   const system = buildChatSystemPrompt(
     profile as Profile | null,
     recalled,

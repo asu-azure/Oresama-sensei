@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { fetchAllRows } from "@/lib/fetch-all";
 import { generateCoachNote, resolveEngine } from "@/lib/claude";
 import { computeInsights, statsDigest, type InsightItem } from "@/lib/insights";
 import type { Profile } from "@/lib/types";
@@ -20,23 +21,28 @@ export async function POST(request: Request) {
     // no body → default (use cache)
   }
 
-  const [{ data: items }, { data: profile }, { data: cached }] =
-    await Promise.all([
+  const [items, { data: profile }, { data: cached }] = await Promise.all([
+    // Whole library — paged past the 1000-row cap so the coach's note reflects
+    // every item, not just the first 1000.
+    fetchAllRows<InsightItem>((from, to) =>
       supabase
         .from("knowledge_items")
         .select(
           "type,jlpt_level,term,srs_reps,srs_lapses,srs_stability,srs_difficulty,srs_interval,srs_due,created_at",
         )
-        .eq("user_id", user.id),
-      supabase.from("profiles").select("*").eq("id", user.id).maybeSingle(),
-      supabase
-        .from("learner_insights")
-        .select("summary_md,focus_areas,stats_signature,generated_at")
         .eq("user_id", user.id)
-        .maybeSingle(),
-    ]);
+        .order("id")
+        .range(from, to),
+    ),
+    supabase.from("profiles").select("*").eq("id", user.id).maybeSingle(),
+    supabase
+      .from("learner_insights")
+      .select("summary_md,focus_areas,stats_signature,generated_at")
+      .eq("user_id", user.id)
+      .maybeSingle(),
+  ]);
 
-  const insights = computeInsights((items ?? []) as InsightItem[]);
+  const insights = computeInsights(items);
 
   if (insights.total === 0) {
     return Response.json({

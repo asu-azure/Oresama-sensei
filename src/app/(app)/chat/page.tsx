@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { fetchAllRows } from "@/lib/fetch-all";
 import { resolveChatModel } from "@/lib/claude";
 import { ChatClient, type UiMessage } from "./chat-client";
 import type { ConversationSummary } from "./conversation-drawer";
@@ -16,13 +17,17 @@ export default async function ChatPage({
     data: { user },
   } = await supabase.auth.getUser();
 
-  // All conversations for the drawer (most recent first).
-  const { data: convoRows } = await supabase
-    .from("conversations")
-    .select("id,title,created_at")
-    .eq("user_id", user!.id)
-    .order("created_at", { ascending: false });
-  const conversations = (convoRows ?? []) as ConversationSummary[];
+  // All conversations for the drawer (most recent first); paged past the
+  // 1000-row cap so the drawer shows every conversation.
+  const conversations = await fetchAllRows<ConversationSummary>((from, to) =>
+    supabase
+      .from("conversations")
+      .select("id,title,created_at")
+      .eq("user_id", user!.id)
+      .order("created_at", { ascending: false })
+      .order("id")
+      .range(from, to),
+  );
 
   // The learner's saved default chat model (degrades to Gemini Flash if the
   // column / migration 0018 isn't present yet).

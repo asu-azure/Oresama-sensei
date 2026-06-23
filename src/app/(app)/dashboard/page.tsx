@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { BookOpen, Brain, MessageCircle, Layers } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { fetchAllRows } from "@/lib/fetch-all";
 import { computeInsights, type InsightItem } from "@/lib/insights";
 import { healthBuckets, retentionForecast } from "@/lib/srs";
 import { StudyNext } from "@/components/insights/study-next";
@@ -34,29 +35,6 @@ const TYPE_LABEL: Record<string, string> = {
 
 const ITEM_COLUMNS =
   "type,jlpt_level,created_at,times_seen,srs_due,srs_reps,srs_lapses,srs_stability,srs_difficulty,srs_interval,srs_last_review,term,reading";
-
-/** Fetch ALL knowledge items, paging past Supabase/PostgREST's default 1000-row
- *  cap so every dashboard aggregate reflects the full library (not just the
- *  first 1000). Mirrors the manual `.range()` pattern in library/actions.ts. */
-async function fetchAllItems(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  userId: string,
-): Promise<Item[]> {
-  const PAGE = 1000;
-  const all: Item[] = [];
-  for (let from = 0; ; from += PAGE) {
-    const { data } = await supabase
-      .from("knowledge_items")
-      .select(ITEM_COLUMNS)
-      .eq("user_id", userId)
-      .order("created_at", { ascending: true })
-      .range(from, from + PAGE - 1);
-    if (!data || data.length === 0) break;
-    all.push(...(data as Item[]));
-    if (data.length < PAGE) break;
-  }
-  return all;
-}
 
 function StatCard({
   icon,
@@ -224,16 +202,26 @@ export default async function DashboardPage() {
     .slice(0, 10);
   const [
     items,
-    [
-      { data: lessonsRaw },
-      { count: questionCount },
-      { data: coachRow },
-      { data: reviewLogRaw },
-    ],
+    lessons,
+    [{ count: questionCount }, { data: coachRow }, { data: reviewLogRaw }],
   ] = await Promise.all([
-    fetchAllItems(supabase, user!.id),
+    fetchAllRows<Item>((from, to) =>
+      supabase
+        .from("knowledge_items")
+        .select(ITEM_COLUMNS)
+        .eq("user_id", user!.id)
+        .order("created_at", { ascending: true })
+        .range(from, to),
+    ),
+    fetchAllRows<{ kind: string }>((from, to) =>
+      supabase
+        .from("lessons")
+        .select("kind")
+        .eq("user_id", user!.id)
+        .order("id")
+        .range(from, to),
+    ),
     Promise.all([
-      supabase.from("lessons").select("kind").eq("user_id", user!.id),
       supabase
         .from("messages")
         .select("id", { count: "exact", head: true })
@@ -254,7 +242,6 @@ export default async function DashboardPage() {
     ]),
   ]);
 
-  const lessons = (lessonsRaw ?? []) as { kind: string }[];
   const insights = computeInsights(items as InsightItem[], new Date(nowMs));
   const coachInitial = (coachRow as CoachNoteData | null) ?? null;
 
