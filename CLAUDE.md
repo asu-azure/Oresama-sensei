@@ -55,6 +55,16 @@ Two core features:
 3. `npm install` → `npm run dev` → http://localhost:3000. Restart dev after editing `.env.local`
    (Next reads env only at startup).
 
+### Supabase MCP (optional, for AI agents)
+`.mcp.json` (committed) wires Claude Code to the **hosted Supabase MCP server**
+(`https://mcp.supabase.com/mcp`), scoped to this project (`project_ref`) and **read-only**
+(inspect schema, verify migrations, run read-only debug queries — no writes). To enable it,
+set a **Supabase personal access token** in the environment Claude Code runs in (NOT in git):
+`SUPABASE_ACCESS_TOKEN` (create at Supabase dashboard → Account → Access Tokens). On Windows:
+`setx SUPABASE_ACCESS_TOKEN "<token>"` then reopen the terminal. The project ref in `.mcp.json`
+is public (same as the `NEXT_PUBLIC_SUPABASE_URL` subdomain), so only the token is secret.
+To let an agent **apply** migrations, drop `read_only=true` from the URL temporarily.
+
 ## Working across computers (IMPORTANT)
 The **data lives in Supabase (cloud)**, so chats/vocab/lessons sync automatically. Only the
 **code** syncs via GitHub. Workflow:
@@ -433,3 +443,13 @@ The **data lives in Supabase (cloud)**, so chats/vocab/lessons sync automaticall
   eagerly loads the tiny `levels.json` for `levelOf`/lists and **lazy-loads** per-level info/strokes via
   dynamic `import()` (memoized). Components come from KanjiVG `kvg:element` group nesting (root's direct
   children); strokes are the ordered `<path d>`. Attribution (CC-BY-SA) is shown on the Kanji page.
+- Supabase queries that fetch a **full list** for display/aggregation must page past PostgREST's
+  default **1000-row cap** via `fetchAllRows` (`src/lib/fetch-all.ts`) with a stable `.order()`
+  (add `id` as a tiebreaker on non-unique sorts). Used by dashboard, library stats, search, kanji
+  seen-set, chat/coach digests, conversation drawer, and per-collection items. Queries with an
+  intentional small bound (`review`/`tests`/`map`/`summary` `.limit(...)`, infinite-scroll
+  `.range`, `count:"exact",head:true`) are left as-is.
+- **Supabase MCP** for AI agents is wired via committed `.mcp.json` (hosted server, project-scoped,
+  **read-only** by default); the access token is env-only (`SUPABASE_ACCESS_TOKEN`), never committed.
+  See "Supabase MCP" under Running it. Chosen because this repo is DB-heavy (schema/migration work,
+  live-data debugging); read-only + project scope keeps the blast radius small for the single private DB.
