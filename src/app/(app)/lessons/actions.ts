@@ -42,6 +42,51 @@ export async function deleteLesson(formData: FormData) {
   redirect("/lessons");
 }
 
+/** Does this collection already have a lesson on this exact page? Used by the
+ *  uploader to offer "Add to existing" vs "Create separate" on a re-upload. */
+export async function findLessonForPage(
+  collectionId: string,
+  pageStart: number,
+): Promise<{ lessonId: string; title: string | null } | null> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+
+  // Prefer the page-grid mapping; fall back to a lesson whose range starts here.
+  const { data: page } = await supabase
+    .from("collection_pages")
+    .select("lesson_id")
+    .eq("user_id", user.id)
+    .eq("collection_id", collectionId)
+    .eq("page_number", pageStart)
+    .not("lesson_id", "is", null)
+    .maybeSingle();
+  let lessonId = (page?.lesson_id as string | null) ?? null;
+
+  if (!lessonId) {
+    const { data: lesson } = await supabase
+      .from("lessons")
+      .select("id")
+      .eq("user_id", user.id)
+      .eq("collection_id", collectionId)
+      .eq("page_start", pageStart)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    lessonId = (lesson?.id as string | null) ?? null;
+  }
+  if (!lessonId) return null;
+
+  const { data: l } = await supabase
+    .from("lessons")
+    .select("title")
+    .eq("id", lessonId)
+    .maybeSingle();
+  return { lessonId, title: (l?.title as string | null) ?? null };
+}
+
 export type UpdateLessonSourceInput = {
   lessonId: string;
   materialType: MaterialType;
@@ -50,6 +95,8 @@ export type UpdateLessonSourceInput = {
   newCollectionAuthor?: string | null;
   pageStart?: number | null;
   pageEnd?: number | null;
+  chapter?: string | null;
+  chapterPage?: number | null;
 };
 
 /** Backfill / edit a lesson's source attribution, and stamp the same attribution
@@ -77,19 +124,40 @@ export async function updateLessonSource(
     });
   }
 
-  const { error: lessonErr } = await supabase
+  // Update the lesson. chapter/chapter_page are best-effort (migration 0023):
+  // if those columns don't exist yet, retry without them so the edit still saves.
+  const basePatch = {
+    material_type: input.materialType,
+    collection_id: collectionId,
+    page_start: input.pageStart ?? null,
+    page_end: input.pageEnd ?? null,
+  };
+  let { error: lessonErr } = await supabase
     .from("lessons")
     .update({
-      material_type: input.materialType,
-      collection_id: collectionId,
-      page_start: input.pageStart ?? null,
-      page_end: input.pageEnd ?? null,
+      ...basePatch,
+      chapter: input.chapter ?? null,
+      chapter_page: input.chapterPage ?? null,
     })
     .eq("id", input.lessonId)
     .eq("user_id", user.id);
+  if (lessonErr) {
+    ({ error: lessonErr } = await supabase
+      .from("lessons")
+      .update(basePatch)
+      .eq("id", input.lessonId)
+      .eq("user_id", user.id));
+  }
   if (lessonErr) return { error: "Couldn't update the lesson." };
 
-  // Record the page range for the books grid.
+  // MOVE the lesson cleanly: un-place it from EVERY page it used to sit on (any
+  // old book/page), so editing the collection/page doesn't leave it lingering on
+  // the previous book. Then record its new page range.
+  await supabase
+    .from("collection_pages")
+    .delete()
+    .eq("user_id", user.id)
+    .eq("lesson_id", input.lessonId);
   if (collectionId && input.pageStart != null) {
     await upsertCollectionPages(supabase, user.id, {
       collectionId,

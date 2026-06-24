@@ -388,6 +388,31 @@ The **data lives in Supabase (cloud)**, so chats/vocab/lessons sync automaticall
   **aggregate review-history** chart on `/dashboard` (reviews/day bars + an avg-**stability** trend line)
   showing the library getting sturdier overall. Both history views degrade to friendly empty-states until
   data accrues. Run migration **0022**.
+- ✅ v4.1 shipped (insights analytics + lesson/book/map/kanji round): a new **/insights** data-mining
+  page (`src/lib/insights-mining.ts` pure helpers + `src/components/insights/charts.tsx` hand-rolled
+  SVG/flex charts — composition by source/level/type, **difficulty-vs-stability scatter**, maturity
+  buckets, rating mix, study-rhythm by local hour, **pass-rate by source**, FSRS **calibration** actual
+  vs predicted, leech table). New **Insights** nav tab. **Lessons**: re-uploading a page that already has
+  a lesson now **asks** Add-to-existing vs Create-separate (`findLessonForPage` + `mode:"extend"` in
+  `api/lesson/route.ts` appends article/images/source/exercises into the same lesson, dedupe avoids dup
+  items); editing a lesson's book/page **fully moves** it — `updateLessonSource` deletes stale
+  `collection_pages` before re-placing. New **chapter** layer (migration **0023**: free-text
+  `lessons.chapter` + independent `chapter_page`; uploader + source-editor inputs; collapsible chapter
+  sections in the book view; degrades gracefully if 0023 unrun). **Map** at scale: a **scope picker**
+  (All / book / JLPT level / source → `/api/map` filters before the 200-cap, scope stored in
+  `knowledge_maps.data.scope`) + a client **search/filter overlay** (highlight/dim graph nodes, filter
+  board). **Kanji coverage**: shared `src/lib/kanji-coverage.ts` → full **% learned** section on `/kanji`
+  (overall + per-level bars + status heatmap of all 2211 kanji) and a compact card on `/insights`.
+  **Books**: first tap on a page previews its items, second tap opens the lesson. Run migration **0023**.
+- ✅ v4.2 shipped (review UX): the insights "Compare forgetting curves" became **Compare review
+  history** — real per-word **sawtooth** from `review_log` (reuses `buildSawtooth` + the exported
+  `SawtoothChart`), with **Separate** (small multiples) and **Overlay** (aligned to each word's first
+  review) views; the insights page groups its already-fetched logs by item (added `stability_after` to
+  `LOG_COLUMNS`), no new query. Flashcard review now shows **"N due left"**. The **Review nav badge is
+  live + uncapped**: a `useSyncExternalStore` store (`src/lib/use-review-due.ts`) seeded each navigation
+  by `ReviewDueSync` in the layout and decremented in the grade handler from `/api/srs`'s `due` (an
+  "again" with a minutes-ahead due correctly stays counted) — updates without a refresh and shows the
+  real number (no "99+").
 - ⏳ Next ideas (not built): an **SNS growth view** that aggregates `sns_corrections.errors[].type` over
   time (the error log is being collected now); library multi-select bulk source-tag (per-lesson editor covers backfill for
   now); per-page knowledge granularity (page color currently aggregates the whole lesson's items); a

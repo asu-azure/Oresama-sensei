@@ -15,6 +15,7 @@ import {
   type MaterialType,
 } from "@/lib/source";
 import { listCollections } from "./collections-actions";
+import { findLessonForPage } from "./actions";
 import { createClient } from "@/lib/supabase/client";
 import type { CollectionOption } from "@/lib/collections";
 
@@ -89,7 +90,26 @@ export function LessonUploader({
   const [cover, setCover] = useState<Pic | null>(null);
   const [pageStart, setPageStart] = useState(initialPage ?? "");
   const [pageEnd, setPageEnd] = useState("");
+  const [chapter, setChapter] = useState("");
+  const [chapterPage, setChapterPage] = useState("");
   const coverInputRef = useRef<HTMLInputElement>(null);
+
+  // Duplicate-page detection: if this collection already has a lesson on this
+  // page, ask the user whether to extend it or make a separate one.
+  const [dupLesson, setDupLesson] = useState<{
+    lessonId: string;
+    title: string | null;
+  } | null>(null);
+  const [extendChoice, setExtendChoice] = useState<"extend" | "new" | null>(null);
+
+  async function checkDuplicate(cid: string, page: string) {
+    setDupLesson(null);
+    setExtendChoice(null);
+    const n = parseInt(page, 10);
+    if (!cid || cid === NEW_COLLECTION || !Number.isFinite(n) || n <= 0) return;
+    const found = await findLessonForPage(cid, n).catch(() => null);
+    if (found) setDupLesson(found);
+  }
 
   const collectionKind = collectionKindForMaterial(materialType);
   const kindCollections = collections.filter((c) => c.kind === collectionKind);
@@ -112,6 +132,7 @@ export function LessonUploader({
   function selectCollection(cid: string) {
     setCollectionId(cid);
     rememberBook(materialType, cid);
+    void checkDuplicate(cid, pageStart);
   }
 
   function pickCover(list: FileList | null) {
@@ -171,6 +192,10 @@ export function LessonUploader({
     setNewAuthor("");
     setPageStart("");
     setPageEnd("");
+    setChapter("");
+    setChapterPage("");
+    setDupLesson(null);
+    setExtendChoice(null);
     setArticle("");
     setLessonId(null);
     setStage("idle");
@@ -186,6 +211,14 @@ export function LessonUploader({
 
   async function generate() {
     if (pics.length === 0 || busy) return;
+
+    // If this page already has a lesson, make the user choose first.
+    if (dupLesson && extendChoice === null) {
+      setError(
+        'This page already has a lesson — choose "Add to it" or "Create separate".',
+      );
+      return;
+    }
 
     // Validate up front so a bad file fails before anything is uploaded.
     for (const p of pics) {
@@ -252,6 +285,13 @@ export function LessonUploader({
         }
         if (pageStart.trim()) body.pageStart = pageStart.trim();
         if (pageEnd.trim()) body.pageEnd = pageEnd.trim();
+        if (chapter.trim()) body.chapter = chapter.trim();
+        if (chapterPage.trim()) body.chapterPage = chapterPage.trim();
+        // Extend an existing lesson on this page when the user chose to.
+        if (dupLesson && extendChoice === "extend") {
+          body.mode = "extend";
+          body.extendLessonId = dupLesson.lessonId;
+        }
       }
 
       setStage("reading");
@@ -475,7 +515,10 @@ export function LessonUploader({
                 <span className="text-sm text-muted">Pages</span>
                 <input
                   value={pageStart}
-                  onChange={(e) => setPageStart(e.target.value)}
+                  onChange={(e) => {
+                    setPageStart(e.target.value);
+                    void checkDuplicate(collectionId, e.target.value);
+                  }}
                   disabled={busy}
                   inputMode="numeric"
                   placeholder="from"
@@ -491,6 +534,63 @@ export function LessonUploader({
                   className="w-24 rounded-lg border border-border bg-surface px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring"
                 />
               </div>
+
+              {/* Chapter (free text) + independent in-chapter page (optional) */}
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-sm text-muted">Chapter</span>
+                <input
+                  value={chapter}
+                  onChange={(e) => setChapter(e.target.value)}
+                  disabled={busy}
+                  placeholder="e.g. Arc 2: Tournament (optional)"
+                  className="min-w-0 flex-1 rounded-lg border border-border bg-surface px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring"
+                />
+                <input
+                  value={chapterPage}
+                  onChange={(e) => setChapterPage(e.target.value)}
+                  disabled={busy}
+                  inputMode="numeric"
+                  placeholder="ch. p."
+                  title="Page within the chapter (independent of the book page)"
+                  className="w-20 rounded-lg border border-border bg-surface px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring"
+                />
+              </div>
+
+              {/* Duplicate-page prompt: add to the existing lesson or make a new one */}
+              {dupLesson && (
+                <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-2.5 text-sm">
+                  <p className="text-foreground">
+                    ⚠ Page {pageStart} already has a lesson
+                    {dupLesson.title ? ` ("${dupLesson.title}")` : ""}.
+                  </p>
+                  <div className="mt-2 flex gap-1.5">
+                    <button
+                      onClick={() => setExtendChoice("extend")}
+                      disabled={busy}
+                      className={cn(
+                        "rounded-full border px-3 py-1 text-xs transition-colors disabled:opacity-50",
+                        extendChoice === "extend"
+                          ? "border-primary bg-primary/10 text-primary"
+                          : "border-border bg-surface text-muted hover:bg-surface-2",
+                      )}
+                    >
+                      Add to it
+                    </button>
+                    <button
+                      onClick={() => setExtendChoice("new")}
+                      disabled={busy}
+                      className={cn(
+                        "rounded-full border px-3 py-1 text-xs transition-colors disabled:opacity-50",
+                        extendChoice === "new"
+                          ? "border-primary bg-primary/10 text-primary"
+                          : "border-border bg-surface text-muted hover:bg-surface-2",
+                      )}
+                    >
+                      Create separate
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

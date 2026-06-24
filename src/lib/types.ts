@@ -94,6 +94,10 @@ export interface Lesson {
   /** Page range covered, for collection material. */
   page_start: number | null;
   page_end: number | null;
+  /** Free-text chapter/arc this lesson belongs to (migration 0023). */
+  chapter: string | null;
+  /** Optional page number WITHIN the chapter, independent of page_start/end (0023). */
+  chapter_page: number | null;
   exercises: Exercise[] | null;
   created_at: string;
 }
@@ -134,6 +138,14 @@ export interface MapEdge {
   relation: string;
 }
 
+/** What subset of items a map was generated from. */
+export interface MapScope {
+  type: "all" | "collection" | "level" | "source";
+  value?: string | null;
+  /** Human label for the picker/header, e.g. "One Piece" or "N2". */
+  label?: string | null;
+}
+
 /** The full generated map structure (item ids reference knowledge_items). */
 export interface MapData {
   groups: MapGroup[];
@@ -141,6 +153,8 @@ export interface MapData {
   /** Manually-dragged node positions, keyed by node id (item id or
    *  `group-<id>`). Persisted in-place; absent on a freshly generated map. */
   positions?: Record<string, { x: number; y: number }>;
+  /** The scope this map was generated from (absent → all items). */
+  scope?: MapScope;
 }
 
 /** A cached knowledge map row. */

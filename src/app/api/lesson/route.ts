@@ -93,6 +93,12 @@ export async function POST(request: Request) {
   let newCollectionAuthor: string | null;
   let pageStart: number | null;
   let pageEnd: number | null;
+  let chapter: string | null;
+  let chapterPage: number | null;
+  // "extend": append into an existing lesson on the same page instead of
+  // creating a new one (the uploader asks the user on a duplicate page).
+  let mode: "extend" | "new";
+  let extendLessonId: string | null;
   // Per-page buffers + mimes (for OCR) and the final stored paths.
   let buffers: Buffer[] = [];
   let mimes: string[] = [];
@@ -120,6 +126,10 @@ export async function POST(request: Request) {
     providedCoverPath = (json.coverPath as string)?.trim?.() || null;
     pageStart = parseIntOrNull(String(json.pageStart ?? ""));
     pageEnd = parseIntOrNull(String(json.pageEnd ?? ""));
+    chapter = (json.chapter as string)?.trim?.() || null;
+    chapterPage = parseIntOrNull(String(json.chapterPage ?? ""));
+    mode = json.mode === "extend" ? "extend" : "new";
+    extendLessonId = (json.extendLessonId as string)?.trim?.() || null;
 
     const paths = Array.isArray(json.imagePaths)
       ? (json.imagePaths as unknown[]).filter(
@@ -177,6 +187,10 @@ export async function POST(request: Request) {
     coverFile = cf instanceof File ? cf : null;
     pageStart = parseIntOrNull(form.get("pageStart"));
     pageEnd = parseIntOrNull(form.get("pageEnd"));
+    chapter = (form.get("chapter") as string)?.trim() || null;
+    chapterPage = parseIntOrNull(form.get("chapterPage"));
+    mode = form.get("mode") === "extend" ? "extend" : "new";
+    extendLessonId = (form.get("extendLessonId") as string)?.trim() || null;
 
     const raw = form.getAll("images");
     const files = (raw.length ? raw : [form.get("image")]).filter(
@@ -289,10 +303,47 @@ export async function POST(request: Request) {
     pageText.split("\n")[0].slice(0, 60) ||
     "Untitled lesson";
 
-  // 3. Create the lesson row up front so we have an id to return.
-  const { data: lesson, error: lessonError } = await supabase
-    .from("lessons")
-    .insert({
+  // 3. Either EXTEND an existing lesson on this page (append) or create a new
+  //    one. When extending, we keep the prior content to merge in at persist time.
+  type ExistingLesson = {
+    article_md: string | null;
+    image_paths: string[] | null;
+    source_text: string | null;
+    exercises: unknown[] | null;
+  };
+  let extending: ExistingLesson | null = null;
+  let lessonId = "";
+
+  if (mode === "extend" && extendLessonId) {
+    const { data: ex } = await supabase
+      .from("lessons")
+      .select("id,article_md,image_paths,source_text,exercises")
+      .eq("id", extendLessonId)
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (ex?.id) {
+      lessonId = ex.id as string;
+      extending = {
+        article_md: (ex.article_md as string | null) ?? null,
+        image_paths: (ex.image_paths as string[] | null) ?? null,
+        source_text: (ex.source_text as string | null) ?? null,
+        exercises: (ex.exercises as unknown[] | null) ?? null,
+      };
+      // Best-effort: stamp a chapter onto the existing lesson if one was given.
+      if (chapter != null || chapterPage != null) {
+        await supabase
+          .from("lessons")
+          .update({ chapter, chapter_page: chapterPage })
+          .eq("id", lessonId)
+          .then(undefined, () => undefined);
+      }
+    }
+  }
+
+  if (!extending) {
+    // Create the lesson row up front so we have an id to return. chapter columns
+    // are best-effort (migration 0023): retry without them if the write fails.
+    const baseInsert = {
       user_id: user.id,
       title,
       image_path: imagePaths[0] ?? null,
@@ -302,13 +353,24 @@ export async function POST(request: Request) {
       collection_id: collectionId,
       page_start: pageStart,
       page_end: pageEnd,
-    })
-    .select("id")
-    .single();
-  if (lessonError || !lesson) {
-    return new Response("Failed to create lesson", { status: 500 });
+    };
+    let inserted = await supabase
+      .from("lessons")
+      .insert({ ...baseInsert, chapter, chapter_page: chapterPage })
+      .select("id")
+      .single();
+    if (inserted.error) {
+      inserted = await supabase
+        .from("lessons")
+        .insert(baseInsert)
+        .select("id")
+        .single();
+    }
+    if (inserted.error || !inserted.data) {
+      return new Response("Failed to create lesson", { status: 500 });
+    }
+    lessonId = inserted.data.id;
   }
-  const lessonId = lesson.id;
 
   // Record the pages this upload covers (for the books page grid).
   if (collectionId && pageStart != null) {
@@ -385,10 +447,34 @@ export async function POST(request: Request) {
       // what was being skipped before when a tab switch aborted the stream.
       try {
         if (article.trim()) {
-          await supabase
-            .from("lessons")
-            .update({ article_md: article })
-            .eq("id", lessonId);
+          // When extending, APPEND the new article/images/source to the existing
+          // lesson instead of overwriting it.
+          if (extending) {
+            const dateLabel = new Date().toISOString().slice(0, 10);
+            const finalArticle = extending.article_md
+              ? `${extending.article_md}\n\n---\n\n## 追加 (added ${dateLabel})\n\n${article}`
+              : article;
+            const mergedImages = Array.from(
+              new Set([...(extending.image_paths ?? []), ...imagePaths]),
+            );
+            const finalSource = extending.source_text
+              ? `${extending.source_text}\n\n${pageText}`
+              : pageText;
+            await supabase
+              .from("lessons")
+              .update({
+                article_md: finalArticle,
+                image_path: mergedImages[0] ?? null,
+                image_paths: mergedImages.length > 0 ? mergedImages : null,
+                source_text: finalSource,
+              })
+              .eq("id", lessonId);
+          } else {
+            await supabase
+              .from("lessons")
+              .update({ article_md: article })
+              .eq("id", lessonId);
+          }
           const items = await extractKnowledge(article, engine);
           if (items.length > 0) {
             await storeKnowledge(supabase, user.id, items, {
@@ -421,9 +507,13 @@ export async function POST(request: Request) {
             engine,
           );
           if (exercises.length > 0) {
+            // Extend mode appends to the existing set so older practice survives.
+            const merged = extending
+              ? [...(extending.exercises ?? []), ...exercises]
+              : exercises;
             await supabase
               .from("lessons")
-              .update({ exercises })
+              .update({ exercises: merged })
               .eq("id", lessonId);
           }
         }

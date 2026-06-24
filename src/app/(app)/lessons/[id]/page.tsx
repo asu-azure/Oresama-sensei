@@ -115,6 +115,8 @@ export default async function LessonDetailPage({
           collectionTitle={(coll as { title: string } | null)?.title ?? null}
           pageStart={lesson.page_start}
           pageEnd={lesson.page_end}
+          chapter={lesson.chapter ?? null}
+          chapterPage={lesson.chapter_page ?? null}
           collections={collections}
         />
       )}

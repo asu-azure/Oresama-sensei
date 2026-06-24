@@ -26,6 +26,7 @@ import { PitchToggle } from "@/components/pitch-toggle";
 import { PitchLegend } from "@/components/pitch-legend";
 import { usePitch } from "@/lib/use-pitch";
 import { playReveal, playGrade } from "@/lib/use-sound";
+import { bumpReviewDue } from "@/lib/use-review-due";
 import { masteryInfo, type MasteryLevel } from "@/lib/mastery";
 import { sourceMeta } from "@/lib/source";
 import { cn } from "@/lib/utils";
@@ -301,7 +302,19 @@ function Flashcards({
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ itemId: card.id, rating }),
-    }).catch(() => {});
+    })
+      .then((r) => r.json())
+      .then((res: { due?: string | null }) => {
+        // A graded "due" card leaves the due-now set unless it's rescheduled to
+        // right now/the past (it isn't — even "again" gets a minutes-ahead due,
+        // which matches the server's `srs_due <= now` definition). Decrement the
+        // live nav badge instantly. Don't touch it when reviewing ahead.
+        if (ahead) return;
+        const stillDue =
+          res?.due != null && new Date(res.due).getTime() <= Date.now();
+        if (!stillDue) bumpReviewDue(-1);
+      })
+      .catch(() => {});
     const nextIndex = index + 1;
     const nextReviewed = reviewed + 1;
     setReviewed(nextReviewed);
@@ -337,6 +350,11 @@ function Flashcards({
       <div className="mb-4 flex items-center justify-between text-sm text-muted">
         <span>
           Review · {index + 1} / {cards.length}
+          {!ahead && (
+            <span className="ml-2 text-foreground">
+              · {Math.max(0, totalDue - reviewed)} due left
+            </span>
+          )}
         </span>
         <span className="flex items-center gap-1">
           <RotateCcw className="h-3.5 w-3.5" /> spaced repetition

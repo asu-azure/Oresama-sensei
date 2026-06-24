@@ -23,7 +23,7 @@ const H = 100;
 const PAD_X = 4;
 const PAD_Y = 6;
 
-function Chart({ saw }: { saw: Sawtooth }) {
+export function SawtoothChart({ saw }: { saw: Sawtooth }) {
   const span = Math.max(1, saw.t1 - saw.t0);
   const x = (t: number) => PAD_X + ((t - saw.t0) / span) * (W - 2 * PAD_X);
   const y = (r: number) => PAD_Y + (1 - r) * (H - 2 * PAD_Y);
@@ -149,7 +149,7 @@ export function MemoryHistory({
               <p className="mt-2 text-xs text-muted">Loading…</p>
             ) : enough && saw ? (
               <div className="mt-2">
-                <Chart saw={saw} />
+                <SawtoothChart saw={saw} />
                 <p className="mt-1 text-[11px] text-muted">
                   Each review snaps your recall back to ~100%, then it fades. As
                   this item gets sturdier the dips get gentler and farther apart.

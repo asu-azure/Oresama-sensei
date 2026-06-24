@@ -1,4 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
+import { fetchAllRows } from "@/lib/fetch-all";
+import { listUserCollections } from "@/lib/collections";
 import { MapClient, type MapItem } from "./map-client";
 import type { KnowledgeMap } from "@/lib/types";
 
@@ -8,7 +10,7 @@ export default async function MapPage() {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const [{ data: mapRow }, { count }, { data: items }] = await Promise.all([
+  const [{ data: mapRow }, { count }, items, collections] = await Promise.all([
     supabase
       .from("knowledge_maps")
       .select("*")
@@ -20,10 +22,18 @@ export default async function MapPage() {
       .from("knowledge_items")
       .select("id", { count: "exact", head: true })
       .eq("user_id", user!.id),
-    supabase
-      .from("knowledge_items")
-      .select("id,type,term,reading,meaning,example,jlpt_level")
-      .eq("user_id", user!.id),
+    // Page past the 1000-row cap so the scope/filter options see every item.
+    fetchAllRows<MapItem>((from, to) =>
+      supabase
+        .from("knowledge_items")
+        .select(
+          "id,type,term,reading,meaning,example,jlpt_level,source_type,collection_id",
+        )
+        .eq("user_id", user!.id)
+        .order("id")
+        .range(from, to),
+    ),
+    listUserCollections(supabase, user!.id),
   ]);
 
   const map = mapRow as KnowledgeMap | null;
@@ -34,7 +44,8 @@ export default async function MapPage() {
       generatedCount={map?.item_count ?? null}
       generatedAt={map?.created_at ?? null}
       totalItems={count ?? 0}
-      items={(items ?? []) as MapItem[]}
+      items={items}
+      collections={collections.map((c) => ({ id: c.id, title: c.title }))}
     />
   );
 }

@@ -59,6 +59,25 @@ export default async function BookDetailPage({
   }[];
   const lessons = (lessonsRaw ?? []) as { id: string; title: string | null }[];
 
+  // Chapter info per lesson — best-effort: if migration 0023 isn't applied yet,
+  // this query errors and we simply fall back to ungrouped pages.
+  const chapterByLesson: Record<
+    string,
+    { chapter: string | null; chapter_page: number | null }
+  > = {};
+  const { data: chapterRows } = await supabase
+    .from("lessons")
+    .select("id,chapter,chapter_page")
+    .eq("user_id", user!.id)
+    .eq("collection_id", id);
+  for (const r of (chapterRows ?? []) as {
+    id: string;
+    chapter: string | null;
+    chapter_page: number | null;
+  }[]) {
+    chapterByLesson[r.id] = { chapter: r.chapter, chapter_page: r.chapter_page };
+  }
+
   let coverUrl: string | null = null;
   if (collection.cover_path) {
     const { data: signed } = await supabase.storage
@@ -81,6 +100,7 @@ export default async function BookDetailPage({
   const pages: GridPage[] = pageRows.map((p) => {
     const lessonItems = p.lesson_id ? (itemsByLesson[p.lesson_id] ?? []) : [];
     const m = pageMastery(lessonItems);
+    const ch = p.lesson_id ? chapterByLesson[p.lesson_id] : undefined;
     return {
       page_number: p.page_number,
       status: p.status,
@@ -89,6 +109,8 @@ export default async function BookDetailPage({
       level: m?.level ?? null,
       item_count: lessonItems.length,
       image_path: p.image_path,
+      chapter: ch?.chapter ?? null,
+      chapter_page: ch?.chapter_page ?? null,
     };
   });
 

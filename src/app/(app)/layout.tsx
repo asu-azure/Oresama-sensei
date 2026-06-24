@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { Nav } from "@/components/nav";
+import { ReviewDueSync } from "@/components/review-due-sync";
 import { SplashScreen } from "@/components/splash-screen";
 import { BackgroundParticles } from "@/components/background-particles";
 import { PixelBuddies } from "@/components/pixel-buddies";
@@ -30,6 +31,7 @@ export default async function AppLayout({
       <BackgroundParticles />
       <PixelBuddies />
       <SplashScreen />
+      <ReviewDueSync count={count ?? 0} />
       <Nav reviewDue={count ?? 0} />
       <main className="relative z-10 mx-auto w-full max-w-4xl flex-1 px-4 pb-[var(--bottom-nav)]">
         <PageTransition>{children}</PageTransition>

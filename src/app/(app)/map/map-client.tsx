@@ -25,7 +25,8 @@ import { Button } from "@/components/ui/button";
 import { CostHint, MODEL_LABELS } from "@/components/cost-hint";
 import { cn, formatDate } from "@/lib/utils";
 import { showReading } from "@/lib/furigana";
-import type { MapData } from "@/lib/types";
+import { sourceMeta } from "@/lib/source";
+import type { MapData, MapScope } from "@/lib/types";
 import {
   saveMapPositions,
   findLessonsForTerm,
@@ -40,7 +41,32 @@ export type MapItem = {
   meaning: string | null;
   example: string | null;
   jlpt_level: string | null;
+  source_type: string | null;
+  collection_id: string | null;
 };
+
+/** Normalize a messy jlpt_level ("N2/N1") to its highest single level. */
+function primaryLevel(raw: string | null): string | null {
+  const m = (raw ?? "").toUpperCase().match(/N[1-5]/g);
+  if (!m) return null;
+  return m.sort((a, b) => Number(a[1]) - Number(b[1]))[0];
+}
+
+/** Encode a scope as a "type:value" key (matches the <select> option values). */
+function scopeToKey(s?: MapScope): string {
+  if (!s || s.type === "all") return "all";
+  return `${s.type}:${s.value ?? ""}`;
+}
+
+/** A search predicate over term/reading/meaning. Empty query → matches all. */
+function makeMatch(q: string): (it: MapItem) => boolean {
+  const t = q.trim().toLowerCase();
+  if (!t) return () => true;
+  return (it) =>
+    it.term.toLowerCase().includes(t) ||
+    (it.reading?.toLowerCase().includes(t) ?? false) ||
+    (it.meaning?.toLowerCase().includes(t) ?? false);
+}
 
 const COLORS = [
   "#6366f1", "#e11d48", "#0891b2", "#16a34a", "#d97706",
@@ -66,9 +92,11 @@ function Term({ term, reading }: { term: string; reading: string | null }) {
 function buildGraph(
   data: MapData | null,
   itemsById: Map<string, MapItem>,
+  match: (it: MapItem) => boolean = () => true,
 ): { nodes: Node[]; edges: Edge[] } {
   if (!data) return { nodes: [], edges: [] };
   const pos = data.positions ?? {};
+  const dimmed = new Set<string>();
 
   const radii = data.groups.map((g) => Math.max(150, 26 * g.item_ids.length));
   const maxRadius = Math.max(150, ...radii);
@@ -105,6 +133,8 @@ function buildGraph(
     g.item_ids.forEach((id, idx) => {
       const it = itemsById.get(id);
       if (!it) return;
+      const isMatch = match(it);
+      if (!isMatch) dimmed.add(id);
       const angle = (2 * Math.PI * idx) / Math.max(1, n) - Math.PI / 2;
       nodes.push({
         id,
@@ -128,6 +158,7 @@ function buildGraph(
           whiteSpace: "pre-line",
           textAlign: "center",
           cursor: "pointer",
+          opacity: isMatch ? 1 : 0.12,
         },
       });
     });
@@ -142,7 +173,10 @@ function buildGraph(
       target: e.target,
       label: e.relation,
       labelStyle: { fontSize: 10, fill: "var(--muted, #666)" },
-      style: { stroke: "var(--border, #ccc)" },
+      style: {
+        stroke: "var(--border, #ccc)",
+        opacity: dimmed.has(e.source) || dimmed.has(e.target) ? 0.1 : 1,
+      },
     }));
 
   return { nodes, edges };
@@ -154,12 +188,14 @@ export function MapClient({
   generatedAt,
   totalItems,
   items,
+  collections,
 }: {
   initialData: MapData | null;
   generatedCount: number | null;
   generatedAt: string | null;
   totalItems: number;
   items: MapItem[];
+  collections: { id: string; title: string }[];
 }) {
   const [data, setData] = useState<MapData | null>(initialData);
   const [view, setView] = useState<"board" | "graph">("board");
@@ -167,6 +203,58 @@ export function MapClient({
   const [error, setError] = useState<string | null>(null);
   // Bumped only on regenerate, to remount React Flow with a fresh layout.
   const [version, setVersion] = useState(0);
+
+  // What subset to (re)generate the map from.
+  const [scope, setScope] = useState<MapScope>(
+    initialData?.scope ?? { type: "all" },
+  );
+  // Search overlay: `query` is live (board); `appliedQuery` is debounced and
+  // drives the graph (so typing doesn't remount React Flow every keystroke).
+  const [query, setQuery] = useState("");
+  const [appliedQuery, setAppliedQuery] = useState("");
+  const qTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const onQuery = useCallback((v: string) => {
+    setQuery(v);
+    if (qTimer.current) clearTimeout(qTimer.current);
+    qTimer.current = setTimeout(() => setAppliedQuery(v), 300);
+  }, []);
+  const match = useMemo(() => makeMatch(query), [query]);
+
+  // Scope options derived from the user's items (only show levels/sources/books
+  // that actually have items).
+  const scopeOptions = useMemo(() => {
+    const collTitle = new Map(collections.map((c) => [c.id, c.title]));
+    const books = new Map<string, string>();
+    const levels = new Set<string>();
+    const sources = new Set<string>();
+    for (const it of items) {
+      if (it.collection_id && collTitle.has(it.collection_id))
+        books.set(it.collection_id, collTitle.get(it.collection_id)!);
+      const lv = primaryLevel(it.jlpt_level);
+      if (lv) levels.add(lv);
+      if (it.source_type) sources.add(it.source_type);
+    }
+    return {
+      books: [...books.entries()].map(([id, title]) => ({ id, title })),
+      levels: [...levels].sort(),
+      sources: [...sources].sort(),
+    };
+  }, [items, collections]);
+
+  // Encode/decode the scope as a "type:value" string for the <select>.
+  const scopeKey =
+    scope.type === "all" ? "all" : `${scope.type}:${scope.value ?? ""}`;
+  function pickScope(key: string) {
+    if (key === "all") return setScope({ type: "all" });
+    const idx = key.indexOf(":");
+    const type = key.slice(0, idx);
+    const value = key.slice(idx + 1);
+    let label = value;
+    if (type === "collection")
+      label = scopeOptions.books.find((b) => b.id === value)?.title ?? value;
+    else if (type === "source") label = sourceMeta(value).label;
+    setScope({ type: type as MapScope["type"], value, label });
+  }
 
   // Selected item detail panel + its "lessons mentioning this" results.
   const [selected, setSelected] = useState<MapItem | null>(null);
@@ -180,9 +268,10 @@ export function MapClient({
     return m;
   }, [items]);
 
+  const graphMatch = useMemo(() => makeMatch(appliedQuery), [appliedQuery]);
   const { nodes, edges } = useMemo(
-    () => buildGraph(data, itemsById),
-    [data, itemsById],
+    () => buildGraph(data, itemsById, graphMatch),
+    [data, itemsById, graphMatch],
   );
 
   // Live snapshot of node positions, kept in sync with the latest layout and
@@ -256,17 +345,30 @@ export function MapClient({
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch("/api/map", { method: "POST" });
+      const res = await fetch("/api/map", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scope }),
+      });
       if (!res.ok) throw new Error(await res.text().catch(() => "Failed."));
-      const json = (await res.json()) as { data: MapData };
-      setData(json.data);
+      const json = (await res.json()) as { data: MapData; empty?: boolean };
+      setData(json.empty ? null : json.data);
       setVersion((v) => v + 1);
+      if (json.empty) setError("No items in that scope yet.");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong.");
     } finally {
       setBusy(false);
     }
   }
+
+  // Clean up the debounce timer on unmount.
+  useEffect(
+    () => () => {
+      if (qTimer.current) clearTimeout(qTimer.current);
+    },
+    [],
+  );
 
   // --- Empty states ---
   if (totalItems === 0) {
@@ -300,9 +402,13 @@ export function MapClient({
         <div>
           <h1 className="text-xl font-semibold">Knowledge Map</h1>
           <p className="text-sm text-muted">
-            {totalItems} saved items
+            {data?.scope && data.scope.type !== "all"
+              ? `Map of ${data.scope.label ?? data.scope.value}`
+              : `${totalItems} saved items`}
             {generatedAt && ` · mapped ${formatDate(generatedAt)}`}
-            {stale && " · new items since — regenerate to include them"}
+            {stale &&
+              (!data?.scope || data.scope.type === "all") &&
+              " · new items since — regenerate to include them"}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -342,6 +448,69 @@ export function MapClient({
         </div>
       </div>
 
+      {/* Scope picker + search overlay */}
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <label className="flex items-center gap-1.5 text-sm text-muted">
+          Map of
+          <select
+            value={scopeKey}
+            onChange={(e) => pickScope(e.target.value)}
+            className="rounded-lg border border-border bg-surface px-2.5 py-1.5 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring"
+          >
+            <option value="all">All items</option>
+            {scopeOptions.books.length > 0 && (
+              <optgroup label="Book / series">
+                {scopeOptions.books.map((b) => (
+                  <option key={b.id} value={`collection:${b.id}`}>
+                    {b.title}
+                  </option>
+                ))}
+              </optgroup>
+            )}
+            {scopeOptions.levels.length > 0 && (
+              <optgroup label="JLPT level">
+                {scopeOptions.levels.map((lv) => (
+                  <option key={lv} value={`level:${lv}`}>
+                    {lv}
+                  </option>
+                ))}
+              </optgroup>
+            )}
+            {scopeOptions.sources.length > 0 && (
+              <optgroup label="Source">
+                {scopeOptions.sources.map((s) => (
+                  <option key={s} value={`source:${s}`}>
+                    {sourceMeta(s).label}
+                  </option>
+                ))}
+              </optgroup>
+            )}
+          </select>
+        </label>
+        {scopeKey !== scopeToKey(data?.scope) && (
+          <span className="text-xs text-muted">— regenerate to apply</span>
+        )}
+        {data && (
+          <div className="relative ml-auto">
+            <input
+              value={query}
+              onChange={(e) => onQuery(e.target.value)}
+              placeholder="Search to highlight…"
+              className="w-44 rounded-lg border border-border bg-surface py-1.5 pl-3 pr-7 text-sm outline-none focus:ring-2 focus:ring-ring"
+            />
+            {query && (
+              <button
+                onClick={() => onQuery("")}
+                aria-label="Clear search"
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted hover:text-foreground"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+
       {error && <p className="mb-3 text-sm text-accent">{error}</p>}
 
       {!data && !busy && (
@@ -364,6 +533,12 @@ export function MapClient({
         <div className="grid gap-4 sm:grid-cols-2">
           {data.groups.map((g, gi) => {
             const color = COLORS[gi % COLORS.length];
+            // When searching, hide items (and whole groups) that don't match.
+            const shownIds = g.item_ids.filter((id) => {
+              const it = itemsById.get(id);
+              return it && match(it);
+            });
+            if (query.trim() && shownIds.length === 0) return null;
             return (
               <div
                 key={g.id}
@@ -381,7 +556,7 @@ export function MapClient({
                 )}
                 {g.note && <p className="mt-2 text-sm text-muted">{g.note}</p>}
                 <ul className="mt-3 space-y-1">
-                  {g.item_ids.map((id) => {
+                  {(query.trim() ? shownIds : g.item_ids).map((id) => {
                     const it = itemsById.get(id);
                     if (!it) return null;
                     return (
@@ -416,7 +591,7 @@ export function MapClient({
       {data && view === "graph" && (
         <div className="h-[70dvh] overflow-hidden rounded-2xl border border-border bg-surface">
           <ReactFlow
-            key={version}
+            key={`${version}:${appliedQuery}`}
             defaultNodes={nodes}
             defaultEdges={edges}
             onNodeClick={onNodeClick}

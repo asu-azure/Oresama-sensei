@@ -24,6 +24,8 @@ export function LessonSourceEditor({
   collectionTitle,
   pageStart: initialPageStart,
   pageEnd: initialPageEnd,
+  chapter: initialChapter = null,
+  chapterPage: initialChapterPage = null,
   collections,
 }: {
   lessonId: string;
@@ -32,6 +34,8 @@ export function LessonSourceEditor({
   collectionTitle: string | null;
   pageStart: number | null;
   pageEnd: number | null;
+  chapter?: string | null;
+  chapterPage?: number | null;
   collections: CollectionOption[];
 }) {
   const router = useRouter();
@@ -52,6 +56,10 @@ export function LessonSourceEditor({
   );
   const [pageEnd, setPageEnd] = useState(
     initialPageEnd != null ? String(initialPageEnd) : "",
+  );
+  const [chapter, setChapter] = useState(initialChapter ?? "");
+  const [chapterPage, setChapterPage] = useState(
+    initialChapterPage != null ? String(initialChapterPage) : "",
   );
 
   const collectionKind = collectionKindForMaterial(materialType);
@@ -81,6 +89,9 @@ export function LessonSourceEditor({
           : null,
       pageStart: pageStart.trim() ? parseInt(pageStart, 10) : null,
       pageEnd: pageEnd.trim() ? parseInt(pageEnd, 10) : null,
+      chapter: collectionKind ? chapter.trim() || null : null,
+      chapterPage:
+        collectionKind && chapterPage.trim() ? parseInt(chapterPage, 10) : null,
     });
     setSaving(false);
     if ("error" in res) {
@@ -180,6 +191,23 @@ export function LessonSourceEditor({
                   inputMode="numeric"
                   placeholder="to (opt.)"
                   className="w-24 rounded-lg border border-border bg-surface px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring"
+                />
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-muted">Chapter</span>
+                <input
+                  value={chapter}
+                  onChange={(e) => setChapter(e.target.value)}
+                  placeholder="e.g. Arc 2 (optional)"
+                  className="min-w-0 flex-1 rounded-lg border border-border bg-surface px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring"
+                />
+                <input
+                  value={chapterPage}
+                  onChange={(e) => setChapterPage(e.target.value)}
+                  inputMode="numeric"
+                  placeholder="ch. p."
+                  title="Page within the chapter"
+                  className="w-20 rounded-lg border border-border bg-surface px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring"
                 />
               </div>
             </div>

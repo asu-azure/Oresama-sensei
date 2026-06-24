@@ -18,6 +18,7 @@ import {
   GraduationCap,
   PenLine,
   AtSign,
+  LineChart,
   MoreHorizontal,
   Loader2,
   X,
@@ -25,6 +26,7 @@ import {
 import { signOut } from "@/app/login/actions";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { playTap } from "@/lib/use-sound";
+import { useReviewDue } from "@/lib/use-review-due";
 import { cn } from "@/lib/utils";
 
 /** Shows a spinner while THIS link's navigation is pending, so a tap registers
@@ -52,6 +54,7 @@ const links = [
   { href: "/kanji", label: "Kanji", icon: PenLine },
   { href: "/map", label: "Map", icon: Network },
   { href: "/dashboard", label: "Progress", icon: BarChart3 },
+  { href: "/insights", label: "Insights", icon: LineChart },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
@@ -69,6 +72,10 @@ const ACCENT =
 export function Nav({ reviewDue = 0 }: { reviewDue?: number }) {
   const pathname = usePathname();
   const [moreOpen, setMoreOpen] = useState(false);
+  // Live due count (updates the instant a card is graded); falls back to the
+  // server-seeded prop before the store is seeded.
+  const liveDue = useReviewDue();
+  const dueCount = liveDue ?? reviewDue;
 
   const current = links.find((l) => pathname.startsWith(l.href));
   const moreActive = moreLinks.some((l) => pathname.startsWith(l.href));
@@ -88,7 +95,7 @@ export function Nav({ reviewDue = 0 }: { reviewDue?: number }) {
           <nav className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto">
             {links.map(({ href, label, icon: Icon }) => {
               const active = pathname.startsWith(href);
-              const showBadge = href === "/review" && reviewDue > 0;
+              const showBadge = href === "/review" && dueCount > 0;
               return (
                 <Link
                   key={href}
@@ -109,7 +116,7 @@ export function Nav({ reviewDue = 0 }: { reviewDue?: number }) {
                   <Icon className="h-4 w-4 shrink-0" />
                   <span className="flex-1">{label}</span>
                   <NavLinkSpinner />
-                  {showBadge && <Badge value={reviewDue} />}
+                  {showBadge && <Badge value={dueCount} />}
                 </Link>
               );
             })}
@@ -155,7 +162,7 @@ export function Nav({ reviewDue = 0 }: { reviewDue?: number }) {
         <div className="mx-auto flex h-15 max-w-lg items-stretch">
           {primaryLinks.map(({ href, label, icon: Icon }) => {
             const active = pathname.startsWith(href);
-            const showBadge = href === "/review" && reviewDue > 0;
+            const showBadge = href === "/review" && dueCount > 0;
             return (
               <Link
                 key={href}
@@ -180,7 +187,7 @@ export function Nav({ reviewDue = 0 }: { reviewDue?: number }) {
                   <Icon className="h-5 w-5" />
                   {showBadge && (
                     <span className="absolute -right-2 -top-1.5">
-                      <Badge value={reviewDue} />
+                      <Badge value={dueCount} />
                     </span>
                   )}
                   <NavLinkSpinner className="absolute -right-2.5 -top-2" />
@@ -278,7 +285,7 @@ export function Nav({ reviewDue = 0 }: { reviewDue?: number }) {
 function Badge({ value }: { value: number }) {
   return (
     <span className="inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold leading-none text-primary-foreground">
-      {value > 99 ? "99+" : value}
+      {value}
     </span>
   );
 }

@@ -50,6 +50,8 @@ export type GridPage = {
   level: MasteryLevel | null;
   item_count: number;
   image_path: string | null;
+  chapter: string | null;
+  chapter_page: number | null;
 };
 
 type CollectionLite = {
@@ -122,13 +124,8 @@ export function BookDetail({
   // When on, tapping a page opens its status/edit panel instead of navigating.
   const [editMode, setEditMode] = useState(false);
 
-  // Tapping a page: open its lesson, or start a new lesson for a blank page.
-  // In edit mode, open the status panel instead.
-  function onCellClick(n: number) {
-    if (editMode) {
-      setSelected(selected === n ? null : n);
-      return;
-    }
+  // Navigate to a page's lesson, or start a new lesson for a blank page.
+  function goToPage(n: number) {
     const page = pageMap.get(n);
     if (page?.lesson_id) {
       router.push(`/lessons/${page.lesson_id}`);
@@ -137,6 +134,21 @@ export function BookDetail({
       router.push(
         `/lessons?collection=${collection.id}&page=${n}&material=${material}`,
       );
+    }
+  }
+
+  // Tapping a page: in edit mode, toggle its status panel. In view mode, the
+  // first tap opens a preview (saved items on that page); a second tap on the
+  // same page opens its lesson.
+  function onCellClick(n: number) {
+    if (editMode) {
+      setSelected(selected === n ? null : n);
+      return;
+    }
+    if (selected === n) {
+      goToPage(n);
+    } else {
+      setSelected(n);
     }
   }
 
@@ -221,6 +233,66 @@ export function BookDetail({
   ) {
     await setPageStatus(collection.id, pageNumber, status);
     router.refresh();
+  }
+
+  // Chapter grouping: ordered list of chapters (by their first page), each with
+  // the content pages it spans. Only built when some lesson carries a chapter.
+  const chapters = useMemo(() => {
+    const map = new Map<string, number[]>();
+    let any = false;
+    for (const p of pages) {
+      if (p.status !== "content") continue;
+      const key = p.chapter?.trim();
+      if (!key) continue;
+      any = true;
+      (map.get(key) ?? map.set(key, []).get(key)!).push(p.page_number);
+    }
+    if (!any) return null;
+    const out = [...map.entries()].map(([name, nums]) => ({
+      name,
+      nums: nums.sort((a, b) => a - b),
+    }));
+    out.sort((a, b) => a.nums[0] - b.nums[0]);
+    return out;
+  }, [pages]);
+
+  const [openChapter, setOpenChapter] = useState(0);
+
+  // One page cell (shared by the range grid and the chapter sections).
+  function renderCell(n: number) {
+    const page = pageMap.get(n);
+    const cell = (
+      <button
+        id={`book-page-${n}`}
+        onClick={() => onCellClick(n)}
+        className={cn(
+          "flex h-9 w-9 items-center justify-center rounded-md text-xs font-medium transition-transform hover:scale-105",
+          cellClasses(page),
+          selected === n &&
+            "ring-2 ring-ring ring-offset-1 ring-offset-background",
+        )}
+        title={
+          page
+            ? `Page ${n} · ${page.status}${page.level ? ` · ${masteryInfo(page.level).label}` : ""}`
+            : `Page ${n} · not uploaded`
+        }
+      >
+        {n}
+      </button>
+    );
+    return page?.lesson_id || page?.image_path ? (
+      <ImagePreview
+        key={n}
+        load={() => getBookPageImages(page.lesson_id, page.image_path)}
+        hoverOnly
+      >
+        {cell}
+      </ImagePreview>
+    ) : (
+      <span key={n} className="inline-flex">
+        {cell}
+      </span>
+    );
   }
 
   const selectedPage = selected != null ? pageMap.get(selected) : undefined;
@@ -347,7 +419,7 @@ export function BookDetail({
         <div className="mb-2 flex items-center gap-2">
           <h2 className="text-sm font-semibold">Pages</h2>
           <p className="text-xs text-muted">
-            {editMode ? "Tap a page to flag it" : "Tap a page to open its lesson"}
+            {editMode ? "Tap a page to flag it" : "Tap to preview · tap again to open"}
           </p>
           <button
             onClick={() => {
@@ -393,7 +465,48 @@ export function BookDetail({
               </div>
             )}
 
-            {/* Collapsible ranges of 50 */}
+            {/* Chapters (when lessons carry a chapter): collapsible sections for
+                thematic navigation, above the full page index below. */}
+            {chapters && (
+              <div className="mb-3 space-y-1.5">
+                <p className="text-xs font-medium text-muted">Chapters</p>
+                {chapters.map((c, ci) => {
+                  const open = openChapter === ci;
+                  return (
+                    <div
+                      key={c.name}
+                      className="overflow-hidden rounded-xl border border-border bg-surface"
+                    >
+                      <button
+                        onClick={() => setOpenChapter(open ? -1 : ci)}
+                        className="flex w-full items-center gap-3 px-3 py-2.5 text-left"
+                        aria-expanded={open}
+                      >
+                        <span className="min-w-0 flex-1 truncate text-sm font-medium font-jp">
+                          {c.name}
+                        </span>
+                        <span className="shrink-0 text-xs text-muted">
+                          {c.nums.length} page{c.nums.length === 1 ? "" : "s"}
+                        </span>
+                        <ChevronDown
+                          className={cn(
+                            "h-4 w-4 shrink-0 text-muted transition-transform",
+                            open && "rotate-180",
+                          )}
+                        />
+                      </button>
+                      {open && (
+                        <div className="flex flex-wrap gap-1.5 border-t border-border px-3 py-3">
+                          {c.nums.map((n) => renderCell(n))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Collapsible ranges of 50 (full page index) */}
             <div className="space-y-1.5">
               {ranges.map((r) => {
                 const { studied, byLevel } = rangeStats(r.nums);
@@ -437,46 +550,7 @@ export function BookDetail({
                     </button>
                     {open && (
                       <div className="flex flex-wrap gap-1.5 border-t border-border px-3 py-3">
-                        {r.nums.map((n) => {
-                          const page = pageMap.get(n);
-                          const cell = (
-                            <button
-                              id={`book-page-${n}`}
-                              onClick={() => onCellClick(n)}
-                              className={cn(
-                                "flex h-9 w-9 items-center justify-center rounded-md text-xs font-medium transition-transform hover:scale-105",
-                                cellClasses(page),
-                                selected === n &&
-                                  "ring-2 ring-ring ring-offset-1 ring-offset-background",
-                              )}
-                              title={
-                                page
-                                  ? `Page ${n} · ${page.status}${page.level ? ` · ${masteryInfo(page.level).label}` : ""}`
-                                  : `Page ${n} · not uploaded`
-                              }
-                            >
-                              {n}
-                            </button>
-                          );
-                          return page?.lesson_id || page?.image_path ? (
-                            <ImagePreview
-                              key={n}
-                              load={() =>
-                                getBookPageImages(
-                                  page.lesson_id,
-                                  page.image_path,
-                                )
-                              }
-                              hoverOnly
-                            >
-                              {cell}
-                            </ImagePreview>
-                          ) : (
-                            <span key={n} className="inline-flex">
-                              {cell}
-                            </span>
-                          );
-                        })}
+                        {r.nums.map((n) => renderCell(n))}
                       </div>
                     )}
                   </div>
@@ -506,8 +580,16 @@ export function BookDetail({
         {/* Selected page panel */}
         {selected != null && (
           <div className="mt-3 rounded-xl border border-border bg-surface p-3">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <span className="text-sm font-medium">Page {selected}</span>
+              {selectedPage?.chapter && (
+                <span className="rounded-full bg-surface-2 px-2 py-0.5 text-[11px] text-muted">
+                  {selectedPage.chapter}
+                  {selectedPage.chapter_page != null
+                    ? ` · p.${selectedPage.chapter_page}`
+                    : ""}
+                </span>
+              )}
               {selectedPage?.lesson_id && (
                 <Link
                   href={`/lessons/${selectedPage.lesson_id}`}
@@ -525,23 +607,36 @@ export function BookDetail({
               </button>
             </div>
 
-            {/* Status flags */}
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              {PAGE_STATUSES.map((s) => (
-                <button
-                  key={s.value}
-                  onClick={() => markPage(selected, s.value)}
-                  className={cn(
-                    "rounded-full border px-2.5 py-0.5 text-xs transition-colors",
-                    (selectedPage?.status ?? "content") === s.value
-                      ? "border-primary bg-primary/10 text-primary"
-                      : "border-border bg-surface text-muted hover:bg-surface-2",
-                  )}
-                >
-                  {s.label}
-                </button>
-              ))}
-            </div>
+            {/* Status flags (edit mode only) */}
+            {editMode && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {PAGE_STATUSES.map((s) => (
+                  <button
+                    key={s.value}
+                    onClick={() => markPage(selected, s.value)}
+                    className={cn(
+                      "rounded-full border px-2.5 py-0.5 text-xs transition-colors",
+                      (selectedPage?.status ?? "content") === s.value
+                        ? "border-primary bg-primary/10 text-primary"
+                        : "border-border bg-surface text-muted hover:bg-surface-2",
+                    )}
+                  >
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* View-mode: clear affordance to open the lesson (also: second tap
+                on the page does this). */}
+            {!editMode && (
+              <button
+                onClick={() => goToPage(selected)}
+                className="mt-2 inline-flex items-center gap-1 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90"
+              >
+                {selectedPage?.lesson_id ? "Open lesson →" : "Create lesson →"}
+              </button>
+            )}
 
             {(selectedPage?.lesson_id || selectedPage?.image_path) && (
               <ImagePreview
