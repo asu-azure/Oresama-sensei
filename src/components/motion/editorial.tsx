@@ -102,6 +102,61 @@ export function RunningLine({
   );
 }
 
+/** Big-fat Japanese display word (financial-create motif). A bold serif-JP
+ *  statement with an optional mono kicker; can flow-gradient or run vertically.
+ *  Decorative — pair with the English title nearby. */
+export function JpDisplay({
+  word,
+  label,
+  flow = false,
+  vertical = false,
+  className,
+}: {
+  word: string;
+  label?: string;
+  flow?: boolean;
+  vertical?: boolean;
+  className?: string;
+}) {
+  const [ref, inView] = useInView<HTMLDivElement>({ threshold: 0.3 });
+  return (
+    <div ref={ref} className={cn("select-none", className)}>
+      {label && (
+        <p
+          className="mono mb-2"
+          style={{
+            opacity: inView ? 1 : 0,
+            transition: "opacity 0.6s var(--ease)",
+          }}
+        >
+          {label}
+        </p>
+      )}
+      <div
+        aria-hidden="true"
+        className={cn(
+          "font-semibold leading-[0.95] tracking-tight",
+          flow && "flow-text",
+          vertical
+            ? "text-5xl sm:text-6xl"
+            : "text-6xl sm:text-7xl md:text-8xl",
+        )}
+        style={{
+          fontFamily: "var(--font-serif-jp)",
+          writingMode: vertical ? "vertical-rl" : undefined,
+          textOrientation: vertical ? "upright" : undefined,
+          opacity: inView ? 1 : 0,
+          transform: inView ? "translateY(0)" : "translateY(14px)",
+          transition:
+            "opacity 0.8s var(--ease) 0.05s, transform 0.8s var(--ease) 0.05s",
+        }}
+      >
+        {word}
+      </div>
+    </div>
+  );
+}
+
 /** Wraps a block and adds `.is-in` once it scrolls into view, so descendant
  *  chart elements (.spark / .draw-path / .bar-rise / .glow) play their
  *  entrance. */

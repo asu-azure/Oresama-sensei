@@ -74,10 +74,10 @@ export type CardMeta = {
 };
 
 const RATINGS: { rating: Rating; label: string; cls: string }[] = [
-  { rating: "again", label: "Again", cls: "bg-accent text-white" },
-  { rating: "hard", label: "Hard", cls: "bg-surface-2 text-foreground" },
-  { rating: "good", label: "Good", cls: "bg-primary text-primary-foreground" },
-  { rating: "easy", label: "Easy", cls: "bg-emerald-600 text-white" },
+  { rating: "again", label: "Again", cls: "bg-[#f43f5e] text-white" },
+  { rating: "hard", label: "Hard", cls: "bg-[#f59e0b] text-white" },
+  { rating: "good", label: "Good", cls: "bg-[#2742f0] text-white" },
+  { rating: "easy", label: "Easy", cls: "bg-[#10b981] text-white" },
 ];
 
 // Color + glow for the on-grade gline flash. Reds for struggle, cobalt for solid,
@@ -360,8 +360,10 @@ function Flashcards({
   }
 
   return (
-    <>
-      {/* On-grade gline flash — color + glow encode how the answer went. */}
+    <div className="relative">
+      {/* On-grade gline flash — color + glow encode how the answer went.
+          Centered on the content column (absolute, not viewport-fixed) so it
+          lines up under the card and shows on mobile too. */}
       <AnimatePresence>
         {flash && (
           <motion.div
@@ -371,7 +373,7 @@ function Flashcards({
             animate={{ opacity: 1, scaleX: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-            className="pointer-events-none fixed left-1/2 top-3 z-[80] flex -translate-x-1/2 flex-col items-center gap-1"
+            className="pointer-events-none absolute left-1/2 top-9 z-50 flex -translate-x-1/2 flex-col items-center gap-1"
           >
             <div
               className="h-[3px] w-56 rounded-full"
@@ -654,7 +656,7 @@ function Flashcards({
         ]}
         onSaveToNote={onSaveToNote}
       />
-    </>
+    </div>
   );
 }
 

@@ -164,13 +164,7 @@ export function Scatter({ points }: { points: ScatterPoint[] }) {
             <circle
               key={i}
               className="spark"
-              style={
-                {
-                  "--i": i % 60,
-                  transformBox: "fill-box",
-                  transformOrigin: "center",
-                } as React.CSSProperties
-              }
+              style={{ "--i": i % 60 } as React.CSSProperties}
               cx={px(p.x)}
               cy={py(p.y)}
               r={3}

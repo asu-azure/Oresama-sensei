@@ -67,11 +67,14 @@
   --line-strong: rgba(244, 241, 234, 0.22);
   --grid-line: rgba(244, 241, 234, 0.05);
 
-  --primary: #2742f0;
-  --primary-foreground: #ffffff;
-  --accent: #2742f0;
-  --accent-soft: rgba(39, 66, 240, 0.2);
-  --ring: #2742f0;
+  /* Brighter cobalt on ink — #2742f0 is too dark to read on near-black, so the
+     dark tone uses a lifted periwinkle for text/lines/fills (still white-legible
+     as a button fill). */
+  --primary: #5b78ff;
+  --primary-foreground: #0c0c0d;
+  --accent: #6a86ff;
+  --accent-soft: rgba(106, 134, 255, 0.22);
+  --ring: #6a86ff;
 }
 
 @theme inline {
@@ -515,40 +518,46 @@ html.has-cursor * {
   cursor: none !important;
 }
 .cursor {
+  /* A zero-size point pinned to the pointer by GSAP quickTo (x/y transform).
+     The visible dot/label are children offset from this point, so GSAP's
+     per-frame transform never fights their own transitions. */
   position: fixed;
   top: 0;
   left: 0;
-  width: 22px;
-  height: 22px;
+  width: 0;
+  height: 0;
   pointer-events: none;
   z-index: 9999;
-  /* position driven by GSAP quickTo (x/y) — no CSS transition here or it fights
-     the per-frame transform updates. The triangle's tip (~3,2 in the svg) is the
-     visual hotspot. */
   will-change: transform;
 }
-.cursor__tri {
-  display: block;
-  width: 100%;
-  height: 100%;
-  /* cobalt fill + white edge, plus a soft shadow for contrast on any bg */
-  fill: var(--accent);
-  stroke: #fff;
-  stroke-width: 1.6;
-  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.45));
-  transition: transform 0.2s var(--ease), fill 0.2s var(--ease);
+.cursor__dot {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 16px;
+  height: 16px;
+  margin: -8px 0 0 -8px; /* center on the pointer */
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--accent) 80%, transparent);
+  border: 2px solid #fff;
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(0, 0, 0, 0.18);
+  transition: width 0.2s var(--ease), height 0.2s var(--ease),
+    margin 0.2s var(--ease), background-color 0.2s var(--ease),
+    border-color 0.2s var(--ease);
 }
-.cursor.is-hover .cursor__tri {
-  transform: scale(1.5) rotate(-8deg);
-  fill: #18c4d6;
-}
-.cursor.is-label .cursor__tri {
-  transform: scale(1.25);
+/* Hover: grows + shifts to cyan (the color-change effect). */
+.cursor.is-hover .cursor__dot,
+.cursor.is-label .cursor__dot {
+  width: 30px;
+  height: 30px;
+  margin: -15px 0 0 -15px;
+  background: color-mix(in srgb, #18c4d6 70%, transparent);
+  border-color: #18c4d6;
 }
 .cursor__label {
   position: absolute;
-  left: 20px;
-  top: 18px;
+  left: 16px;
+  top: 12px;
   white-space: nowrap;
   padding: 2px 7px;
   border-radius: 4px;
@@ -708,21 +717,15 @@ html.has-cursor * {
    `is-in` ancestor (set by an in-view observer) gates the entrance so it only
    fires once the chart scrolls into view.
 --------------------------------------------------------------------------- */
+/* Opacity-only — cheap to paint even for hundreds of scatter dots. (Animating
+   transform/filter here promoted every dot to its own GPU layer and janked the
+   scroll.) */
 @keyframes sparkle-in {
   0% {
     opacity: 0;
-    transform: scale(0);
-    filter: brightness(2.6);
-  }
-  55% {
-    opacity: 1;
-    transform: scale(1.55);
-    filter: brightness(2.6);
   }
   100% {
     opacity: 1;
-    transform: scale(1);
-    filter: brightness(1);
   }
 }
 @keyframes twinkle {

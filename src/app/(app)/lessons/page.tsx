@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { PageHeading } from "@/components/motion/page-heading";
+import { JpDisplay } from "@/components/motion/editorial";
 import { createClient } from "@/lib/supabase/server";
 import { LessonUploader } from "./lesson-uploader";
 import { LessonTextGenerator } from "./lesson-text-generator";
@@ -84,6 +85,7 @@ export default async function LessonsPage({
           vtext="教材から学ぶ"
           subtitle="Turn study material into a meaningful lesson, or review everything at once."
         />
+        <JpDisplay word="学び" label="TURN MATERIAL INTO — 学び" flow className="mb-6" />
         <div className="space-y-4">
           <LessonUploader
             initialMaterial={initialMaterial}

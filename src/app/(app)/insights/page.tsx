@@ -220,9 +220,17 @@ export default async function InsightsPage() {
           </span>
         </Reveal>
         <p className="mono mt-8">THE NUMBERS BELOW MEASURE</p>
-        <FlowText as="div" className="mega leading-none">
-          MEMORY
-        </FlowText>
+        <div className="flex flex-wrap items-end gap-x-6 gap-y-1">
+          <FlowText as="div" className="mega leading-none">
+            MEMORY
+          </FlowText>
+          <span
+            className="flow-text text-5xl font-semibold leading-none sm:text-6xl"
+            style={{ fontFamily: "var(--font-serif-jp)" }}
+          >
+            記憶
+          </span>
+        </div>
       </div>
 
       {/* Headline cards */}

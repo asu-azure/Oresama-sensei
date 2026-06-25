@@ -76,10 +76,7 @@ export function Cursor() {
       aria-hidden="true"
       style={enabled ? undefined : { display: "none" }}
     >
-      <svg className="cursor__tri" viewBox="0 0 24 24">
-        {/* arrow-style triangle with its tip at the top-left (the hotspot) */}
-        <polygon points="3,2 3,21 11,15 16,21 19,18 13,12 21,12" />
-      </svg>
+      <span className="cursor__dot" />
       <span ref={labelRef} className="cursor__label" />
     </div>
   );

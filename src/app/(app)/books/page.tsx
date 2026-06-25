@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { BookMarked } from "lucide-react";
 import { PageHeading } from "@/components/motion/page-heading";
+import { JpDisplay } from "@/components/motion/editorial";
 import { createClient } from "@/lib/supabase/server";
 import { collectionEmoji } from "@/lib/source";
 import { AddBook } from "./add-book";
@@ -67,6 +68,8 @@ export default async function BooksPage() {
         />
         {colls.length > 0 && <AddBook />}
       </div>
+
+      <JpDisplay word="蔵書" label="THE COLLECTION — 読んだ証" flow className="py-1" />
 
       {colls.length === 0 ? (
         <div className="py-16 text-center">

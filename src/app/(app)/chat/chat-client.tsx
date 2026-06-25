@@ -325,7 +325,16 @@ export function ChatClient({
         )}
 
         {messages.length === 0 && (
-          <div className="flex h-full flex-col items-center justify-center text-center">
+          <div className="relative flex h-full flex-col items-center justify-center overflow-hidden text-center">
+            {/* Big faint Japanese watermark */}
+            <span
+              aria-hidden="true"
+              className="pointer-events-none absolute select-none text-[28vw] font-semibold leading-none text-foreground/[0.04] sm:text-[16rem]"
+              style={{ fontFamily: "var(--font-serif-jp)" }}
+            >
+              会話
+            </span>
+            <div className="relative z-10 flex flex-col items-center">
             <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
               <Sparkles className="h-6 w-6" />
             </div>
@@ -350,6 +359,7 @@ export function ChatClient({
                   {s}
                 </button>
               ))}
+            </div>
             </div>
           </div>
         )}
