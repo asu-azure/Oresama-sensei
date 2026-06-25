@@ -76,17 +76,41 @@ export type CardMeta = {
 const RATINGS: { rating: Rating; label: string; cls: string }[] = [
   { rating: "again", label: "Again", cls: "bg-[#f43f5e] text-white" },
   { rating: "hard", label: "Hard", cls: "bg-[#f59e0b] text-white" },
-  { rating: "good", label: "Good", cls: "bg-[#2742f0] text-white" },
+  { rating: "good", label: "Good", cls: "bg-[#3b82f6] text-white" },
   { rating: "easy", label: "Easy", cls: "bg-[#10b981] text-white" },
 ];
 
-// Color + glow for the on-grade gline flash. Reds for struggle, cobalt for solid,
-// a glowing super-green for "easy".
-const FLASH: Record<Rating, { color: string; glow: string; label: string }> = {
-  again: { color: "#f43f5e", glow: "0 0 10px rgba(244,63,94,0.45)", label: "AGAIN" },
-  hard: { color: "#f59e0b", glow: "0 0 10px rgba(245,158,11,0.5)", label: "HARD" },
-  good: { color: "#2742f0", glow: "0 0 14px rgba(39,66,240,0.55)", label: "GOOD" },
-  easy: { color: "#10b981", glow: "0 0 26px rgba(16,185,129,0.9)", label: "EASY" },
+// Color + light tint + glow for the on-grade gline flash. Reds for struggle, a
+// bright sky-blue for "good" (distinct from the cobalt progress bar), a glowing
+// super-green for "easy". `grad` draws the line as a soft gradient streak.
+const FLASH: Record<
+  Rating,
+  { color: string; grad: string; glow: string; label: string }
+> = {
+  again: {
+    color: "#f43f5e",
+    grad: "linear-gradient(90deg, transparent, #f43f5e 22%, #ff8aa3 50%, #f43f5e 78%, transparent)",
+    glow: "0 0 10px rgba(244,63,94,0.5)",
+    label: "AGAIN",
+  },
+  hard: {
+    color: "#f59e0b",
+    grad: "linear-gradient(90deg, transparent, #f59e0b 22%, #ffd27a 50%, #f59e0b 78%, transparent)",
+    glow: "0 0 10px rgba(245,158,11,0.5)",
+    label: "HARD",
+  },
+  good: {
+    color: "#3b82f6",
+    grad: "linear-gradient(90deg, transparent, #3b82f6 22%, #93c5fd 50%, #3b82f6 78%, transparent)",
+    glow: "0 0 14px rgba(59,130,246,0.6)",
+    label: "GOOD",
+  },
+  easy: {
+    color: "#10b981",
+    grad: "linear-gradient(90deg, transparent, #10b981 20%, #6ee7b7 50%, #10b981 80%, transparent)",
+    glow: "0 0 26px rgba(16,185,129,0.95)",
+    label: "EASY",
+  },
 };
 
 export function ReviewClient({
@@ -362,30 +386,28 @@ function Flashcards({
   return (
     <div className="relative">
       {/* On-grade gline flash — color + glow encode how the answer went.
-          Centered on the content column (absolute, not viewport-fixed) so it
-          lines up under the card and shows on mobile too. */}
+          Viewport-fixed at the bottom-center of the content column so it's
+          always visible no matter how far the card/notes are scrolled, clear of
+          the top progress bar, and above the mobile bottom nav. */}
       <AnimatePresence>
         {flash && (
           <motion.div
             key={flash.seq}
             aria-hidden="true"
-            initial={{ opacity: 0, scaleX: 0.2 }}
-            animate={{ opacity: 1, scaleX: 1 }}
-            exit={{ opacity: 0 }}
+            initial={{ opacity: 0, y: 10, scaleX: 0.3 }}
+            animate={{ opacity: 1, y: 0, scaleX: 1 }}
+            exit={{ opacity: 0, y: 6 }}
             transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-            className="pointer-events-none absolute left-1/2 top-9 z-50 flex -translate-x-1/2 flex-col items-center gap-1"
+            className="pointer-events-none fixed bottom-[calc(var(--bottom-nav)_+_1.25rem)] left-1/2 z-[60] flex -translate-x-1/2 flex-col-reverse items-center gap-1.5 md:left-[calc(50%_+_7.5rem)]"
           >
             <div
-              className="h-[3px] w-56 rounded-full"
+              className="h-[3px] w-64 max-w-[80vw] rounded-full"
               style={{
-                background: FLASH[flash.rating].color,
+                background: FLASH[flash.rating].grad,
                 boxShadow: FLASH[flash.rating].glow,
               }}
             />
-            <span
-              className="mono"
-              style={{ color: FLASH[flash.rating].color }}
-            >
+            <span className="mono" style={{ color: FLASH[flash.rating].color }}>
               {FLASH[flash.rating].label}
             </span>
           </motion.div>
