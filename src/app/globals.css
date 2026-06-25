@@ -1,48 +1,77 @@
 @import "tailwindcss";
 
 /* ---------------------------------------------------------------------------
-   Design tokens — Japanese pop-art: white + bright green, vivid accents
+   Design tokens — "Editorial FUI": magazine signature tones (paper / ink),
+   serif narrates + grotesk punches + mono labels, one cobalt accent.
+   Light mode = paper (warm cream); dark mode = ink (charcoal). Ported from the
+   kampanat-portfolio design language.
 --------------------------------------------------------------------------- */
 :root {
-  --background: #f3f5f2;
-  --surface: #ffffff;
-  --surface-2: #f0fdf4;
-  --foreground: #0f172a;
-  --muted: #64748b;
-  --border: #dcfce7;
-  --primary: #16a34a;
+  /* ---- Paper (light) tone — the default ---- */
+  --background: #e9e4d8;
+  --surface: #f1ece2;
+  --surface-2: #e3dccd; /* slightly deeper cream for hover states */
+  --foreground: #16140f;
+  --muted: #5f5a4e;
+  --border: rgba(22, 20, 15, 0.14);
+  --line-strong: rgba(22, 20, 15, 0.3);
+  --grid-line: rgba(22, 20, 15, 0.06);
+
+  /* One cobalt accent — reads on both tones */
+  --primary: #2742f0;
   --primary-foreground: #ffffff;
-  --accent: #f43f5e;
-  --ring: #22c55e;
-  --radius: 0.875rem;
+  --accent: #2742f0;
+  --accent-soft: rgba(39, 66, 240, 0.16);
+  --ring: #2742f0;
 
-  /* Faint classroom graph-paper grid line */
-  --grid-line: rgba(22, 101, 52, 0.06);
+  /* Editorial is squarer than the old pop-art look */
+  --radius: 0.5rem;
 
-  /* Decorative pop colors — used only by particles */
-  --pop-pink: #ff3366;
-  --pop-yellow: #ffd600;
-  --pop-cyan: #00bcd4;
-  --pop-orange: #ff6b35;
-  --pop-purple: #a855f7;
-  --pop-green: #16a34a;
+  /* Type — serif narrates, grotesk punches, mono labels. The raw families come
+     from next/font (--font-fraunces / --font-space-grotesk / etc. in layout.tsx);
+     these semantic vars build the fallback stacks the utilities consume. */
+  --font-display: var(--font-space-grotesk), system-ui, sans-serif;
+  --font-serif: var(--font-fraunces), Georgia, "Times New Roman", serif;
+  --font-serif-jp: var(--font-noto-serif-jp), serif;
+  --font-jp: var(--font-noto-sans-jp), system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains-mono), ui-monospace, monospace;
+
+  /* Mega display scale — recurring giant emphasis words */
+  --font-mega: clamp(3rem, 13vw, 11rem);
+
+  /* Moving-gradient palette for .flow-text (cobalt → cyan → amber, looping) */
+  --flow-grad: linear-gradient(
+    100deg,
+    #2742f0,
+    #18c4d6,
+    #6aa0ff,
+    #e8a31a,
+    #2742f0
+  );
+
+  /* Award-style easing */
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 /* Dark mode is class-based (`<html class="dark">`) so the in-app toggle can
    override the OS setting. A no-flash inline script in app/layout.tsx adds the
-   class before paint (system pref on first visit, stored choice after). */
+   class before paint (system pref on first visit, stored choice after).
+   Dark = ink (charcoal). Cobalt stays the accent — it reads on ink too. */
 :root.dark {
-  --background: #052e16;
-  --surface: #0d3321;
-  --surface-2: #14532d;
-  --foreground: #f0fdf4;
-  --muted: #86efac;
-  --border: #166534;
-  --primary: #4ade80;
-  --primary-foreground: #052e16;
-  --accent: #fb7185;
-  --ring: #4ade80;
-  --grid-line: rgba(134, 239, 172, 0.06);
+  --background: #0c0c0d;
+  --surface: #151517;
+  --surface-2: #1e1e21;
+  --foreground: #f4f1ea;
+  --muted: #9a968c;
+  --border: rgba(244, 241, 234, 0.1);
+  --line-strong: rgba(244, 241, 234, 0.22);
+  --grid-line: rgba(244, 241, 234, 0.05);
+
+  --primary: #2742f0;
+  --primary-foreground: #ffffff;
+  --accent: #2742f0;
+  --accent-soft: rgba(39, 66, 240, 0.2);
+  --ring: #2742f0;
 }
 
 @theme inline {
@@ -57,14 +86,15 @@
   --color-accent: var(--accent);
   --color-ring: var(--ring);
 
-  --font-sans: var(--font-noto-sans-jp), var(--font-geist-sans), ui-sans-serif,
-    system-ui, sans-serif;
-  --font-jp: var(--font-noto-sans-jp), ui-sans-serif, system-ui, sans-serif;
-  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+  /* Body default is grotesk; serif/serif-jp/mono available as utilities. */
+  --font-sans: var(--font-display);
+  --font-serif: var(--font-serif);
+  --font-jp: var(--font-jp);
+  --font-mono: var(--font-mono);
 
   --radius-lg: var(--radius);
-  --radius-md: calc(var(--radius) - 0.35rem);
-  --radius-sm: calc(var(--radius) - 0.6rem);
+  --radius-md: calc(var(--radius) - 0.18rem);
+  --radius-sm: calc(var(--radius) - 0.3rem);
 }
 
 * {
@@ -73,6 +103,18 @@
 
 html {
   -webkit-text-size-adjust: 100%;
+}
+
+/* Lenis smooth-scroll plumbing (components/motion/smooth-scroll.tsx) */
+html.lenis,
+html.lenis body {
+  height: auto;
+}
+.lenis.lenis-smooth {
+  scroll-behavior: auto !important;
+}
+.lenis.lenis-stopped {
+  overflow: hidden;
 }
 
 /* iOS Safari auto-zooms a focused form control whose font is < 16px (most of our
@@ -102,13 +144,49 @@ html {
 
 body {
   background-color: var(--background);
-  /* Faint graph-paper grid (classroom manuscript feel). Static, GPU-free,
-     sits behind the z-0 particle layer and z-10 content. */
+  /* Faint blueprint grid (editorial FUI). Static, GPU-free; sits behind the
+     z-0 background layer and z-10 content. */
   background-image: linear-gradient(var(--grid-line) 1px, transparent 1px),
     linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
-  background-size: 26px 26px;
+  background-size: 30px 30px;
   color: var(--foreground);
   font-family: var(--font-sans);
+}
+
+/* ---- Signature spreads: opt-in tone flip for a section (magazine signatures).
+   Add .spread--ink / .spread--paper to any block to invert its local palette
+   independent of the global light/dark mode. ---- */
+.spread {
+  transition: background-color 0.6s var(--ease), color 0.6s var(--ease);
+}
+.spread--ink {
+  --background: #0c0c0d;
+  --surface: #151517;
+  --surface-2: #1e1e21;
+  --foreground: #f4f1ea;
+  --muted: #9a968c;
+  --border: rgba(244, 241, 234, 0.1);
+  --line-strong: rgba(244, 241, 234, 0.22);
+  --grid-line: rgba(244, 241, 234, 0.05);
+  background-color: var(--background);
+  color: var(--foreground);
+}
+.spread--paper {
+  --background: #e9e4d8;
+  --surface: #f1ece2;
+  --surface-2: #e3dccd;
+  --foreground: #16140f;
+  --muted: #5f5a4e;
+  --border: rgba(22, 20, 15, 0.14);
+  --line-strong: rgba(22, 20, 15, 0.3);
+  --grid-line: rgba(22, 20, 15, 0.06);
+  background-color: var(--background);
+  color: var(--foreground);
+}
+
+::selection {
+  background: var(--foreground);
+  color: var(--background);
 }
 
 /* Furigana: <ruby>漢字<rt>かんじ</rt></ruby> */
@@ -160,123 +238,429 @@ rt {
 }
 
 /* ---------------------------------------------------------------------------
-   Pop-art particle animations — GPU-safe (transform + opacity only)
+   Editorial type utilities — serif narrates, grotesk punches, mono labels.
 --------------------------------------------------------------------------- */
-@keyframes pop-float {
-  0%, 100% { transform: translateY(0px) rotate(0deg); }
-  50%       { transform: translateY(-18px) rotate(6deg); }
-}
-@keyframes pop-float-x {
-  0%, 100% { transform: translateX(0px) rotate(0deg); }
-  50%       { transform: translateX(14px) rotate(-8deg); }
-}
-@keyframes pop-spin {
-  from { transform: rotate(0deg); }
-  to   { transform: rotate(360deg); }
-}
-@keyframes pop-spin-rev {
-  from { transform: rotate(0deg) scale(1); }
-  to   { transform: rotate(-360deg) scale(1); }
-}
-@keyframes pop-pulse {
-  0%, 100% { transform: scale(1); }
-  50%       { transform: scale(1.18); }
-}
-@keyframes pop-drift {
-  0%   { transform: translate(0, 0)      rotate(0deg);   }
-  33%  { transform: translate(12px, -16px) rotate(60deg);  }
-  66%  { transform: translate(-8px, -22px) rotate(120deg); }
-  100% { transform: translate(0, 0)      rotate(180deg); }
+
+/* Monospace micro-labels used all over the FUI chrome */
+.mono {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--muted);
 }
 
-/* Splash-screen per-character box sweep — a skewed, blurred rainbow light bar
-   wipes across each title-kanji slot as it reveals (paired with the stroke draw
-   + glitch-in). The bar is the ::before; the wrapper carries an inline
-   animation-delay which the bar inherits so each char fires in turn. */
-.splash-sweep {
-  position: absolute;
-  inset: 0;
-  overflow: hidden;
-  pointer-events: none;
-  z-index: 5;
+/* Editorial serif — narrative voice (Fraunces) */
+.serif {
+  font-family: var(--font-serif);
+  font-weight: 400;
+  font-optical-sizing: auto;
 }
-.splash-sweep::before {
+
+/* Recurring giant emphasis words */
+.mega {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--font-mega);
+  line-height: 0.86;
+  letter-spacing: -0.03em;
+  text-transform: uppercase;
+}
+.mega--serif {
+  font-family: var(--font-serif);
+  font-weight: 480;
+  text-transform: none;
+  letter-spacing: -0.02em;
+}
+
+/* Flowing-gradient text (cobalt→cyan→amber, looping). DISPLAY words only,
+   never body copy, so the page stays readable. */
+.flow-text {
+  background: var(--flow-grad);
+  background-size: 280% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  animation: flow 9s linear infinite;
+}
+
+/* Animated gradient highlight that sweeps over a key phrase on first view.
+   Horizontal text wipes L→R; vertical (JP) text wipes top→down. The gradient
+   grows via a background-size animation so the text stays crisp on top. Add
+   .is-on (e.g. via the Reveal observer) to trigger. */
+.hl,
+.hl--v {
+  --ang: 90deg;
+  --grad: linear-gradient(var(--ang), #2742f0, #6aa0ff);
+  --hl-on: #fff; /* text color once the box has swept in */
+  background-image: var(--grad);
+  background-repeat: no-repeat;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+.hl {
+  padding: 0.02em 0.28em;
+  background-size: 0% 100%;
+  background-position: left center;
+  transition: background-size 0.7s var(--ease), color 0.3s 0.2s var(--ease);
+}
+.hl.is-on {
+  background-size: 100% 100%;
+  color: var(--hl-on);
+}
+.hl--v {
+  --ang: 180deg;
+  padding: 0.5em 0.22em;
+  background-size: 100% 0%;
+  background-position: center top;
+  transition: background-size 0.85s var(--ease), color 0.3s 0.25s var(--ease);
+}
+.hl--v.is-on {
+  background-size: 100% 100%;
+  color: var(--hl-on);
+}
+.hl--g-blue {
+  --grad: linear-gradient(var(--ang), #2742f0, #6aa0ff);
+}
+.hl--g-cyan {
+  --grad: linear-gradient(var(--ang), #2742f0, #18c4d6);
+}
+.hl--g-amber {
+  --grad: linear-gradient(var(--ang), #d9930f, #ffd666);
+  --hl-on: #1a1407;
+}
+.hl--g-mix {
+  --grad: linear-gradient(var(--ang), #2742f0, #18c4d6, #e8a31a);
+}
+
+/* Giant faint index numeral per section (SAKAZUKI "02") */
+.index-num {
+  font-family: var(--font-serif);
+  font-weight: 300;
+  font-size: clamp(4rem, 12vw, 11rem);
+  line-height: 0.8;
+  color: var(--line-strong);
+  pointer-events: none;
+  user-select: none;
+}
+
+/* Vertical Japanese accent column (kai-group / financial-create) */
+.vtext {
+  writing-mode: vertical-rl;
+  text-orientation: upright;
+  font-family: var(--font-serif-jp);
+  letter-spacing: 0.25em;
+  color: var(--line-strong);
+}
+
+/* Mask-reveal helper: child text rises out from behind a clip */
+.reveal-mask {
+  display: block;
+  overflow: hidden;
+}
+.reveal-mask > * {
+  display: block;
+  will-change: transform;
+}
+
+/* Iridescent / cobalt hairline divider (replaces the old rainbow pop-divider).
+   Class name kept so existing usages restyle automatically. */
+.pop-divider {
+  height: 1px;
+  border: 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--accent) 20%,
+    #18c4d6 50%,
+    var(--accent) 80%,
+    transparent
+  );
+}
+
+/* ---------------------------------------------------------------------------
+   Gradient draw-line (.gline) — a thin cobalt→cyan→amber rule that scales in
+   from the left on view, then keeps a slow shimmer. The portfolio's signature
+   "rainbow thin line". Add .is-on (Reveal/InView) to trigger the draw.
+--------------------------------------------------------------------------- */
+.gline {
+  display: block;
+  width: clamp(120px, 22vw, 320px);
+  height: 3px;
+  border-radius: 2px;
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform 0.9s var(--ease);
+  background: linear-gradient(
+    90deg,
+    var(--accent),
+    #18c4d6,
+    #34d399,
+    #e8a31a,
+    var(--accent)
+  );
+  background-size: 200% 100%;
+}
+.gline.is-on {
+  transform: scaleX(1);
+  animation: shimmer 3.6s linear infinite;
+}
+.gline--full {
+  width: 100%;
+}
+
+/* Running line — a thin gradient bar whose lit segment travels left→right on a
+   loop (kai-group hero motif). Use as a fixed top accent or a section rule. */
+.run-line {
+  position: relative;
+  height: 2px;
+  width: 100%;
+  overflow: hidden;
+  background: var(--line);
+}
+/* Pinned across the very top of the viewport. Declared after .run-line (and
+   after Tailwind utilities) so it reliably wins the position cascade — using the
+   Tailwind `fixed` utility here loses to `.run-line { position: relative }`. */
+.run-line--fixed {
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: 0;
+  z-index: 70;
+}
+.run-line::before {
   content: "";
   position: absolute;
-  top: -20%;
-  bottom: -20%;
-  width: 60%;
-  left: -75%;
-  transform: skewX(-16deg);
-  filter: blur(2px);
+  inset: 0;
   background: linear-gradient(
     90deg,
     transparent 0%,
-    color-mix(in srgb, var(--pop-cyan) 80%, transparent) 38%,
-    #ffffff 50%,
-    color-mix(in srgb, var(--pop-pink) 80%, transparent) 62%,
+    var(--accent) 35%,
+    #18c4d6 50%,
+    #e8a31a 65%,
     transparent 100%
   );
-  animation: splash-sweep 0.5s ease-out both;
-  animation-delay: inherit;
+  background-size: 45% 100%;
+  background-repeat: no-repeat;
+  animation: run-line 3.2s linear infinite;
 }
-@keyframes splash-sweep {
-  0%   { left: -75%; opacity: 0; }
-  20%  { opacity: 0.95; }
-  100% { left: 120%; opacity: 0; }
-}
-
-/* One-shot flash-wipe for page transitions — now a slim bright bar. Fades fully
-   out at the end so it never lingers as a stuck line on tall screens. */
-@keyframes pop-wipe {
-  0%   { transform: translateX(-10vw) skewX(-12deg); opacity: 0; }
-  12%  { opacity: 0.9; }
-  80%  { opacity: 0.9; }
-  100% { transform: translateX(108vw)  skewX(-12deg); opacity: 0; }
+@keyframes run-line {
+  0% {
+    background-position: -50% 0;
+  }
+  100% {
+    background-position: 150% 0;
+  }
 }
 
-/* Small geometric shapes trailing behind the wipe bar. */
-@keyframes pop-wipe-trail {
-  0%   { transform: translateX(-12vw) scale(0.5) rotate(0deg); opacity: 0; }
-  20%  { opacity: 0.9; }
-  100% { transform: translateX(106vw) scale(1) rotate(220deg); opacity: 0; }
+/* Marquee — a horizontally scrolling strip of repeated content. Duplicate the
+   children inside so the loop is seamless. */
+.marquee {
+  display: flex;
+  width: max-content;
+  animation: marquee 22s linear infinite;
+}
+.marquee:hover {
+  animation-play-state: paused;
+}
+@keyframes marquee {
+  to {
+    transform: translateX(-50%);
+  }
 }
 
-/* "Hologram glitch" — a bold RGB-split + sliced-jitter that settles to clean
-   text. Used for the flashcard reveal/advance (applied via the .glitch-in
-   class). text-shadow drives the chromatic split (glyphs only, not borders);
-   clip-path slices the block for a digital "tearing" look.
-   Tunables: bump the px offsets / duration here to dial intensity. */
-@keyframes glitch-in {
-  0%   { opacity: 0; transform: translate3d(-9px, 0, 0);
-         text-shadow: 5px 0 var(--pop-pink), -5px 0 var(--pop-cyan);
-         clip-path: inset(0 0 62% 0); }
-  10%  { opacity: 1; transform: translate3d(9px, 0, 0);
-         text-shadow: -7px 0 var(--pop-pink), 7px 0 var(--pop-cyan);
-         clip-path: inset(58% 0 0 0); }
-  22%  { transform: translate3d(-7px, 0, 0);
-         text-shadow: 7px 0 var(--pop-cyan), -7px 0 var(--pop-pink);
-         clip-path: inset(22% 0 42% 0); }
-  34%  { transform: translate3d(6px, 0, 0);
-         text-shadow: -5px 0 var(--pop-pink), 5px 0 var(--pop-cyan);
-         clip-path: inset(46% 0 8% 0); }
-  46%  { opacity: 0.5; transform: translate3d(-4px, 0, 0);
-         text-shadow: 4px 0 var(--pop-cyan), -4px 0 var(--pop-pink);
-         clip-path: inset(0 0 0 0); }
-  62%  { opacity: 1; transform: translate3d(3px, 0, 0);
-         text-shadow: 2px 0 var(--pop-pink), -2px 0 var(--pop-cyan); }
-  80%  { transform: translate3d(-1px, 0, 0); text-shadow: none; }
-  100% { opacity: 1; transform: translate3d(0, 0, 0); text-shadow: none;
-         clip-path: inset(0 0 0 0); }
+/* Knowledge-map (React Flow) nodes fade in on mount. Opacity only — animating
+   transform here would clobber React Flow's inline positioning transform. */
+@keyframes node-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.react-flow__node {
+  animation: node-fade 0.5s var(--ease) both;
+}
+.react-flow__edge {
+  animation: node-fade 0.9s var(--ease) both;
+}
+
+/* A faint blueprint grid panel (fixed background use) */
+.grid-bg {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background-image: linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+  background-size: clamp(48px, 8vw, 96px) clamp(48px, 8vw, 96px);
+  mask-image: radial-gradient(ellipse at 50% 40%, #000 30%, transparent 85%);
+  -webkit-mask-image: radial-gradient(
+    ellipse at 50% 40%,
+    #000 30%,
+    transparent 85%
+  );
+}
+
+/* ---------------------------------------------------------------------------
+   Custom cursor (mounted by components/motion/cursor.tsx) — a bold cobalt
+   triangle pointer with a white outline so it reads on any tone. The Cursor
+   component adds `.has-cursor` to <html> only on fine pointers + motion-OK,
+   which hides the native cursor and reveals the triangle — degrades gracefully.
+--------------------------------------------------------------------------- */
+html.has-cursor,
+html.has-cursor * {
+  cursor: none !important;
+}
+.cursor {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 22px;
+  height: 22px;
+  pointer-events: none;
+  z-index: 9999;
+  /* position driven by GSAP quickTo (x/y) — no CSS transition here or it fights
+     the per-frame transform updates. The triangle's tip (~3,2 in the svg) is the
+     visual hotspot. */
+  will-change: transform;
+}
+.cursor__tri {
+  display: block;
+  width: 100%;
+  height: 100%;
+  /* cobalt fill + white edge, plus a soft shadow for contrast on any bg */
+  fill: var(--accent);
+  stroke: #fff;
+  stroke-width: 1.6;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.45));
+  transition: transform 0.2s var(--ease), fill 0.2s var(--ease);
+}
+.cursor.is-hover .cursor__tri {
+  transform: scale(1.5) rotate(-8deg);
+  fill: #18c4d6;
+}
+.cursor.is-label .cursor__tri {
+  transform: scale(1.25);
+}
+.cursor__label {
+  position: absolute;
+  left: 20px;
+  top: 18px;
+  white-space: nowrap;
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: var(--accent);
+  color: #fff;
+  font-family: var(--font-mono);
+  font-size: 0.55rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  opacity: 0;
+  transform: translateY(-2px);
+  transition: opacity 0.18s var(--ease), transform 0.18s var(--ease);
+}
+.cursor.is-label .cursor__label {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* ---------------------------------------------------------------------------
+   "Sticker" card → re-skinned as an editorial card: a hairline frame that
+   warms to cobalt on hover, with a soft lift. Class name kept so existing
+   .pop-card usages across the app pick up the new look automatically.
+--------------------------------------------------------------------------- */
+.pop-card {
+  border-width: 1px;
+  border-color: var(--border);
+  background-color: var(--surface);
+  transition: transform 0.18s var(--ease), border-color 0.18s var(--ease),
+    box-shadow 0.18s var(--ease);
+}
+.pop-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--accent);
+  box-shadow: 0 10px 30px -18px var(--accent);
+}
+.pop-card:active {
+  transform: translateY(0);
+}
+
+/* ============================ Motion keyframes ============================ */
+@keyframes flow {
+  to {
+    background-position: 280% 50%;
+  }
+}
+@keyframes float-soft {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-0.12em);
+  }
+}
+@keyframes shimmer {
+  0% {
+    background-position: -150% 0;
+  }
+  100% {
+    background-position: 250% 0;
+  }
+}
+/* Soft cobalt bokeh drift for the ambient background */
+@keyframes bokeh-drift {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+  33% {
+    transform: translate3d(2.5vw, -1.6vh, 0);
+  }
+  66% {
+    transform: translate3d(-1.8vw, 1.4vh, 0);
+  }
+}
+/* GeometricLoader — orbit spin + dot pulse */
+@keyframes gl-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes gl-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.18);
+  }
+}
+
+/* Flashcard reveal — a clean editorial rise/clip (replaces the pop-art RGB
+   glitch). Class name kept so review-client.tsx is untouched. */
+@keyframes gl-reveal {
+  0% {
+    opacity: 0;
+    transform: translateY(8px);
+    clip-path: inset(0 0 40% 0);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+    clip-path: inset(0 0 0 0);
+  }
 }
 .glitch-in {
-  animation: glitch-in 0.42s steps(2, end) both;
+  animation: gl-reveal 0.45s var(--ease) both;
 }
 
-/* Bright light bar that sweeps across a flashcard on reveal/advance. The element
-   is an absolute cover (.card-sweep); a skewed, blurred gradient strip slides
-   L→R via its ::before. pointer-events disabled so it never blocks taps.
-   Tunables: width / left range / blur / opacity below. */
+/* Cobalt light bar that sweeps across a flashcard on reveal/advance. The
+   element is an absolute cover (.card-sweep); a skewed gradient strip slides
+   L→R via its ::before. pointer-events disabled so it never blocks taps. */
 .card-sweep {
   position: absolute;
   inset: 0;
@@ -296,30 +680,137 @@ rt {
   background: linear-gradient(
     90deg,
     transparent 0%,
-    color-mix(in srgb, var(--pop-cyan) 75%, transparent) 35%,
-    #ffffff 50%,
-    color-mix(in srgb, var(--pop-pink) 75%, transparent) 65%,
+    color-mix(in srgb, var(--accent) 50%, transparent) 40%,
+    color-mix(in srgb, #18c4d6 70%, transparent) 50%,
+    color-mix(in srgb, var(--accent) 50%, transparent) 60%,
     transparent 100%
   );
-  animation: card-sweep 0.45s ease-out both;
+  animation: card-sweep 0.5s ease-out both;
 }
 @keyframes card-sweep {
-  0%   { left: -55%; opacity: 0; }
-  18%  { opacity: 0.9; }
-  100% { left: 115%; opacity: 0; }
+  0% {
+    left: -55%;
+    opacity: 0;
+  }
+  18% {
+    opacity: 0.85;
+  }
+  100% {
+    left: 115%;
+    opacity: 0;
+  }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .glitch-in { animation: none; }
-  .card-sweep::before { animation: none; opacity: 0; }
-  .splash-sweep::before { animation: none; opacity: 0; }
+/* ---------------------------------------------------------------------------
+   Chart kinetics — entrance + idle animations for the insights visuals
+   (forgetting curve, scatter, heatmap, calibration bars). Ported from the
+   portfolio's pedagogy section. Elements opt in via these classes; the
+   `is-in` ancestor (set by an in-view observer) gates the entrance so it only
+   fires once the chart scrolls into view.
+--------------------------------------------------------------------------- */
+@keyframes sparkle-in {
+  0% {
+    opacity: 0;
+    transform: scale(0);
+    filter: brightness(2.6);
+  }
+  55% {
+    opacity: 1;
+    transform: scale(1.55);
+    filter: brightness(2.6);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+    filter: brightness(1);
+  }
+}
+@keyframes twinkle {
+  0%,
+  100% {
+    opacity: 0.85;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.18);
+    filter: brightness(1.4);
+  }
+}
+@keyframes pulse-glow {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 0 rgba(39, 66, 240, 0));
+    opacity: 1;
+  }
+  50% {
+    filter: drop-shadow(0 0 4px rgba(39, 66, 240, 0.85));
+    opacity: 0.9;
+  }
+}
+@keyframes bar-rise {
+  0% {
+    transform: scaleY(0);
+  }
+  80% {
+    transform: scaleY(1.04);
+  }
+  100% {
+    transform: scaleY(1);
+  }
+}
+@keyframes bar-grow {
+  0% {
+    transform: scaleX(0);
+  }
+  100% {
+    transform: scaleX(1);
+  }
+}
+@keyframes draw-stroke {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* SVG path that draws itself in. Set --len (via JS getTotalLength) for an exact
+   draw; otherwise a large dasharray works for most line charts. */
+.draw-path {
+  stroke-dasharray: var(--len, 2000);
+  stroke-dashoffset: var(--len, 2000);
+}
+.is-in .draw-path {
+  animation: draw-stroke 1.4s var(--ease) forwards;
+}
+
+/* Dots/cells that sparkle in once the chart is in view; the inline
+   --i (index) drives a stagger. */
+.is-in .spark {
+  animation: sparkle-in 0.5s var(--ease) both;
+  animation-delay: calc(var(--i, 0) * 18ms);
+}
+.is-in .spark-twinkle {
+  animation: sparkle-in 0.5s var(--ease) both,
+    twinkle 3.4s ease-in-out calc(0.6s + var(--i, 0) * 18ms) infinite;
+}
+.is-in .glow {
+  animation: pulse-glow 3.6s ease-in-out infinite;
+}
+/* Vertical bars rise from the baseline (needs transform-origin:bottom). */
+.is-in .bar-rise {
+  animation: bar-rise 0.8s var(--ease) both;
+  animation-delay: calc(var(--i, 0) * 60ms);
+}
+/* Horizontal bars grow from the left (needs transform-origin:left). */
+.is-in .bar-grow {
+  animation: bar-grow 0.8s var(--ease) both;
+  animation-delay: calc(var(--i, 0) * 50ms);
 }
 
 /* ---------------------------------------------------------------------------
    Pitch-accent contour (PitchAccent): an overline over HIGH morae + a vertical
    downstep hook, drawn left→right like a lit fuse with a soft glow, colored by
    accent type via the inline --pitch-color var. Low morae render no element.
-   Tunables: line thickness / reserve / glow strength below.
 --------------------------------------------------------------------------- */
 .pitch-mora {
   position: relative;
@@ -340,9 +831,7 @@ rt {
   right: 0;
   height: 0.13em;
   transform-origin: left center;
-  animation:
-    pitch-draw 0.2s ease-out both,
-    pitch-glow 0.55s ease-out both;
+  animation: pitch-draw 0.2s ease-out both, pitch-glow 0.55s ease-out both;
   animation-delay: var(--pitch-delay);
 }
 .pitch-drop {
@@ -351,127 +840,69 @@ rt {
   width: 0.13em;
   height: 0.72em;
   transform-origin: top center;
-  animation:
-    pitch-draw-v 0.16s ease-out both,
-    pitch-glow 0.5s ease-out both;
+  animation: pitch-draw-v 0.16s ease-out both, pitch-glow 0.5s ease-out both;
   animation-delay: var(--pitch-delay);
 }
 @keyframes pitch-draw {
-  from { transform: scaleX(0); }
-  to   { transform: scaleX(1); }
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
 }
 @keyframes pitch-draw-v {
-  from { transform: scaleY(0); }
-  to   { transform: scaleY(1); }
+  from {
+    transform: scaleY(0);
+  }
+  to {
+    transform: scaleY(1);
+  }
 }
 @keyframes pitch-glow {
-  0%   { box-shadow: 0 0 7px 1px var(--pitch-color); filter: brightness(1.7); }
-  55%  { box-shadow: 0 0 4px 0 var(--pitch-color); filter: brightness(1.2); }
-  100% { box-shadow: 0 0 2px 0 color-mix(in srgb, var(--pitch-color) 45%, transparent);
-         filter: brightness(1); }
-}
-@media (prefers-reduced-motion: reduce) {
-  .pitch-line,
-  .pitch-drop {
-    animation: none;
-    transform: none;
+  0% {
+    box-shadow: 0 0 7px 1px var(--pitch-color);
+    filter: brightness(1.7);
+  }
+  55% {
+    box-shadow: 0 0 4px 0 var(--pitch-color);
+    filter: brightness(1.2);
+  }
+  100% {
     box-shadow: 0 0 2px 0 color-mix(in srgb, var(--pitch-color) 45%, transparent);
+    filter: brightness(1);
   }
 }
 
-/* ---------------------------------------------------------------------------
-   Pixel "buddies" — tiny characters that amble / sit / sleep along the bottom
---------------------------------------------------------------------------- */
-@keyframes buddy-walk {
-  0%   { transform: translateX(0) scaleX(1); }
-  48%  { transform: translateX(72vw) scaleX(1); }
-  50%  { transform: translateX(72vw) scaleX(-1); }
-  98%  { transform: translateX(0) scaleX(-1); }
-  100% { transform: translateX(0) scaleX(1); }
-}
-/* Snap between the two walk frames (no fade). */
-@keyframes buddy-step {
-  0%, 49.9% { opacity: 0; }
-  50%, 100% { opacity: 1; }
-}
-/* Cross-fade a resting buddy between its "sit" and "sleep" poses. */
-@keyframes buddy-rest {
-  0%, 40% { opacity: 0; }
-  50%, 90% { opacity: 1; }
-  100% { opacity: 0; }
-}
-@keyframes buddy-zzz {
-  0%, 45% { opacity: 0; transform: translateY(0) scale(0.7); }
-  60% { opacity: 1; }
-  90% { opacity: 0.6; transform: translateY(-12px) scale(1); }
-  100% { opacity: 0; transform: translateY(-16px) scale(1); }
-}
-
-/* IMPORTANT: these @keyframes are applied via INLINE styles in JS
-   (BackgroundParticles, PixelBuddies, PageTransition), which Tailwind v4's CSS
-   optimizer (Lightning CSS) can't see — so it tree-shakes them out and the
-   animations silently die. Referencing every name here (in a rule that's never
-   actually rendered) marks them as "used" so they survive the build. Keep this
-   list in sync when adding a new decorative keyframe. */
+/* IMPORTANT: keyframes applied via INLINE styles in JS (BackgroundParticles,
+   PageTransition) are invisible to Tailwind v4's optimizer (Lightning CSS),
+   which tree-shakes them out. Referencing every such name here (in a rule that
+   never actually renders) marks them "used" so they survive the build. Keep
+   this list in sync when adding a new decorative keyframe driven by inline JS. */
 .keep-keyframes-alive {
-  animation-name: pop-float, pop-float-x, pop-spin, pop-spin-rev, pop-pulse,
-    pop-drift, pop-wipe, pop-wipe-trail, buddy-walk, buddy-step, buddy-rest,
-    buddy-zzz;
+  animation-name: float-soft, shimmer, bokeh-drift, gl-spin, gl-pulse;
 }
 
 /* ---------------------------------------------------------------------------
-   Pop-art UI utilities — bright accents + geometry on a plain surface
+   Respect users who prefer no motion.
 --------------------------------------------------------------------------- */
-
-/* Halftone dot motif. Use with a low-opacity colored `color:` (currentColor
-   drives the dots), e.g. text-[var(--pop-cyan)]/30. */
-.halftone {
-  background-image: radial-gradient(currentColor 1.5px, transparent 1.6px);
-  background-size: 12px 12px;
-  background-position: 0 0;
-}
-
-/* "Sticker" card — bold border + hard offset shadow, like a die-cut decal.
-   Lifts slightly on hover, presses down on tap. */
-.pop-card {
-  border-width: 2px;
-  border-color: var(--primary);
-  box-shadow: 6px 6px 0 0 var(--primary);
-  transition:
-    transform 0.12s ease,
-    box-shadow 0.12s ease;
-}
-.pop-card:hover {
-  transform: translate(-1px, -1px);
-  box-shadow: 8px 8px 0 0 var(--primary);
-}
-.pop-card:active {
-  transform: translate(3px, 3px);
-  box-shadow: 2px 2px 0 0 var(--primary);
-}
-
-/* Thick multi-color accent rule for section breaks. */
-.pop-divider {
-  height: 4px;
-  border: 0;
-  border-radius: 9999px;
-  background: linear-gradient(
-    90deg,
-    var(--pop-pink) 0%,
-    var(--pop-yellow) 25%,
-    var(--pop-green) 50%,
-    var(--pop-cyan) 75%,
-    var(--pop-purple) 100%
-  );
-}
-
 @media (prefers-reduced-motion: reduce) {
-  /* The ambient background particles intentionally keep their gentle motion
-     even under reduced-motion (owner's choice — purely decorative, behind
-     content). Intrusive motion (page-wipe, splash) is gated in JS via
-     useReducedMotion() and still falls back to a plain fade. */
-  .pop-card {
-    transition: none;
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+  /* keep flowing-gradient words legible (no transparent fill once motion is off) */
+  .flow-text {
+    -webkit-text-fill-color: currentColor;
+    color: var(--foreground);
+    background: none;
+  }
+  .pitch-line,
+  .pitch-drop {
+    transform: none;
+    box-shadow: 0 0 2px 0 color-mix(in srgb, var(--pitch-color) 45%, transparent);
   }
   .pop-card:hover,
   .pop-card:active {

@@ -1,6 +1,6 @@
-/** Reusable on-theme loader: three pop shapes spinning around a center, each
- *  gently pulsing. Pure CSS (transform/opacity only) — cheap and GPU-composited.
- *  Use anywhere we'd otherwise show a plain spinner. */
+/** Reusable on-theme loader: three cobalt/cyan/amber shapes orbiting a center,
+ *  each gently pulsing. Pure CSS (transform/opacity only) — cheap and
+ *  GPU-composited. Use anywhere we'd otherwise show a plain spinner. */
 export function GeometricLoader({
   size = 40,
   className,
@@ -12,9 +12,9 @@ export function GeometricLoader({
   const r = (size - dot) / 2;
   // three shapes at 120° apart on a circle of radius r
   const shapes = [
-    { color: "var(--pop-cyan)", round: "9999px", angle: 0 },
+    { color: "#18c4d6", round: "9999px", angle: 0 },
     { color: "var(--primary)", round: "2px", angle: 120 },
-    { color: "var(--pop-pink)", round: "2px", angle: 240 },
+    { color: "#e8a31a", round: "2px", angle: 240 },
   ];
   return (
     <span
@@ -26,7 +26,7 @@ export function GeometricLoader({
         width: size,
         height: size,
         position: "relative",
-        animation: "pop-spin 1.4s linear infinite",
+        animation: "gl-spin 1.4s linear infinite",
       }}
     >
       {shapes.map((s, i) => {
@@ -46,7 +46,7 @@ export function GeometricLoader({
               borderRadius: s.round,
               clipPath:
                 i === 2 ? "polygon(50% 0%, 100% 100%, 0% 100%)" : undefined,
-              animation: "pop-pulse 1s ease-in-out infinite",
+              animation: "gl-pulse 1s ease-in-out infinite",
               animationDelay: `${i * 0.18}s`,
             }}
           />

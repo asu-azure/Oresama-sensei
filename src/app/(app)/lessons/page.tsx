@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
+import { PageHeading } from "@/components/motion/page-heading";
 import { createClient } from "@/lib/supabase/server";
 import { LessonUploader } from "./lesson-uploader";
 import { LessonTextGenerator } from "./lesson-text-generator";
@@ -76,10 +77,13 @@ export default async function LessonsPage({
   return (
     <div className="space-y-8 py-4">
       <section>
-        <h1 className="mb-1 text-xl font-semibold">Lessons</h1>
-        <p className="mb-4 text-sm text-muted">
-          Turn study material into a meaningful lesson, or review everything at once.
-        </p>
+        <PageHeading
+          kicker="STUDY MATERIAL → LESSON"
+          title="Lessons"
+          jp="授業"
+          vtext="教材から学ぶ"
+          subtitle="Turn study material into a meaningful lesson, or review everything at once."
+        />
         <div className="space-y-4">
           <LessonUploader
             initialMaterial={initialMaterial}

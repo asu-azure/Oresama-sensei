@@ -37,7 +37,7 @@ export function ThemeToggle() {
       /* private mode / storage disabled — ignore */
     }
     const meta = document.querySelector('meta[name="theme-color"]');
-    if (meta) meta.setAttribute("content", next ? "#052e16" : "#f3f5f2");
+    if (meta) meta.setAttribute("content", next ? "#0c0c0d" : "#e9e4d8");
   }
 
   const Icon = dark ? Moon : Sun;

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { PageHeading } from "@/components/motion/page-heading";
 import {
   GraduationCap,
   Loader2,
@@ -318,13 +319,13 @@ export function TestsClient({
 
   return (
     <div className="space-y-6 py-4">
-      <div>
-        <h1 className="text-2xl font-bold">Tests</h1>
-        <p className="mt-1 text-sm text-muted">
-          Generate a focused practice test, or replay a saved one for free.
-          Answers update your review schedule.
-        </p>
-      </div>
+      <PageHeading
+        kicker="PRACTICE — SCORED"
+        title="Tests"
+        jp="力試し"
+        vtext="実力を測る"
+        subtitle="Generate a focused practice test, or replay a saved one for free. Answers update your review schedule."
+      />
 
       {error && <p className="text-sm text-accent">{error}</p>}
 

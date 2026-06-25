@@ -50,18 +50,19 @@ export function BarList({
   const max = Math.max(1, ...data.map((d) => d.value));
   return (
     <div className="space-y-2">
-      {data.map((d) => (
+      {data.map((d, i) => (
         <div key={d.label} className="flex items-center gap-3 text-sm">
           <span className="w-28 shrink-0 truncate text-muted" title={d.label}>
             {d.label}
           </span>
           <div className="h-3 min-w-0 flex-1 overflow-hidden rounded-full bg-surface-2">
             <div
-              className="h-full rounded-full"
+              className="bar-grow h-full origin-left rounded-full"
               style={{
                 width: `${(d.value / max) * 100}%`,
                 background: d.colorVar ?? colorVar,
-              }}
+                "--i": i,
+              } as React.CSSProperties}
             />
           </div>
           {showValue && (
@@ -162,6 +163,14 @@ export function Scatter({ points }: { points: ScatterPoint[] }) {
           {points.map((p, i) => (
             <circle
               key={i}
+              className="spark"
+              style={
+                {
+                  "--i": i % 60,
+                  transformBox: "fill-box",
+                  transformOrigin: "center",
+                } as React.CSSProperties
+              }
               cx={px(p.x)}
               cy={py(p.y)}
               r={3}
@@ -215,18 +224,19 @@ export function HourBars({
   return (
     <div>
       <div className="flex h-28 items-end gap-0.5 overflow-hidden">
-        {data.map((d) => (
+        {data.map((d, i) => (
           <div
             key={d.hour}
             className="flex h-full min-w-0 flex-1 flex-col items-center justify-end"
             title={`${String(d.hour).padStart(2, "0")}:00 — ${d.count} reviews`}
           >
             <div
-              className="w-full rounded-t bg-primary"
+              className="bar-rise w-full origin-bottom rounded-t bg-primary"
               style={{
                 height: `${Math.max(d.count > 0 ? 4 : 0, (d.count / max) * 100)}%`,
                 opacity: d.hour === peak.hour ? 1 : 0.55,
-              }}
+                "--i": i,
+              } as React.CSSProperties}
             />
           </div>
         ))}
@@ -256,7 +266,7 @@ export function Calibration({ data }: { data: CalibrationPoint[] }) {
   return (
     <div>
       <div className="flex h-36 items-end gap-2 overflow-hidden">
-        {data.map((d) => (
+        {data.map((d, i) => (
           <div
             key={d.label}
             className="flex h-full min-w-0 flex-1 flex-col items-center gap-1"
@@ -264,12 +274,16 @@ export function Calibration({ data }: { data: CalibrationPoint[] }) {
           >
             <div className="flex w-full flex-1 items-end justify-center gap-0.5">
               <div
-                className="w-1/2 rounded-t bg-blue-500/70"
-                style={{ height: `${Math.max(2, d.predictedPct)}%` }}
+                className="bar-rise w-1/2 origin-bottom rounded-t bg-blue-500/70"
+                style={
+                  { height: `${Math.max(2, d.predictedPct)}%`, "--i": i * 2 } as React.CSSProperties
+                }
               />
               <div
-                className="w-1/2 rounded-t bg-primary/80"
-                style={{ height: `${Math.max(2, d.actualPct)}%` }}
+                className="bar-rise w-1/2 origin-bottom rounded-t bg-primary/80"
+                style={
+                  { height: `${Math.max(2, d.actualPct)}%`, "--i": i * 2 + 1 } as React.CSSProperties
+                }
               />
             </div>
             <span className="h-3 w-full truncate text-center text-[9px] leading-3 text-muted">

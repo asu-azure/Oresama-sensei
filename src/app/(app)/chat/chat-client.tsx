@@ -6,6 +6,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Send, Plus, Loader2, Sparkles, BookPlus } from "lucide-react";
 import { Markdown } from "@/components/markdown";
 import { Button } from "@/components/ui/button";
+import { Highlight } from "@/components/motion/editorial";
 import { CostHint, MODEL_LABELS, lessonModelLabel } from "@/components/cost-hint";
 import {
   ConversationDrawer,
@@ -328,10 +329,16 @@ export function ChatClient({
             <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
               <Sparkles className="h-6 w-6" />
             </div>
-            <h2 className="font-jp text-xl font-semibold">先生にきいてみよう</h2>
-            <p className="mt-1 max-w-sm text-sm text-muted">
-              Ask about grammar, vocabulary, or usage. Everything you learn is
-              remembered and used to personalize future answers.
+            <h2
+              className="text-2xl font-medium"
+              style={{ fontFamily: "var(--font-serif-jp)" }}
+            >
+              先生にきいてみよう
+            </h2>
+            <p className="mt-2 max-w-sm text-sm text-muted">
+              Ask about grammar, vocabulary, or usage. Everything you learn is{" "}
+              <Highlight variant="cyan">remembered</Highlight> and used to
+              personalize future answers.
             </p>
             <div className="mt-6 flex w-full max-w-md flex-col gap-2">
               {SUGGESTIONS.map((s) => (
