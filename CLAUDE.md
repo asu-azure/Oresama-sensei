@@ -25,8 +25,11 @@ Two core features:
   work rather than handing back long to-do lists.
 
 ## How it works (architecture)
-- **Next.js 16** (App Router) + React 19 + TypeScript + Tailwind v4 + Framer Motion. Hosted on
-  **Vercel**; code on GitHub (`asu-azure/oresama-sensei`).
+- **Next.js 16** (App Router) + React 19 + TypeScript + Tailwind v4 + Framer Motion, with
+  **GSAP** + **Lenis** added for the v4.3 motion layer (custom cursor, magnetic buttons,
+  smooth scroll). Hosted on **Vercel**; code on GitHub (`asu-azure/oresama-sensei`).
+- **Design language is "Editorial FUI"** (since v4.3) — see the v4.3 changelog entry and the
+  Decisions log for the stack, the legacy→new rationale, and the reusable motion kit.
 - **Supabase** — Auth (single account), Postgres + **pgvector**, Storage. All data is scoped to
   the user via **RLS**; the app uses the user session (no service-role key).
 - **Claude** (`claude-sonnet-4-6`; `claude-opus-4-8` for "deep" lessons) — chat answers, lesson
@@ -413,6 +416,28 @@ The **data lives in Supabase (cloud)**, so chats/vocab/lessons sync automaticall
   by `ReviewDueSync` in the layout and decremented in the grade handler from `/api/srs`'s `due` (an
   "again" with a minutes-ahead due correctly stays counted) — updates without a refresh and shows the
   real number (no "99+").
+- ✅ v4.3 shipped (**"Editorial FUI" retheme** — visual + motion, presentation-only): the whole app was
+  reskinned from the original **Japanese pop-art** look (bright green `#16a34a` / rose `#f43f5e`, halftone,
+  pixel "buddies", glitch reveals, rainbow dividers, graph-paper) to **"Editorial FUI"** — a magazine
+  grammar borrowed from the owner's portfolio: warm **paper** (light) / ink **charcoal** (dark) signature
+  tones, **one cobalt accent** (`#2742f0`, lifted to periwinkle `#5b78ff`/`#6a86ff` on dark for legibility),
+  **serif narrates / grotesk punches / mono labels** (Fraunces + Space Grotesk + JetBrains Mono, + Noto
+  Serif/Sans JP), a blueprint grid, and award-site kineticism. **No engine/framework change** — same
+  Next.js/React/Tailwind; the change is the design-token + typography rewrite in `globals.css` + `layout.tsx`
+  and a new **motion layer** (`gsap` + `lenis` added; Framer Motion kept). New reusable kit in
+  **`src/components/motion/`**: `smooth-scroll` (Lenis), `cursor` (a visible circle dot that grows + shifts
+  cyan on hover; fine-pointer only), `magnetic` (`useMagnetic`/`Magnetic`), `reveal`+`use-in-view`
+  (mask/decode/`.is-in` triggers), and the **editorial kit** (`editorial.tsx`: `Gline` drawing gradient
+  line, `Highlight` box-sweep, `FlowText` flowing-gradient display words, `RunningLine` global top bar,
+  `Marquee`, `InView`, `JpDisplay` big-fat JP type) + `PageHeading` (mono kicker + gline + JP accent +
+  optional vertical `.vtext`). **Applied across** all main pages (PageHeading + big JP on dashboard 記録 /
+  insights 記憶 / books 蔵書 / lessons 学び / sns 言葉 / chat 会話 watermark); **insights charts made kinetic**
+  (forgetting-curve line draws in, bars grow/rise, scatter dots fade in — opacity-only after a blur-perf
+  fix); **review** got distinct rating-button colors + a viewport-fixed bottom **gline answer-flash**
+  (red→amber→sky-blue `#3b82f6`→glowing green). The old pop-art look is preserved in tag
+  **`aesthetic/pop-art-v1`** + the **`legacy/pop-art/`** archive (verbatim `globals.css` + components +
+  restore README). Reduced-motion is honored throughout. **No DB/API/Supabase/RAG/SRS change.** Done as
+  branch `feat/editorial-fui` → PRs #4/#5.
 - ⏳ Next ideas (not built): an **SNS growth view** that aggregates `sns_corrections.errors[].type` over
   time (the error log is being collected now); library multi-select bulk source-tag (per-lesson editor covers backfill for
   now); per-page knowledge granularity (page color currently aggregates the whole lesson's items); a
@@ -478,3 +503,18 @@ The **data lives in Supabase (cloud)**, so chats/vocab/lessons sync automaticall
   **read-only** by default); the access token is env-only (`SUPABASE_ACCESS_TOKEN`), never committed.
   See "Supabase MCP" under Running it. Chosen because this repo is DB-heavy (schema/migration work,
   live-data debugging); read-only + project scope keeps the blast radius small for the single private DB.
+- **The v4.3 "Editorial FUI" revamp is a reskin, not a re-platform.** Common confusion: the *portfolio*
+  this look was copied from is built on **Astro**; **this app is and stays Next.js**. What makes the new
+  look is (1) a rewritten **design-token + typography system** (CSS custom properties in `globals.css`,
+  fonts via `next/font` in `layout.tsx`) and (2) an **animation stack** — **GSAP** (custom cursor,
+  magnetic buttons, `quickTo` tweens) + **Lenis** (smooth/inertia scroll) layered on top of the existing
+  **Framer Motion** (component enter/exit) and IntersectionObserver-driven reveals. Legacy vs new differs
+  technically only by those two added libs + the token/font rewrite + the new `src/components/motion/`
+  primitives; aesthetically it's pop-art→editorial (loud/playful → restrained/typographic/kinetic).
+  This "Awwwards-style" toolkit has well-known alternatives if we ever extend it: smooth scroll =
+  **Lenis** (ours) / Locomotive Scroll / native View Transitions; animation = **GSAP**(+ScrollTrigger) /
+  **Framer Motion / Motion** / Motion One / react-spring / anime.js; WebGL = **Three.js** / React Three
+  Fiber / **OGL** (the portfolio uses OGL for image distortion); designer assets = **Rive** / **Lottie**;
+  page transitions = Barba.js / Swup. Next natural upgrades toward the portfolio ceiling would be **GSAP
+  ScrollTrigger** (scroll-scrubbed timelines) and an **OGL/Three.js** WebGL hero — deliberately skipped
+  for now since this is a study *tool*, not a showcase (motion should not get in the way of studying).
