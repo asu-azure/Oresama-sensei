@@ -4,6 +4,7 @@
 // them in. Hand-rolled SVG to match the project's no-charting-lib convention.
 
 import { cn } from "@/lib/utils";
+import { InView } from "@/components/motion/editorial";
 import type { ForecastPoint, HealthBuckets } from "@/lib/srs";
 
 // Horizontal reference lines / y-axis labels. 90% is the FSRS target retention,
@@ -71,19 +72,26 @@ export function ForgettingCurve({
       </div>
 
       {/* Health distribution bar */}
-      <div className="flex h-4 overflow-hidden rounded-full bg-surface-2">
-        {SEGMENTS.map((s) => {
+      <InView className="flex h-4 overflow-hidden rounded-full bg-surface-2">
+        {SEGMENTS.map((s, i) => {
           const v = buckets[s.key];
           if (v === 0) return null;
           return (
             <div
               key={s.key}
-              style={{ width: `${(v / total) * 100}%`, background: s.color }}
+              className="bar-grow origin-left"
+              style={
+                {
+                  width: `${(v / total) * 100}%`,
+                  background: s.color,
+                  "--i": i,
+                } as React.CSSProperties
+              }
               title={`${s.label}: ${v}`}
             />
           );
         })}
-      </div>
+      </InView>
       <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted">
         {SEGMENTS.map((s) => (
           <span key={s.key} className="flex items-center gap-1">
@@ -100,7 +108,7 @@ export function ForgettingCurve({
       <p className="mt-4 mb-1 text-[11px] text-muted">
         If you stop reviewing, average recall drops like this over 30 days:
       </p>
-      <div className="flex gap-1.5">
+      <InView as="div" className="flex gap-1.5">
         {/* y-axis labels (HTML, so they don't stretch with the SVG) */}
         <div className="relative h-48 w-8 shrink-0">
           {TICKS.map((r) => (
@@ -140,6 +148,7 @@ export function ForgettingCurve({
           ))}
           <path d={area} fill="var(--color-primary)" opacity={0.12} />
           <path
+            className="draw-path"
             d={line}
             fill="none"
             stroke="var(--color-primary)"
@@ -149,7 +158,7 @@ export function ForgettingCurve({
             strokeLinecap="round"
           />
         </svg>
-      </div>
+      </InView>
       <div className="ml-[38px] mt-1 flex justify-between text-[10px] text-muted">
         <span>now</span>
         <span>in 2 weeks</span>

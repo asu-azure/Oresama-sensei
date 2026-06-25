@@ -1,20 +1,52 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono, Noto_Sans_JP } from "next/font/google";
+import {
+  Fraunces,
+  Space_Grotesk,
+  JetBrains_Mono,
+  Noto_Sans_JP,
+  Noto_Serif_JP,
+} from "next/font/google";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+// "Editorial FUI" type system — serif narrates, grotesk punches, mono labels.
+// Fraunces (display serif): optical-sizing responds to size; carries italics.
+const fraunces = Fraunces({
+  variable: "--font-fraunces",
   subsets: ["latin"],
+  weight: ["300", "400", "500", "600"],
+  style: ["normal", "italic"],
+  display: "swap",
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+// Space Grotesk — default body + impact words.
+const spaceGrotesk = Space_Grotesk({
+  variable: "--font-space-grotesk",
   subsets: ["latin"],
+  weight: ["300", "400", "500", "700"],
+  display: "swap",
 });
 
+// JetBrains Mono — FUI micro-labels (.mono).
+const jetBrainsMono = JetBrains_Mono({
+  variable: "--font-jetbrains-mono",
+  subsets: ["latin"],
+  weight: ["400", "500"],
+  display: "swap",
+});
+
+// Japanese: sans for body furigana/text, serif for vertical editorial accents
+// (.vtext). Heavy subsets stay lazy (preload:false) to keep first paint fast.
 const notoSansJp = Noto_Sans_JP({
   variable: "--font-noto-sans-jp",
   subsets: ["latin"],
+  display: "swap",
+  preload: false,
+});
+
+const notoSerifJp = Noto_Serif_JP({
+  variable: "--font-noto-serif-jp",
+  subsets: ["latin"],
+  weight: ["400", "600"],
   display: "swap",
   preload: false,
 });
@@ -44,8 +76,8 @@ export const viewport: Viewport = {
   initialScale: 1,
   viewportFit: "cover",
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#f3f5f2" },
-    { media: "(prefers-color-scheme: dark)", color: "#052e16" },
+    { media: "(prefers-color-scheme: light)", color: "#e9e4d8" },
+    { media: "(prefers-color-scheme: dark)", color: "#0c0c0d" },
   ],
 };
 
@@ -63,7 +95,7 @@ export default function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${geistSans.variable} ${geistMono.variable} ${notoSansJp.variable} h-full antialiased`}
+      className={`${fraunces.variable} ${spaceGrotesk.variable} ${jetBrainsMono.variable} ${notoSansJp.variable} ${notoSerifJp.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT }} />

@@ -41,13 +41,13 @@ const VIEWS: { key: ViewMode; label: string }[] = [
   { key: "overlay", label: "Overlay" },
 ];
 
-// Distinct line colors for the overlay (pop palette + primary).
+// Distinct line colors for the overlay — editorial cobalt-family ramp.
 const COLORS = [
-  "var(--pop-pink)",
-  "var(--pop-cyan)",
-  "var(--pop-orange)",
-  "var(--pop-purple)",
-  "var(--color-primary)",
+  "#2742f0",
+  "#18c4d6",
+  "#e8a31a",
+  "#6aa0ff",
+  "#9a6bff",
 ];
 
 const DAY_MS = 86_400_000;

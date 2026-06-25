@@ -74,11 +74,20 @@ export type CardMeta = {
 };
 
 const RATINGS: { rating: Rating; label: string; cls: string }[] = [
-  { rating: "again", label: "Again", cls: "bg-accent text-white" },
-  { rating: "hard", label: "Hard", cls: "bg-surface-2 text-foreground" },
-  { rating: "good", label: "Good", cls: "bg-primary text-primary-foreground" },
-  { rating: "easy", label: "Easy", cls: "bg-emerald-600 text-white" },
+  { rating: "again", label: "Again", cls: "bg-[#f43f5e] text-white" },
+  { rating: "hard", label: "Hard", cls: "bg-[#f59e0b] text-white" },
+  { rating: "good", label: "Good", cls: "bg-[#2742f0] text-white" },
+  { rating: "easy", label: "Easy", cls: "bg-[#10b981] text-white" },
 ];
+
+// Color + glow for the on-grade gline flash. Reds for struggle, cobalt for solid,
+// a glowing super-green for "easy".
+const FLASH: Record<Rating, { color: string; glow: string; label: string }> = {
+  again: { color: "#f43f5e", glow: "0 0 10px rgba(244,63,94,0.45)", label: "AGAIN" },
+  hard: { color: "#f59e0b", glow: "0 0 10px rgba(245,158,11,0.5)", label: "HARD" },
+  good: { color: "#2742f0", glow: "0 0 14px rgba(39,66,240,0.55)", label: "GOOD" },
+  easy: { color: "#10b981", glow: "0 0 26px rgba(16,185,129,0.9)", label: "EASY" },
+};
 
 export function ReviewClient({
   cards,
@@ -217,6 +226,10 @@ function Flashcards({
     Object.fromEntries(cards.map((c) => [c.id, c.personal_note ?? ""])),
   );
   const [editingNote, setEditingNote] = useState(false);
+  // On-grade gline flash (keyed by seq so it replays each grade).
+  const [flash, setFlash] = useState<{ rating: Rating; seq: number } | null>(
+    null,
+  );
 
   if (cards.length === 0) {
     return (
@@ -298,6 +311,12 @@ function Flashcards({
 
   function grade(rating: Rating) {
     playGrade();
+    const seq = Date.now();
+    setFlash({ rating, seq });
+    window.setTimeout(
+      () => setFlash((f) => (f?.seq === seq ? null : f)),
+      reduce ? 350 : 700,
+    );
     fetch("/api/srs", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -341,7 +360,38 @@ function Flashcards({
   }
 
   return (
-    <>
+    <div className="relative">
+      {/* On-grade gline flash — color + glow encode how the answer went.
+          Centered on the content column (absolute, not viewport-fixed) so it
+          lines up under the card and shows on mobile too. */}
+      <AnimatePresence>
+        {flash && (
+          <motion.div
+            key={flash.seq}
+            aria-hidden="true"
+            initial={{ opacity: 0, scaleX: 0.2 }}
+            animate={{ opacity: 1, scaleX: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+            className="pointer-events-none absolute left-1/2 top-9 z-50 flex -translate-x-1/2 flex-col items-center gap-1"
+          >
+            <div
+              className="h-[3px] w-56 rounded-full"
+              style={{
+                background: FLASH[flash.rating].color,
+                boxShadow: FLASH[flash.rating].glow,
+              }}
+            />
+            <span
+              className="mono"
+              style={{ color: FLASH[flash.rating].color }}
+            >
+              {FLASH[flash.rating].label}
+            </span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {ahead && (
         <div className="mb-3 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-center text-xs text-primary">
           Reviewing ahead — these aren&apos;t due yet.
@@ -606,7 +656,7 @@ function Flashcards({
         ]}
         onSaveToNote={onSaveToNote}
       />
-    </>
+    </div>
   );
 }
 

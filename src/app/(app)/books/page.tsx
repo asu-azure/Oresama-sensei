@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { BookMarked } from "lucide-react";
+import { PageHeading } from "@/components/motion/page-heading";
+import { JpDisplay } from "@/components/motion/editorial";
 import { createClient } from "@/lib/supabase/server";
 import { collectionEmoji } from "@/lib/source";
 import { AddBook } from "./add-book";
@@ -57,15 +59,17 @@ export default async function BooksPage() {
   return (
     <div className="space-y-5 py-4">
       <div className="flex items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold">Books &amp; collections</h1>
-          <p className="mt-1 text-sm text-muted">
-            Your textbooks, games, and series — track pages, browse what
-            you&apos;ve studied, and see a summary.
-          </p>
-        </div>
+        <PageHeading
+          className="m-0"
+          kicker="SOURCES — TRACKED"
+          title="Books & collections"
+          jp="本棚"
+          subtitle="Your textbooks, games, and series — track pages, browse what you've studied, and see a summary."
+        />
         {colls.length > 0 && <AddBook />}
       </div>
+
+      <JpDisplay word="蔵書" label="THE COLLECTION — 読んだ証" flow className="py-1" />
 
       {colls.length === 0 ? (
         <div className="py-16 text-center">

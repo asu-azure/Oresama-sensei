@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { Button } from "@/components/ui/button";
 import { SoundToggle } from "@/components/sound-toggle";
+import { PageHeading } from "@/components/motion/page-heading";
 import { updateProfile } from "./actions";
 import type { Profile } from "@/lib/types";
 
@@ -21,13 +22,12 @@ export default async function SettingsPage() {
 
   return (
     <div className="max-w-xl space-y-6 py-4">
-      <div>
-        <h1 className="text-xl font-semibold">Your profile</h1>
-        <p className="mt-1 text-sm text-muted">
-          This personalizes every answer and lesson. The more the tutor knows
-          about your life and goals, the more meaningful the examples.
-        </p>
-      </div>
+      <PageHeading
+        kicker="SETTINGS"
+        title="Your profile"
+        jp="プロフィール"
+        subtitle="This personalizes every answer and lesson. The more the tutor knows about your life and goals, the more meaningful the examples."
+      />
 
       <form action={updateProfile} className="space-y-4">
         <div className="space-y-1.5">

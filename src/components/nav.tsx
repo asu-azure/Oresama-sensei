@@ -66,8 +66,9 @@ const primaryLinks = PRIMARY_HREFS.map(
 );
 const moreLinks = links.filter((l) => !PRIMARY_HREFS.includes(l.href));
 
+// Thin iridescent cobalt rule along the nav edge (editorial FUI).
 const ACCENT =
-  "linear-gradient(90deg, var(--pop-pink) 0%, var(--pop-yellow) 25%, var(--primary) 50%, var(--pop-cyan) 75%, var(--pop-purple) 100%)";
+  "linear-gradient(90deg, transparent 0%, var(--accent) 25%, #18c4d6 50%, var(--accent) 75%, transparent 100%)";
 
 export function Nav({ reviewDue = 0 }: { reviewDue?: number }) {
   const pathname = usePathname();
@@ -83,12 +84,13 @@ export function Nav({ reviewDue = 0 }: { reviewDue?: number }) {
   return (
     <>
       {/* ===== Desktop: left sidebar ===== */}
-      <aside className="sticky top-0 z-30 hidden h-dvh w-60 shrink-0 flex-col border-r-2 border-border bg-surface/80 backdrop-blur-md md:flex">
-        <div aria-hidden="true" className="h-1 w-full shrink-0" style={{ background: ACCENT }} />
+      <aside className="sticky top-0 z-30 hidden h-dvh w-60 shrink-0 flex-col border-r border-border bg-surface/80 backdrop-blur-md md:flex">
+        <div aria-hidden="true" className="h-px w-full shrink-0" style={{ background: ACCENT }} />
         <div className="flex min-h-0 flex-1 flex-col px-3 py-4">
           <Link
             href="/chat"
-            className="mb-4 px-2 font-jp text-xl font-bold tracking-tight"
+            className="mb-4 px-2 text-xl font-medium tracking-tight"
+            style={{ fontFamily: "var(--font-serif-jp)" }}
           >
             俺様先生
           </Link>
@@ -137,12 +139,13 @@ export function Nav({ reviewDue = 0 }: { reviewDue?: number }) {
       </aside>
 
       {/* ===== Mobile: slim top bar (brand + page title + theme) ===== */}
-      <header className="sticky top-0 z-30 border-b-2 border-border bg-surface backdrop-blur-md [padding-top:env(safe-area-inset-top)] md:hidden">
-        <div aria-hidden="true" className="h-1 w-full" style={{ background: ACCENT }} />
+      <header className="sticky top-0 z-30 border-b border-border bg-surface backdrop-blur-md [padding-top:env(safe-area-inset-top)] md:hidden">
+        <div aria-hidden="true" className="h-px w-full" style={{ background: ACCENT }} />
         <div className="flex h-12 items-center gap-2 pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))]">
           <Link
             href="/chat"
-            className="shrink-0 whitespace-nowrap font-jp text-base font-bold tracking-tight"
+            className="shrink-0 whitespace-nowrap text-base font-medium tracking-tight"
+            style={{ fontFamily: "var(--font-serif-jp)" }}
           >
             俺様先生
           </Link>
@@ -156,7 +159,7 @@ export function Nav({ reviewDue = 0 }: { reviewDue?: number }) {
 
       {/* ===== Mobile: fixed bottom tab bar ===== */}
       <nav
-        className="fixed inset-x-0 bottom-0 z-30 border-t-2 border-border bg-surface/90 backdrop-blur-md md:hidden"
+        className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-surface/90 backdrop-blur-md md:hidden"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
         <div className="mx-auto flex h-15 max-w-lg items-stretch">

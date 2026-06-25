@@ -4,8 +4,10 @@ import { Nav } from "@/components/nav";
 import { ReviewDueSync } from "@/components/review-due-sync";
 import { SplashScreen } from "@/components/splash-screen";
 import { BackgroundParticles } from "@/components/background-particles";
-import { PixelBuddies } from "@/components/pixel-buddies";
 import { PageTransition } from "@/components/page-transition";
+import { SmoothScroll } from "@/components/motion/smooth-scroll";
+import { Cursor } from "@/components/motion/cursor";
+import { RunningLine } from "@/components/motion/editorial";
 
 export default async function AppLayout({
   children,
@@ -28,8 +30,10 @@ export default async function AppLayout({
 
   return (
     <div className="relative flex min-h-dvh flex-col md:flex-row">
+      <RunningLine fixedTop />
+      <SmoothScroll />
+      <Cursor />
       <BackgroundParticles />
-      <PixelBuddies />
       <SplashScreen />
       <ReviewDueSync count={count ?? 0} />
       <Nav reviewDue={count ?? 0} />

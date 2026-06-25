@@ -1,0 +1,480 @@
+@import "tailwindcss";
+
+/* ---------------------------------------------------------------------------
+   Design tokens — Japanese pop-art: white + bright green, vivid accents
+--------------------------------------------------------------------------- */
+:root {
+  --background: #f3f5f2;
+  --surface: #ffffff;
+  --surface-2: #f0fdf4;
+  --foreground: #0f172a;
+  --muted: #64748b;
+  --border: #dcfce7;
+  --primary: #16a34a;
+  --primary-foreground: #ffffff;
+  --accent: #f43f5e;
+  --ring: #22c55e;
+  --radius: 0.875rem;
+
+  /* Faint classroom graph-paper grid line */
+  --grid-line: rgba(22, 101, 52, 0.06);
+
+  /* Decorative pop colors — used only by particles */
+  --pop-pink: #ff3366;
+  --pop-yellow: #ffd600;
+  --pop-cyan: #00bcd4;
+  --pop-orange: #ff6b35;
+  --pop-purple: #a855f7;
+  --pop-green: #16a34a;
+}
+
+/* Dark mode is class-based (`<html class="dark">`) so the in-app toggle can
+   override the OS setting. A no-flash inline script in app/layout.tsx adds the
+   class before paint (system pref on first visit, stored choice after). */
+:root.dark {
+  --background: #052e16;
+  --surface: #0d3321;
+  --surface-2: #14532d;
+  --foreground: #f0fdf4;
+  --muted: #86efac;
+  --border: #166534;
+  --primary: #4ade80;
+  --primary-foreground: #052e16;
+  --accent: #fb7185;
+  --ring: #4ade80;
+  --grid-line: rgba(134, 239, 172, 0.06);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-border: var(--border);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-accent: var(--accent);
+  --color-ring: var(--ring);
+
+  --font-sans: var(--font-noto-sans-jp), var(--font-geist-sans), ui-sans-serif,
+    system-ui, sans-serif;
+  --font-jp: var(--font-noto-sans-jp), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 0.35rem);
+  --radius-sm: calc(var(--radius) - 0.6rem);
+}
+
+* {
+  border-color: var(--border);
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+/* iOS Safari auto-zooms a focused form control whose font is < 16px (most of our
+   inputs use text-sm = 14px). Forcing 16px on touch devices only stops the zoom
+   without touching the desktop look. No maximum-scale, so pinch-zoom still works. */
+@media (pointer: coarse) {
+  input,
+  textarea,
+  select {
+    font-size: 16px;
+  }
+}
+
+/* Navigation bar heights. On mobile the nav is a sticky top bar + a fixed bottom
+   tab bar; on desktop (md+) it's an in-flow left sidebar, so both are 0. Used by
+   the chat full-height view, content bottom padding, and the Ask-Sensei bubble. */
+:root {
+  --top-nav: 0px;
+  --bottom-nav: 0px;
+}
+@media (max-width: 767.98px) {
+  :root {
+    --top-nav: calc(3.25rem + env(safe-area-inset-top));
+    --bottom-nav: calc(3.75rem + env(safe-area-inset-bottom));
+  }
+}
+
+body {
+  background-color: var(--background);
+  /* Faint graph-paper grid (classroom manuscript feel). Static, GPU-free,
+     sits behind the z-0 particle layer and z-10 content. */
+  background-image: linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+  background-size: 26px 26px;
+  color: var(--foreground);
+  font-family: var(--font-sans);
+}
+
+/* Furigana: <ruby>漢字<rt>かんじ</rt></ruby> */
+ruby {
+  ruby-align: center;
+}
+rt {
+  font-size: 0.6em;
+  color: var(--muted);
+  font-weight: 400;
+}
+
+/* Thin, unobtrusive scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 9999px;
+}
+
+/* Opt-out: hide the scrollbar entirely (e.g. the horizontally scrollable
+   nav tab strip on narrow screens). */
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-fade-in-up {
+  animation: fade-in-up 0.35s ease-out both;
+}
+
+/* ---------------------------------------------------------------------------
+   Pop-art particle animations — GPU-safe (transform + opacity only)
+--------------------------------------------------------------------------- */
+@keyframes pop-float {
+  0%, 100% { transform: translateY(0px) rotate(0deg); }
+  50%       { transform: translateY(-18px) rotate(6deg); }
+}
+@keyframes pop-float-x {
+  0%, 100% { transform: translateX(0px) rotate(0deg); }
+  50%       { transform: translateX(14px) rotate(-8deg); }
+}
+@keyframes pop-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+@keyframes pop-spin-rev {
+  from { transform: rotate(0deg) scale(1); }
+  to   { transform: rotate(-360deg) scale(1); }
+}
+@keyframes pop-pulse {
+  0%, 100% { transform: scale(1); }
+  50%       { transform: scale(1.18); }
+}
+@keyframes pop-drift {
+  0%   { transform: translate(0, 0)      rotate(0deg);   }
+  33%  { transform: translate(12px, -16px) rotate(60deg);  }
+  66%  { transform: translate(-8px, -22px) rotate(120deg); }
+  100% { transform: translate(0, 0)      rotate(180deg); }
+}
+
+/* Splash-screen per-character box sweep — a skewed, blurred rainbow light bar
+   wipes across each title-kanji slot as it reveals (paired with the stroke draw
+   + glitch-in). The bar is the ::before; the wrapper carries an inline
+   animation-delay which the bar inherits so each char fires in turn. */
+.splash-sweep {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 5;
+}
+.splash-sweep::before {
+  content: "";
+  position: absolute;
+  top: -20%;
+  bottom: -20%;
+  width: 60%;
+  left: -75%;
+  transform: skewX(-16deg);
+  filter: blur(2px);
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in srgb, var(--pop-cyan) 80%, transparent) 38%,
+    #ffffff 50%,
+    color-mix(in srgb, var(--pop-pink) 80%, transparent) 62%,
+    transparent 100%
+  );
+  animation: splash-sweep 0.5s ease-out both;
+  animation-delay: inherit;
+}
+@keyframes splash-sweep {
+  0%   { left: -75%; opacity: 0; }
+  20%  { opacity: 0.95; }
+  100% { left: 120%; opacity: 0; }
+}
+
+/* One-shot flash-wipe for page transitions — now a slim bright bar. Fades fully
+   out at the end so it never lingers as a stuck line on tall screens. */
+@keyframes pop-wipe {
+  0%   { transform: translateX(-10vw) skewX(-12deg); opacity: 0; }
+  12%  { opacity: 0.9; }
+  80%  { opacity: 0.9; }
+  100% { transform: translateX(108vw)  skewX(-12deg); opacity: 0; }
+}
+
+/* Small geometric shapes trailing behind the wipe bar. */
+@keyframes pop-wipe-trail {
+  0%   { transform: translateX(-12vw) scale(0.5) rotate(0deg); opacity: 0; }
+  20%  { opacity: 0.9; }
+  100% { transform: translateX(106vw) scale(1) rotate(220deg); opacity: 0; }
+}
+
+/* "Hologram glitch" — a bold RGB-split + sliced-jitter that settles to clean
+   text. Used for the flashcard reveal/advance (applied via the .glitch-in
+   class). text-shadow drives the chromatic split (glyphs only, not borders);
+   clip-path slices the block for a digital "tearing" look.
+   Tunables: bump the px offsets / duration here to dial intensity. */
+@keyframes glitch-in {
+  0%   { opacity: 0; transform: translate3d(-9px, 0, 0);
+         text-shadow: 5px 0 var(--pop-pink), -5px 0 var(--pop-cyan);
+         clip-path: inset(0 0 62% 0); }
+  10%  { opacity: 1; transform: translate3d(9px, 0, 0);
+         text-shadow: -7px 0 var(--pop-pink), 7px 0 var(--pop-cyan);
+         clip-path: inset(58% 0 0 0); }
+  22%  { transform: translate3d(-7px, 0, 0);
+         text-shadow: 7px 0 var(--pop-cyan), -7px 0 var(--pop-pink);
+         clip-path: inset(22% 0 42% 0); }
+  34%  { transform: translate3d(6px, 0, 0);
+         text-shadow: -5px 0 var(--pop-pink), 5px 0 var(--pop-cyan);
+         clip-path: inset(46% 0 8% 0); }
+  46%  { opacity: 0.5; transform: translate3d(-4px, 0, 0);
+         text-shadow: 4px 0 var(--pop-cyan), -4px 0 var(--pop-pink);
+         clip-path: inset(0 0 0 0); }
+  62%  { opacity: 1; transform: translate3d(3px, 0, 0);
+         text-shadow: 2px 0 var(--pop-pink), -2px 0 var(--pop-cyan); }
+  80%  { transform: translate3d(-1px, 0, 0); text-shadow: none; }
+  100% { opacity: 1; transform: translate3d(0, 0, 0); text-shadow: none;
+         clip-path: inset(0 0 0 0); }
+}
+.glitch-in {
+  animation: glitch-in 0.42s steps(2, end) both;
+}
+
+/* Bright light bar that sweeps across a flashcard on reveal/advance. The element
+   is an absolute cover (.card-sweep); a skewed, blurred gradient strip slides
+   L→R via its ::before. pointer-events disabled so it never blocks taps.
+   Tunables: width / left range / blur / opacity below. */
+.card-sweep {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 5;
+}
+.card-sweep::before {
+  content: "";
+  position: absolute;
+  top: -12%;
+  bottom: -12%;
+  width: 42%;
+  left: -55%;
+  transform: skewX(-16deg);
+  filter: blur(3px);
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in srgb, var(--pop-cyan) 75%, transparent) 35%,
+    #ffffff 50%,
+    color-mix(in srgb, var(--pop-pink) 75%, transparent) 65%,
+    transparent 100%
+  );
+  animation: card-sweep 0.45s ease-out both;
+}
+@keyframes card-sweep {
+  0%   { left: -55%; opacity: 0; }
+  18%  { opacity: 0.9; }
+  100% { left: 115%; opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .glitch-in { animation: none; }
+  .card-sweep::before { animation: none; opacity: 0; }
+  .splash-sweep::before { animation: none; opacity: 0; }
+}
+
+/* ---------------------------------------------------------------------------
+   Pitch-accent contour (PitchAccent): an overline over HIGH morae + a vertical
+   downstep hook, drawn left→right like a lit fuse with a soft glow, colored by
+   accent type via the inline --pitch-color var. Low morae render no element.
+   Tunables: line thickness / reserve / glow strength below.
+--------------------------------------------------------------------------- */
+.pitch-mora {
+  position: relative;
+  display: inline-block;
+  padding-top: 0.34em; /* uniform top reserve → glyphs stay aligned + room for line */
+  line-height: 1;
+}
+.pitch-line,
+.pitch-drop {
+  position: absolute;
+  background: var(--pitch-color);
+  border-radius: 1px;
+  pointer-events: none;
+}
+.pitch-line {
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 0.13em;
+  transform-origin: left center;
+  animation:
+    pitch-draw 0.2s ease-out both,
+    pitch-glow 0.55s ease-out both;
+  animation-delay: var(--pitch-delay);
+}
+.pitch-drop {
+  top: 0;
+  right: 0;
+  width: 0.13em;
+  height: 0.72em;
+  transform-origin: top center;
+  animation:
+    pitch-draw-v 0.16s ease-out both,
+    pitch-glow 0.5s ease-out both;
+  animation-delay: var(--pitch-delay);
+}
+@keyframes pitch-draw {
+  from { transform: scaleX(0); }
+  to   { transform: scaleX(1); }
+}
+@keyframes pitch-draw-v {
+  from { transform: scaleY(0); }
+  to   { transform: scaleY(1); }
+}
+@keyframes pitch-glow {
+  0%   { box-shadow: 0 0 7px 1px var(--pitch-color); filter: brightness(1.7); }
+  55%  { box-shadow: 0 0 4px 0 var(--pitch-color); filter: brightness(1.2); }
+  100% { box-shadow: 0 0 2px 0 color-mix(in srgb, var(--pitch-color) 45%, transparent);
+         filter: brightness(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pitch-line,
+  .pitch-drop {
+    animation: none;
+    transform: none;
+    box-shadow: 0 0 2px 0 color-mix(in srgb, var(--pitch-color) 45%, transparent);
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Pixel "buddies" — tiny characters that amble / sit / sleep along the bottom
+--------------------------------------------------------------------------- */
+@keyframes buddy-walk {
+  0%   { transform: translateX(0) scaleX(1); }
+  48%  { transform: translateX(72vw) scaleX(1); }
+  50%  { transform: translateX(72vw) scaleX(-1); }
+  98%  { transform: translateX(0) scaleX(-1); }
+  100% { transform: translateX(0) scaleX(1); }
+}
+/* Snap between the two walk frames (no fade). */
+@keyframes buddy-step {
+  0%, 49.9% { opacity: 0; }
+  50%, 100% { opacity: 1; }
+}
+/* Cross-fade a resting buddy between its "sit" and "sleep" poses. */
+@keyframes buddy-rest {
+  0%, 40% { opacity: 0; }
+  50%, 90% { opacity: 1; }
+  100% { opacity: 0; }
+}
+@keyframes buddy-zzz {
+  0%, 45% { opacity: 0; transform: translateY(0) scale(0.7); }
+  60% { opacity: 1; }
+  90% { opacity: 0.6; transform: translateY(-12px) scale(1); }
+  100% { opacity: 0; transform: translateY(-16px) scale(1); }
+}
+
+/* IMPORTANT: these @keyframes are applied via INLINE styles in JS
+   (BackgroundParticles, PixelBuddies, PageTransition), which Tailwind v4's CSS
+   optimizer (Lightning CSS) can't see — so it tree-shakes them out and the
+   animations silently die. Referencing every name here (in a rule that's never
+   actually rendered) marks them as "used" so they survive the build. Keep this
+   list in sync when adding a new decorative keyframe. */
+.keep-keyframes-alive {
+  animation-name: pop-float, pop-float-x, pop-spin, pop-spin-rev, pop-pulse,
+    pop-drift, pop-wipe, pop-wipe-trail, buddy-walk, buddy-step, buddy-rest,
+    buddy-zzz;
+}
+
+/* ---------------------------------------------------------------------------
+   Pop-art UI utilities — bright accents + geometry on a plain surface
+--------------------------------------------------------------------------- */
+
+/* Halftone dot motif. Use with a low-opacity colored `color:` (currentColor
+   drives the dots), e.g. text-[var(--pop-cyan)]/30. */
+.halftone {
+  background-image: radial-gradient(currentColor 1.5px, transparent 1.6px);
+  background-size: 12px 12px;
+  background-position: 0 0;
+}
+
+/* "Sticker" card — bold border + hard offset shadow, like a die-cut decal.
+   Lifts slightly on hover, presses down on tap. */
+.pop-card {
+  border-width: 2px;
+  border-color: var(--primary);
+  box-shadow: 6px 6px 0 0 var(--primary);
+  transition:
+    transform 0.12s ease,
+    box-shadow 0.12s ease;
+}
+.pop-card:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: 8px 8px 0 0 var(--primary);
+}
+.pop-card:active {
+  transform: translate(3px, 3px);
+  box-shadow: 2px 2px 0 0 var(--primary);
+}
+
+/* Thick multi-color accent rule for section breaks. */
+.pop-divider {
+  height: 4px;
+  border: 0;
+  border-radius: 9999px;
+  background: linear-gradient(
+    90deg,
+    var(--pop-pink) 0%,
+    var(--pop-yellow) 25%,
+    var(--pop-green) 50%,
+    var(--pop-cyan) 75%,
+    var(--pop-purple) 100%
+  );
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* The ambient background particles intentionally keep their gentle motion
+     even under reduced-motion (owner's choice — purely decorative, behind
+     content). Intrusive motion (page-wipe, splash) is gated in JS via
+     useReducedMotion() and still falls back to a plain fade. */
+  .pop-card {
+    transition: none;
+  }
+  .pop-card:hover,
+  .pop-card:active {
+    transform: none;
+  }
+}

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { PageHeading } from "@/components/motion/page-heading";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Search, Check, X } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -155,13 +156,13 @@ export function KanjiBrowser({
   return (
     <div className="space-y-5">
       <div className="flex items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold">Kanji</h1>
-          <p className="mt-1 text-sm text-muted">
-            Stroke order, readings, and the parts each kanji is built from. Ones
-            you&apos;ve already met are marked.
-          </p>
-        </div>
+        <PageHeading
+          className="m-0"
+          kicker="JLPT N5–N1"
+          title="Kanji"
+          jp="漢字"
+          subtitle="Stroke order, readings, and the parts each kanji is built from. Ones you've already met are marked."
+        />
         <button
           onClick={() => (selectMode ? exitSelect() : setSelectMode(true))}
           className={cn(

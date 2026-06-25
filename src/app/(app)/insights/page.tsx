@@ -1,5 +1,8 @@
 import { Layers, Repeat, PenLine, Sparkles } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { PageHeading } from "@/components/motion/page-heading";
+import { Reveal } from "@/components/motion/reveal";
+import { Gline, InView, Highlight, FlowText } from "@/components/motion/editorial";
 import { fetchAllRows } from "@/lib/fetch-all";
 import { masteryLevel } from "@/lib/mastery";
 import {
@@ -109,10 +112,13 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-2xl border border-border bg-surface p-5">
-      <h2 className="text-sm font-medium text-muted">{title}</h2>
-      {caption && <p className="mt-1 mb-3 text-xs text-muted">{caption}</p>}
-      <div className={caption ? "" : "mt-3"}>{children}</div>
+    <section className="pop-card rounded-2xl bg-surface p-5">
+      <Reveal as="h2" className="serif text-lg font-medium">
+        {title}
+      </Reveal>
+      <Gline className="mb-3 mt-2" />
+      {caption && <p className="mb-3 text-xs text-muted">{caption}</p>}
+      <InView className={caption ? "" : "mt-3"}>{children}</InView>
     </section>
   );
 }
@@ -194,11 +200,37 @@ export default async function InsightsPage() {
 
   return (
     <div className="space-y-6 py-4">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h1 className="text-xl font-semibold">Insights</h1>
-        <p className="text-xs text-muted">
-          Data-mined from your saved words and review history.
-        </p>
+      <PageHeading
+        kicker="LEARNING SCIENCE — VISUALIZED"
+        title="Insights"
+        jp="洞察"
+        vtext="学びの記録"
+        flow
+        subtitle="Data-mined from your saved words and review history."
+      />
+
+      {/* Editorial intro — the signature highlight-box sweep + flowing wordmark */}
+      <div className="py-2">
+        <Reveal as="p" className="max-w-2xl text-lg leading-relaxed sm:text-xl">
+          <span>
+            Drawn from every word you&apos;ve saved and every review you&apos;ve
+            logged — what&apos;s <Highlight variant="cyan">solid</Highlight>,
+            what&apos;s <Highlight variant="amber">slipping</Highlight>, and when
+            to come back.
+          </span>
+        </Reveal>
+        <p className="mono mt-8">THE NUMBERS BELOW MEASURE</p>
+        <div className="flex flex-wrap items-end gap-x-6 gap-y-1">
+          <FlowText as="div" className="mega leading-none">
+            MEMORY
+          </FlowText>
+          <span
+            className="flow-text text-5xl font-semibold leading-none sm:text-6xl"
+            style={{ fontFamily: "var(--font-serif-jp)" }}
+          >
+            記憶
+          </span>
+        </div>
       </div>
 
       {/* Headline cards */}

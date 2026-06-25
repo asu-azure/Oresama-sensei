@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { motion } from "framer-motion";
+import { PageHeading } from "@/components/motion/page-heading";
+import { JpDisplay } from "@/components/motion/editorial";
 import {
   AtSign,
   Loader2,
@@ -183,14 +185,14 @@ export function SnsClient({
 
   return (
     <div className="mx-auto max-w-2xl py-6">
-      <div className="mb-1 flex items-center gap-2">
-        <AtSign className="h-5 w-5 text-primary" />
-        <h1 className="text-lg font-semibold">SNS helper</h1>
-      </div>
-      <p className="mb-5 text-sm text-muted">
-        Draft natural Japanese for X — replies, posts, or decode what someone
-        means. You get a few options with Thai nuance; refine by chatting.
-      </p>
+      <PageHeading
+        kicker="@ — SOCIAL JAPANESE"
+        title="SNS helper"
+        jp="投稿サポート"
+        subtitle="Draft natural Japanese for X — replies, posts, or decode what someone means. You get a few options with Thai nuance; refine by chatting."
+      />
+
+      <JpDisplay word="言葉" label="FIND THE RIGHT — 言葉" flow className="mb-6" />
 
       {/* Mode */}
       <div className="mb-4 grid grid-cols-3 gap-2">

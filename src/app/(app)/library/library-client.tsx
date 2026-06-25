@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { PageHeading } from "@/components/motion/page-heading";
 import {
   AnimatePresence,
   motion,
@@ -234,13 +235,13 @@ export function LibraryClient({
   return (
     <div className="space-y-5 py-4">
       <div className="flex items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold">Vocab &amp; grammar</h1>
-          <p className="mt-1 text-sm text-muted">
-            {total} saved {total === 1 ? "item" : "items"} · tap a day to see what
-            you added, tap any item to expand it.
-          </p>
-        </div>
+        <PageHeading
+          className="m-0"
+          kicker="SAVED — SRS-TRACKED"
+          title="Vocab & grammar"
+          jp="語彙と文法"
+          subtitle={`${total} saved ${total === 1 ? "item" : "items"} · tap a day to see what you added, tap any item to expand it.`}
+        />
         <PitchToggle />
       </div>
 

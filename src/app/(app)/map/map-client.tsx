@@ -22,6 +22,7 @@ import {
   BookOpen,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { PageHeading } from "@/components/motion/page-heading";
 import { CostHint, MODEL_LABELS } from "@/components/cost-hint";
 import { cn, formatDate } from "@/lib/utils";
 import { showReading } from "@/lib/furigana";
@@ -399,18 +400,23 @@ export function MapClient({
   return (
     <div className="py-4">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold">Knowledge Map</h1>
-          <p className="text-sm text-muted">
-            {data?.scope && data.scope.type !== "all"
-              ? `Map of ${data.scope.label ?? data.scope.value}`
-              : `${totalItems} saved items`}
-            {generatedAt && ` · mapped ${formatDate(generatedAt)}`}
-            {stale &&
-              (!data?.scope || data.scope.type === "all") &&
-              " · new items since — regenerate to include them"}
-          </p>
-        </div>
+        <PageHeading
+          className="m-0"
+          kicker="CONNECTED — VECTOR-MINED"
+          title="Knowledge Map"
+          jp="知識マップ"
+          subtitle={
+            <>
+              {data?.scope && data.scope.type !== "all"
+                ? `Map of ${data.scope.label ?? data.scope.value}`
+                : `${totalItems} saved items`}
+              {generatedAt && ` · mapped ${formatDate(generatedAt)}`}
+              {stale &&
+                (!data?.scope || data.scope.type === "all") &&
+                " · new items since — regenerate to include them"}
+            </>
+          }
+        />
         <div className="flex items-center gap-2">
           {data && (
             <div className="flex rounded-lg border border-border p-0.5">

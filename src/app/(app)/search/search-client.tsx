@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { PageHeading } from "@/components/motion/page-heading";
 import Fuse from "fuse.js";
 import { toHiragana, toRomaji } from "wanakana";
 import {
@@ -148,13 +149,13 @@ export function SearchClient({
   return (
     <div className="space-y-5 py-4">
       <div className="flex items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold">Search</h1>
-          <p className="mt-1 text-sm text-muted">
-            Look up anything you&apos;ve saved — by kanji, kana, rōmaji, or
-            English meaning. Results appear as you type.
-          </p>
-        </div>
+        <PageHeading
+          className="m-0"
+          kicker="LOOK UP — INSTANTLY"
+          title="Search"
+          jp="検索"
+          subtitle="Look up anything you've saved — by kanji, kana, rōmaji, or English meaning. Results appear as you type."
+        />
         <PitchToggle />
       </div>
 

@@ -24,7 +24,7 @@ export function iconResponse(size: number) {
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          background: "linear-gradient(135deg, #4f46e5 0%, #312e81 100%)",
+          background: "linear-gradient(135deg, #2742f0 0%, #0c0c0d 100%)",
         }}
       >
         {/* seal ring */}
@@ -46,7 +46,7 @@ export function iconResponse(size: number) {
             width: dot,
             height: dot,
             borderRadius: 9999,
-            background: "#fb7185",
+            background: "#18c4d6",
           }}
         />
       </div>

@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { BookOpen, Brain, MessageCircle, Layers } from "lucide-react";
+import { PageHeading } from "@/components/motion/page-heading";
+import { Highlight, JpDisplay } from "@/components/motion/editorial";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllRows } from "@/lib/fetch-all";
 import { computeInsights, type InsightItem } from "@/lib/insights";
@@ -333,7 +335,20 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-6 py-4">
-      <h1 className="text-xl font-semibold">Progress</h1>
+      <PageHeading
+        kicker="DASHBOARD — AT A GLANCE"
+        title="Progress"
+        jp="進捗"
+        vtext="記録"
+        flow
+      />
+
+      <p className="-mt-2 max-w-2xl text-sm text-muted">
+        A quick read on what you&apos;ve built and what&apos;s{" "}
+        <Highlight variant="amber">due to review</Highlight>.
+      </p>
+
+      <JpDisplay word="記録" label="THE RECORD — 学びの足跡" flow className="py-2" />
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <StatCard
