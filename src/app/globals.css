@@ -4,7 +4,7 @@
    Design tokens — "Editorial FUI": magazine signature tones (paper / ink),
    serif narrates + grotesk punches + mono labels, one cobalt accent.
    Light mode = paper (warm cream); dark mode = ink (charcoal). Ported from the
-   kampanat-portfolio design language.
+   owner's portfolio design language.
 --------------------------------------------------------------------------- */
 :root {
   /* ---- Paper (light) tone — the default ---- */

@@ -68,6 +68,16 @@ set a **Supabase personal access token** in the environment Claude Code runs in 
 is public (same as the `NEXT_PUBLIC_SUPABASE_URL` subdomain), so only the token is secret.
 To let an agent **apply** migrations, drop `read_only=true` from the URL temporarily.
 
+## Shared database with Hisho (since 2026-07-16)
+The **same Supabase project** also hosts the tables of **Hisho** (`../hisho`,
+`asu-azure/hisho` — a separate Streamlit life-hub app). All of its tables are prefixed
+**`hisho_`** (daily_logs, activities, workouts, workout_sets, habits, habit_ticks,
+transactions, debts, content_items) and are managed by **Hisho's own migration series**
+(`hisho/supabase/migrations/`) — they do NOT appear in this repo's `supabase/migrations/`
+and must never be modified from here. Hisho reads this app's `review_log` /
+`knowledge_items` **read-only** (study stats on its dashboard) and never writes to any
+Oresama-sensei table. Same auth user, RLS-scoped, anon key only on both sides.
+
 ## Working across computers (IMPORTANT)
 The **data lives in Supabase (cloud)**, so chats/vocab/lessons sync automatically. Only the
 **code** syncs via GitHub. Workflow:
