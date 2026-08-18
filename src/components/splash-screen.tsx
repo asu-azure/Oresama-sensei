@@ -1,20 +1,46 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 
 const TITLE = "俺様先生";
 const ROMAJI = "ORE-SAMA SENSEI";
 
-/** Brief entrance splash shown once per full app load. Editorial FUI: the title
- *  rises in serif behind a thin cobalt rule, with a mono readout — replacing the
- *  old pop-art glitch. Theme-aware (CSS tokens) and reduced-motion safe. */
+/** Marks that the splash has already played in this tab. */
+const SEEN_KEY = "splash-seen";
+
+/** Whether this tab has already seen the splash. Read through
+ *  useSyncExternalStore (the pattern use-pitch/use-sound already use here) so it
+ *  is hydration-safe and needs no set-state-in-effect. Never changes within a
+ *  mount, hence the no-op subscribe. */
+function useSplashSeen(): boolean {
+  return useSyncExternalStore(
+    () => () => {},
+    () => window.sessionStorage.getItem(SEEN_KEY) === "1",
+    () => false,
+  );
+}
+
+/** Brief entrance splash shown once per TAB (not once per page load). Editorial
+ *  FUI: the title rises in serif behind a thin cobalt rule, with a mono readout.
+ *  Theme-aware (CSS tokens) and reduced-motion safe.
+ *
+ *  Once-per-tab matters because it renders at z-[100] over the whole viewport:
+ *  any full page load used to block input for ~1.75s, which the review screen
+ *  hit every time you asked for another batch. */
 export function SplashScreen() {
   const reduce = !!useReducedMotion();
+  const seen = useSplashSeen();
   const [show, setShow] = useState(true);
 
   useEffect(() => {
-    const t = setTimeout(() => setShow(false), reduce ? 500 : 1250);
+    const t = setTimeout(
+      () => {
+        window.sessionStorage.setItem(SEEN_KEY, "1");
+        setShow(false);
+      },
+      reduce ? 500 : 1250,
+    );
     return () => clearTimeout(t);
   }, [reduce]);
 
@@ -22,12 +48,12 @@ export function SplashScreen() {
 
   return (
     <AnimatePresence>
-      {show && (
+      {show && !seen && (
         <motion.div
           key="splash"
           initial={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          transition={{ duration: 0.5, ease }}
+          transition={{ duration: seen ? 0 : 0.5, ease }}
           className="fixed inset-0 z-[100] flex flex-col items-center justify-center overflow-hidden bg-background"
           aria-hidden="true"
         >

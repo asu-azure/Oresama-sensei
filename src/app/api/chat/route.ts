@@ -9,6 +9,8 @@ import { recallKnowledge, storeKnowledge, storeMessage } from "@/lib/memory";
 import { fetchAllRows } from "@/lib/fetch-all";
 import { buildChatSystemPrompt } from "@/lib/prompts";
 import { computeInsights, statsDigest, type InsightItem } from "@/lib/insights";
+import { getStudyPace } from "@/lib/study-pace";
+import { getTodayLoad } from "@/lib/review-queue";
 import type { Profile } from "@/lib/types";
 
 export async function POST(request: Request) {
@@ -87,7 +89,17 @@ export async function POST(request: Request) {
       ),
     ]);
 
-  const digest = statsDigest(computeInsights(allItems));
+  // Give the tutor today's plan, not the raw backlog, so it encourages finishing
+  // a finite session instead of nagging about a pile the UI deliberately hides.
+  // Best-effort: a failure here must not break a chat reply.
+  let dueToday: number | undefined;
+  try {
+    const pace = await getStudyPace(supabase, user.id);
+    dueToday = (await getTodayLoad(supabase, user.id, pace)).plannedToday.total;
+  } catch {
+    dueToday = undefined;
+  }
+  const digest = statsDigest(computeInsights(allItems, new Date(), { dueToday }));
   const system = buildChatSystemPrompt(
     profile as Profile | null,
     recalled,

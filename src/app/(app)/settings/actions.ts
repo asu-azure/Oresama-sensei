@@ -2,6 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { clampNewLimit, clampReviewLimit } from "@/lib/study-pace";
+import { resolveDayStartHour, resolveTimeZone } from "@/lib/study-day";
 
 export async function updateProfile(formData: FormData) {
   const supabase = await createClient();
@@ -26,13 +28,26 @@ export async function updateProfile(formData: FormData) {
   };
   const ai_engine = str("ai_engine") === "claude" ? "claude" : "gemini";
 
-  // Try with the ai_engine column; if migration 0015 hasn't run, fall back.
-  const withEngine = await supabase
-    .from("profiles")
-    .upsert({ ...base, ai_engine });
-  if (withEngine.error) {
-    await supabase.from("profiles").upsert(base);
+  const pace = {
+    daily_new_limit: clampNewLimit(formData.get("daily_new_limit")),
+    daily_review_limit: clampReviewLimit(formData.get("daily_review_limit")),
+    study_timezone: resolveTimeZone(str("study_timezone")),
+    day_start_hour: resolveDayStartHour(str("day_start_hour")),
+  };
+
+  // Widest payload first; each fallback drops the newest migration's columns
+  // (0024 pace → 0015 ai_engine → base). An upsert only writes the columns it
+  // names, so chat_model (0018) is never clobbered by any of these.
+  for (const payload of [
+    { ...base, ai_engine, ...pace },
+    { ...base, ai_engine },
+    base,
+  ]) {
+    const { error } = await supabase.from("profiles").upsert(payload);
+    if (!error) break;
   }
 
   revalidatePath("/settings");
+  // The nav badge is computed in the (app) layout from these limits.
+  revalidatePath("/", "layout");
 }

@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { hasSuspendColumn } from "@/lib/review-queue";
 import { TestsClient, type SavedTestRow } from "./tests-client";
 
 export default async function TestsPage() {
@@ -8,24 +9,40 @@ export default async function TestsPage() {
   } = await supabase.auth.getUser();
   const uid = user!.id;
   const nowIso = new Date().toISOString();
+  // Parked words must not resurface here — Tests generates exercises with a
+  // model call, so a leaked parked item costs tokens on a word the learner
+  // explicitly threw away.
+  const canPark = await hasSuspendColumn(supabase);
+  const live = <T,>(q: T): T =>
+    canPark ? (q as unknown as { eq(c: string, v: unknown): T }).eq("srs_suspended", false) : q;
 
+  // Deliberately still the LIFETIME "due" definition, not the daily plan:
+  // generating a practice test over everything due is a different activity from
+  // the paced daily queue on /review.
+  //
   // All counts are plain SQL (no API cost) — they drive the scope picker.
   const [strug, neu, due, levelsRes, saved] = await Promise.all([
-    supabase
-      .from("knowledge_items")
-      .select("id", { count: "exact", head: true })
-      .eq("user_id", uid)
-      .or("srs_lapses.gte.2,srs_difficulty.gte.7"),
-    supabase
-      .from("knowledge_items")
-      .select("id", { count: "exact", head: true })
-      .eq("user_id", uid)
-      .eq("srs_reps", 0),
-    supabase
-      .from("knowledge_items")
-      .select("id", { count: "exact", head: true })
-      .eq("user_id", uid)
-      .or(`srs_due.is.null,srs_due.lte.${nowIso}`),
+    live(
+      supabase
+        .from("knowledge_items")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", uid)
+        .or("srs_lapses.gte.2,srs_difficulty.gte.7"),
+    ),
+    live(
+      supabase
+        .from("knowledge_items")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", uid)
+        .eq("srs_reps", 0),
+    ),
+    live(
+      supabase
+        .from("knowledge_items")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", uid)
+        .or(`srs_due.is.null,srs_due.lte.${nowIso}`),
+    ),
     supabase.from("knowledge_items").select("jlpt_level").eq("user_id", uid),
     supabase
       .from("review_tests")

@@ -2,7 +2,8 @@
 
 import { createClient } from "@/lib/supabase/server";
 import type { LibraryItem } from "./library-client";
-import { LIBRARY_COLS } from "./columns";
+import { libraryCols } from "./columns";
+import { hasSuspendColumn } from "@/lib/review-queue";
 import { generateDeepDive, resolveEngine, type DeepDiveExample } from "@/lib/claude";
 import { recallKnowledge } from "@/lib/memory";
 import type { Profile } from "@/lib/types";
@@ -209,7 +210,7 @@ export async function loadMoreItems(
 
   const { data } = await supabase
     .from("knowledge_items")
-    .select(LIBRARY_COLS)
+    .select(libraryCols(await hasSuspendColumn(supabase)))
     .eq("user_id", user.id)
     .order("created_at", { ascending: false })
     .range(offset, offset + limit - 1);
@@ -232,7 +233,7 @@ export async function loadItemsForDay(dayKey: string): Promise<LibraryItem[]> {
 
   const { data } = await supabase
     .from("knowledge_items")
-    .select(LIBRARY_COLS)
+    .select(libraryCols(await hasSuspendColumn(supabase)))
     .eq("user_id", user.id)
     .gte("created_at", start)
     .lt("created_at", end)

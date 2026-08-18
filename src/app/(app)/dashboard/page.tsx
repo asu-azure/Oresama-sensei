@@ -4,6 +4,9 @@ import { PageHeading } from "@/components/motion/page-heading";
 import { Highlight, JpDisplay } from "@/components/motion/editorial";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllRows } from "@/lib/fetch-all";
+import { getStudyPace } from "@/lib/study-pace";
+import { calendarDayKey } from "@/lib/study-day";
+import { getTodayLoad, hasSuspendColumn } from "@/lib/review-queue";
 import { computeInsights, type InsightItem } from "@/lib/insights";
 import { healthBuckets, retentionForecast } from "@/lib/srs";
 import { StudyNext } from "@/components/insights/study-next";
@@ -14,6 +17,8 @@ import {
 } from "@/components/insights/coach-note";
 
 type Item = {
+  /** Present only once migration 0024 has run (see itemColumns below). */
+  srs_suspended?: boolean | null;
   type: string;
   jlpt_level: string | null;
   created_at: string;
@@ -43,11 +48,14 @@ function StatCard({
   label,
   value,
   href,
+  sub,
 }: {
   icon: React.ReactNode;
   label: string;
   value: number | string;
   href?: string;
+  /** Small muted line under the number (e.g. the true backlog behind a cap). */
+  sub?: string;
 }) {
   const inner = (
     <div className="pop-card rounded-2xl bg-surface p-4">
@@ -56,6 +64,7 @@ function StatCard({
         <span className="text-sm">{label}</span>
       </div>
       <p className="mt-2 text-2xl font-bold">{value}</p>
+      {sub && <p className="mt-0.5 text-[11px] text-muted">{sub}</p>}
     </div>
   );
   return href ? (
@@ -202,6 +211,16 @@ export default async function DashboardPage() {
   const historySince = new Date(nowMs - 29 * 86_400_000)
     .toISOString()
     .slice(0, 10);
+
+  const pace = await getStudyPace(supabase, user!.id);
+  const [todayLoad, canPark] = await Promise.all([
+    getTodayLoad(supabase, user!.id, pace, now),
+    hasSuspendColumn(supabase),
+  ]);
+  // Built, not constant: naming srs_suspended before migration 0024 is run
+  // makes PostgREST fail the query, and fetchAllRows swallows that into [] —
+  // which would blank the entire dashboard rather than degrade.
+  const itemColumns = ITEM_COLUMNS + (canPark ? ",srs_suspended" : "");
   const [
     items,
     lessons,
@@ -210,10 +229,12 @@ export default async function DashboardPage() {
     fetchAllRows<Item>((from, to) =>
       supabase
         .from("knowledge_items")
-        .select(ITEM_COLUMNS)
+        // Cast: the column list is built at runtime (see itemColumns), so
+        // PostgREST's literal-type inference can't apply.
+        .select(itemColumns)
         .eq("user_id", user!.id)
         .order("created_at", { ascending: true })
-        .range(from, to),
+        .range(from, to) as unknown as PromiseLike<{ data: Item[] | null }>,
     ),
     fetchAllRows<{ kind: string }>((from, to) =>
       supabase
@@ -244,7 +265,9 @@ export default async function DashboardPage() {
     ]),
   ]);
 
-  const insights = computeInsights(items as InsightItem[], new Date(nowMs));
+  const insights = computeInsights(items as InsightItem[], new Date(nowMs), {
+    dueToday: todayLoad.plannedToday.total,
+  });
   const coachInitial = (coachRow as CoachNoteData | null) ?? null;
 
   // Forgetting curve: current memory-health + 30-day decay forecast (pure local
@@ -255,9 +278,13 @@ export default async function DashboardPage() {
     reviewed_at: string;
     stability_after: number;
   }[];
+  // Bucket by the learner's LOCAL day, not UTC. In Bangkok (UTC+7) the UTC day
+  // boundary falls at 07:00 local, so anything studied before breakfast used to
+  // be charted on the previous day.
+  const dayOf = (iso: string) => calendarDayKey(new Date(iso), pace.timeZone);
   const histByDay: Record<string, { count: number; stabilitySum: number }> = {};
   for (const r of reviewLog) {
-    const k = r.reviewed_at.slice(0, 10);
+    const k = dayOf(r.reviewed_at);
     const e = (histByDay[k] ??= { count: 0, stabilitySum: 0 });
     e.count++;
     e.stabilitySum += r.stability_after ?? 0;
@@ -268,7 +295,10 @@ export default async function DashboardPage() {
     avgStability: number | null;
   }[] = [];
   for (let d = 29; d >= 0; d--) {
-    const key = new Date(nowMs - d * 86_400_000).toISOString().slice(0, 10);
+    const key = calendarDayKey(
+      new Date(nowMs - d * 86_400_000),
+      pace.timeZone,
+    );
     const e = histByDay[key];
     historyDays.push({
       label: d === 0 ? "Today" : key.slice(5),
@@ -278,9 +308,15 @@ export default async function DashboardPage() {
   }
   const historyTotal = reviewLog.length;
 
-  const dueNow = items.filter(
-    (i) => !i.srs_due || new Date(i.srs_due).getTime() <= nowMs,
+  // The lifetime pile. Kept for context, but no longer the headline number —
+  // most of it is never-seen words, which are created with srs_due = NULL and
+  // so counted as "due" from the moment the tutor extracted them.
+  const backlogAll = items.filter(
+    (i) =>
+      !i.srs_suspended && (!i.srs_due || new Date(i.srs_due).getTime() <= nowMs),
   ).length;
+  // What's actually left to do today, from the same source as the nav badge.
+  const dueToday = todayLoad.plannedToday.total;
 
   const byType = (["vocab", "grammar", "expression"] as const).map((t) => ({
     label: TYPE_LABEL[t],
@@ -307,16 +343,19 @@ export default async function DashboardPage() {
   const addedByDay: Record<string, number> = {};
   const reviewedByDay: Record<string, number> = {};
   for (const i of items) {
-    addedByDay[i.created_at.slice(0, 10)] =
-      (addedByDay[i.created_at.slice(0, 10)] ?? 0) + 1;
+    const added = dayOf(i.created_at);
+    addedByDay[added] = (addedByDay[added] ?? 0) + 1;
     if (i.srs_last_review) {
-      const k = i.srs_last_review.slice(0, 10);
+      const k = dayOf(i.srs_last_review);
       reviewedByDay[k] = (reviewedByDay[k] ?? 0) + 1;
     }
   }
   const days: { label: string; added: number; reviewed: number }[] = [];
   for (let d = 13; d >= 0; d--) {
-    const key = new Date(nowMs - d * 86_400_000).toISOString().slice(0, 10);
+    const key = calendarDayKey(
+      new Date(nowMs - d * 86_400_000),
+      pace.timeZone,
+    );
     days.push({
       label: d === 0 ? "Today" : key.slice(5),
       added: addedByDay[key] ?? 0,
@@ -358,9 +397,14 @@ export default async function DashboardPage() {
         />
         <StatCard
           icon={<Brain className="h-4 w-4" />}
-          label="Due to review"
-          value={dueNow}
+          label="Due today"
+          value={dueToday}
           href="/review"
+          sub={
+            backlogAll > dueToday
+              ? `${backlogAll.toLocaleString()} waiting · ~${Math.max(1, todayLoad.daysToClear)}d`
+              : undefined
+          }
         />
         <StatCard
           icon={<BookOpen className="h-4 w-4" />}
@@ -426,12 +470,12 @@ export default async function DashboardPage() {
             {activityTotal === 0 ? (
               <div className="flex h-32 flex-col items-center justify-center gap-2 text-center text-sm text-muted">
                 <p>No study activity in the last 14 days.</p>
-                {dueNow > 0 ? (
+                {dueToday > 0 ? (
                   <Link
                     href="/review"
                     className="rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90"
                   >
-                    Review {dueNow} due →
+                    Review {dueToday} today →
                   </Link>
                 ) : (
                   <Link

@@ -1,8 +1,6 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import { summarizeNote } from "@/lib/claude";
-import { getAiEngine } from "@/lib/ai-engine";
 
 /** Save/replace the learner's personal note on a knowledge item. RLS scopes the
  *  write to the owner. */
@@ -56,19 +54,28 @@ export async function appendPersonalNote(
   return { ok: !error, note: next };
 }
 
-/** Summarize a tutor reply into one concise line, then append it to the item's
- *  personal note (so "Save to notes" keeps a takeaway, not the whole answer). */
-export async function appendNoteSummary(
+/** Park ("suspend") an item, or bring it back.
+ *
+ *  Words are extracted automatically from chats and photographed pages, so the
+ *  library accumulates things the learner never chose to study. Parking takes
+ *  one out of the review and new queues for good — it stays in the library
+ *  (and in the stats) and can be un-parked at any time.
+ *
+ *  Returns ok:false rather than throwing if migration 0024 hasn't been run. */
+export async function setItemSuspended(
   itemId: string,
-  content: string,
-): Promise<{ ok: boolean; note?: string }> {
+  suspended: boolean,
+): Promise<{ ok: boolean }> {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { ok: false };
 
-  const engine = await getAiEngine(supabase, user.id);
-  const summary = await summarizeNote(content, engine);
-  return appendPersonalNote(itemId, summary);
+  const { error } = await supabase
+    .from("knowledge_items")
+    .update({ srs_suspended: suspended })
+    .eq("id", itemId)
+    .eq("user_id", user.id);
+  return { ok: !error };
 }
