@@ -14,6 +14,13 @@ export interface Profile {
   /** Which provider runs secondary (non-chat, non-lesson) AI calls:
    *  'gemini' (default, cheaper) | 'claude'. Added in migration 0015. */
   ai_engine?: string | null;
+  /** Study pace — how much work per day, and when the day rolls over.
+   *  Added in migration 0024; absent until it is run (code falls back to
+   *  DEFAULT_PACE in lib/study-pace, which matches the migration defaults). */
+  daily_new_limit?: number | null;
+  daily_review_limit?: number | null;
+  study_timezone?: string | null;
+  day_start_hour?: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -74,6 +81,9 @@ export interface KnowledgeItem {
   srs_difficulty: number | null;
   srs_state: number | null;
   srs_last_review: string | null;
+  /** Parked: kept in the library but out of every review queue and due count.
+   *  Added in migration 0024. */
+  srs_suspended?: boolean | null;
 }
 
 export interface Lesson {

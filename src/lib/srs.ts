@@ -50,8 +50,18 @@ export interface SrsUpdate {
 }
 
 // Target 90% retention; cap intervals at a year.
+//
+// `enable_fuzz` scatters each new due date slightly (a few % of the interval).
+// Without it, every card scheduled on the same day comes back on the same day,
+// forever — so one skipped day turns into a permanently recurring spike, and a
+// batch of words added together stays clumped for life. This is the change that
+// stops the backlog re-forming after it has been drained.
 const f = fsrs(
-  generatorParameters({ request_retention: 0.9, maximum_interval: 365 }),
+  generatorParameters({
+    request_retention: 0.9,
+    maximum_interval: 365,
+    enable_fuzz: true,
+  }),
 );
 
 /** Build an FSRS Card from a stored row. New items start empty; legacy SM-2

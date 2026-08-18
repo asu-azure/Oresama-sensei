@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { generateExercises, type ExerciseItemRef } from "@/lib/claude";
 import { getAiEngine } from "@/lib/ai-engine";
+import { hasSuspendColumn } from "@/lib/review-queue";
 
 type ItemRow = {
   id: string;
@@ -82,6 +83,12 @@ export async function POST(req: Request) {
       .from("knowledge_items")
       .select(COLS)
       .eq("user_id", user.id);
+
+    // Never generate exercises for a parked word — that spends tokens on
+    // something the learner explicitly removed from rotation.
+    if (await hasSuspendColumn(supabase)) {
+      query = query.eq("srs_suspended", false);
+    }
 
     if (scope === "struggling") {
       query = query

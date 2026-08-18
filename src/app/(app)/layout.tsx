@@ -1,5 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getStudyPace } from "@/lib/study-pace";
+import { getTodayLoad } from "@/lib/review-queue";
 import { Nav } from "@/components/nav";
 import { ReviewDueSync } from "@/components/review-due-sync";
 import { SplashScreen } from "@/components/splash-screen";
@@ -21,12 +23,13 @@ export default async function AppLayout({
 
   if (!user) redirect("/login");
 
-  const nowIso = new Date().toISOString();
-  const { count } = await supabase
-    .from("knowledge_items")
-    .select("id", { count: "exact", head: true })
-    .eq("user_id", user.id)
-    .or(`srs_due.is.null,srs_due.lte.${nowIso}`);
+  // The badge shows what is left to do TODAY, not the lifetime pile. Showing
+  // the raw uncapped total on every page is what made a few skipped days feel
+  // unrecoverable — and most of that number was never-seen new words, which
+  // land with srs_due = NULL and so counted as "due" the moment they appeared.
+  const pace = await getStudyPace(supabase, user.id);
+  const load = await getTodayLoad(supabase, user.id, pace);
+  const count = load.plannedToday.total;
 
   return (
     <div className="relative flex min-h-dvh flex-col md:flex-row">
@@ -35,8 +38,8 @@ export default async function AppLayout({
       <Cursor />
       <BackgroundParticles />
       <SplashScreen />
-      <ReviewDueSync count={count ?? 0} />
-      <Nav reviewDue={count ?? 0} />
+      <ReviewDueSync count={count} />
+      <Nav reviewDue={count} />
       <main className="relative z-10 mx-auto w-full max-w-4xl flex-1 px-4 pb-[var(--bottom-nav)]">
         <PageTransition>{children}</PageTransition>
       </main>

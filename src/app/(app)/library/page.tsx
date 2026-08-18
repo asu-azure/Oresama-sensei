@@ -1,7 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllRows } from "@/lib/fetch-all";
 import { LibraryClient, type LibraryItem } from "./library-client";
-import { LIBRARY_COLS } from "./columns";
+import { libraryCols } from "./columns";
+import { hasSuspendColumn } from "@/lib/review-queue";
 import { loadExplanations } from "./explanations";
 import { masteryLevel, type MasteryLevel } from "@/lib/mastery";
 
@@ -27,10 +28,14 @@ export default async function LibraryPage() {
   //  1. the most recent PAGE_SIZE items (rest stream in via infinite scroll)
   //  2. a few small columns for EVERY item, to build the calendar heat-map,
   //     the DB-wide mastery counts, and the full list of source types.
+  // Parked items stay listed here (that's the point — the library is where you
+  // find and un-park them); only the queues exclude them.
+  const canPark = await hasSuspendColumn(supabase);
+
   const [{ data: recent }, stats] = await Promise.all([
     supabase
       .from("knowledge_items")
-      .select(LIBRARY_COLS)
+      .select(libraryCols(canPark))
       .eq("user_id", user!.id)
       .order("created_at", { ascending: false })
       .limit(PAGE_SIZE),

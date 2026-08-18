@@ -44,7 +44,11 @@ export async function POST(request: Request) {
   // "before" values. Best-effort: never let logging (or a missing review_log
   // table) break a review.
   try {
-    const prev = item.srs_last_review ?? item.last_seen;
+    // Only a real previous REVIEW counts here. `last_seen` defaults to the row's
+    // creation time, so falling back to it made a brand-new card log "days since
+    // it was added" instead of the null the column comment promises — which
+    // skewed the FSRS calibration chart on /insights.
+    const prev = item.srs_last_review;
     const elapsedDays = prev
       ? (now.getTime() - new Date(prev).getTime()) / 86_400_000
       : null;

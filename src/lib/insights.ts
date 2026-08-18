@@ -46,7 +46,10 @@ export type Priority = {
 
 export interface LearnerInsights {
   total: number;
+  /** The lifetime backlog (everything due or never scheduled). */
   due: number;
+  /** What the daily budget actually asks for today, when the caller knows it. */
+  dueToday: number | null;
   newCount: number;
   strugglingCount: number;
   byType: GroupStat[];
@@ -100,6 +103,7 @@ function hash(s: string): string {
 export function computeInsights(
   items: InsightItem[],
   now: Date = new Date(),
+  opts: { dueToday?: number } = {},
 ): LearnerInsights {
   const nowMs = now.getTime();
 
@@ -107,9 +111,15 @@ export function computeInsights(
   const tagged = items.map((it) => ({ it, level: masteryLevel(it).level }));
 
   const total = items.length;
+  // Deliberately still the LIFETIME backlog, not the daily plan: `due` feeds the
+  // coach-note cache signature below, which is already saturated at d99. Swapping
+  // in a small daily number would make the signature move every day and re-fire
+  // the paid generateCoachNote call. The daily figure rides alongside as
+  // `dueToday` instead.
   const due = items.filter(
     (i) => !i.srs_due || new Date(i.srs_due).getTime() <= nowMs,
   ).length;
+  const dueToday = opts.dueToday ?? null;
   const newCount = tagged.filter((t) => t.level === "new").length;
   const struggling = tagged.filter((t) => t.level === "struggling");
   const strugglingCount = struggling.length;
@@ -155,11 +165,13 @@ export function computeInsights(
 
   // Ranked, actionable "study next" priorities.
   const priorities: Priority[] = [];
-  if (due > 0)
+  if ((dueToday ?? due) > 0)
     priorities.push({
       kind: "due",
-      label: "Review what's due",
-      count: due,
+      // Point at the finishable number when we have it — "review 418" is the
+      // framing that made the backlog feel hopeless in the first place.
+      label: dueToday != null ? "Review today's cards" : "Review what's due",
+      count: dueToday ?? due,
       href: "/review",
     });
   if (strugglingCount > 0)
@@ -200,6 +212,7 @@ export function computeInsights(
   return {
     total,
     due,
+    dueToday,
     newCount,
     strugglingCount,
     byType,
@@ -214,8 +227,14 @@ export function computeInsights(
  *  chat tutor's system prompt and as input to the coach-note generator. */
 export function statsDigest(ins: LearnerInsights): string {
   if (ins.total === 0) return "";
+  // When the daily plan is known, lead with it — otherwise Sensei nags about a
+  // backlog the app deliberately no longer shows the learner.
+  const dueLine =
+    ins.dueToday != null
+      ? `Due today (their daily plan): ${ins.dueToday}, with ${ins.due} waiting in total — do not push them past today's plan.`
+      : `Due now: ${ins.due}.`;
   const lines: string[] = [
-    `Total saved items: ${ins.total}. Due now: ${ins.due}. New (not yet drilled): ${ins.newCount}. Struggling: ${ins.strugglingCount}.`,
+    `Total saved items: ${ins.total}. ${dueLine} New (not yet drilled): ${ins.newCount}. Struggling: ${ins.strugglingCount}.`,
   ];
 
   const fmt = (g: GroupStat) =>

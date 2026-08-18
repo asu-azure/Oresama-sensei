@@ -17,6 +17,7 @@ import {
   Sparkles,
   BookOpen,
   Image as ImageIcon,
+  Archive,
 } from "lucide-react";
 import {
   masteryLevel,
@@ -41,6 +42,7 @@ import type { ExplanationMap } from "./explanations";
 import { cn, formatDate } from "@/lib/utils";
 import { LibraryCalendar } from "./library-calendar";
 import { getLessonImageUrls, loadItemsForDay, loadMoreItems } from "./actions";
+import { setItemSuspended } from "../review/actions";
 
 export type LibraryItem = {
   id: string;
@@ -64,6 +66,10 @@ export type LibraryItem = {
   lesson_id: string | null;
   image_path: string | null;
   collections: { title: string; kind: string } | null;
+  /** Parked out of the review queues. Undefined until migration 0024 runs — the
+   *  column is only requested when it exists, so `undefined` means "unknown"
+   *  and the Park control stays hidden. */
+  srs_suspended?: boolean | null;
 };
 
 const TYPES = ["all", "vocab", "grammar", "expression"];
@@ -511,6 +517,12 @@ export function LibraryClient({
                         >
                           Review
                         </Link>
+                        {it.srs_suspended != null && (
+                          <ParkToggle
+                            itemId={it.id}
+                            parked={!!it.srs_suspended}
+                          />
+                        )}
                       </div>
                       <KanjiChips term={it.term} />
                       <ItemImage
@@ -591,6 +603,44 @@ function FilterChip({
       )}
     >
       {children}
+    </button>
+  );
+}
+
+/** Park / un-park an item. Parking keeps the word here in the library but takes
+ *  it out of every review queue and due count — the escape hatch for words the
+ *  tutor extracted automatically that you never wanted to study. */
+function ParkToggle({ itemId, parked }: { itemId: string; parked: boolean }) {
+  const [on, setOn] = useState(parked);
+  const [busy, setBusy] = useState(false);
+
+  async function toggle() {
+    if (busy) return;
+    setBusy(true);
+    const next = !on;
+    const res = await setItemSuspended(itemId, next);
+    setBusy(false);
+    if (res.ok) setOn(next);
+  }
+
+  return (
+    <button
+      onClick={toggle}
+      disabled={busy}
+      title={
+        on
+          ? "Bring this word back into review"
+          : "Stop reviewing this word (keeps it in the library)"
+      }
+      className={cn(
+        "flex items-center gap-1 rounded-full border px-2 py-0.5 transition-colors disabled:opacity-50",
+        on
+          ? "border-amber-500/40 bg-amber-500/10 text-amber-600"
+          : "border-border text-muted hover:bg-surface-2 hover:text-foreground",
+      )}
+    >
+      <Archive className="h-3 w-3" />
+      {on ? "Parked" : "Park"}
     </button>
   );
 }

@@ -52,7 +52,7 @@ Two core features:
 - `supabase/migrations/0001_init.sql` — schema, pgvector, RLS, `match_knowledge`, storage, profile trigger.
 
 ## Running it
-1. Supabase project → run the SQL files in `supabase/migrations/` (0001–0022) in order in the SQL editor.
+1. Supabase project → run the SQL files in `supabase/migrations/` (0001–0024) in order in the SQL editor.
 2. `.env.local` (NOT committed) with: `NEXT_PUBLIC_SUPABASE_URL`,
    `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`. See `.env.example`.
 3. `npm install` → `npm run dev` → http://localhost:3000. Restart dev after editing `.env.local`
@@ -448,6 +448,48 @@ The **data lives in Supabase (cloud)**, so chats/vocab/lessons sync automaticall
   **`aesthetic/pop-art-v1`** + the **`legacy/pop-art/`** archive (verbatim `globals.css` + components +
   restore README). Reduced-motion is honored throughout. **No DB/API/Supabase/RAG/SRS change.** Done as
   branch `feat/editorial-fui` → PRs #4/#5.
+- ✅ v4.4 shipped (**daily study budget, keyboard grading, faster cursor**). Run migration **0024**.
+  **(a) The backlog fix.** Root cause: `knowledge_items` are inserted by `lib/memory.ts` with no `srs_*`
+  fields, so `srs_due` is NULL — and the queue counted NULL as *due* **and** sorted it first
+  (`nullsFirst`). Every word extracted from a chat or a photographed page therefore jumped to the head of
+  the queue the instant it was created, burying real overdue reviews under an unbounded pile of unseen
+  words (~1,065 "due", of which ~985 were new). Now split into two budgeted buckets by
+  **`src/lib/review-queue.ts`**: reviews ordered by **relative overdueness** (`(now−due)/max(1d, interval)`
+  — a 1-day card 3 days late outranks a 200-day card 3 days late), new words oldest-first, **interleaved**
+  (one new every ~6th slot) so a session never opens with 15 unknown words. Work done today is counted from
+  `review_log` since the study-day start, using `stability_before IS NULL` as an exact "new card introduced"
+  marker (no new column). Budgets live on `profiles` (`daily_new_limit` 15 / `daily_review_limit` 80) with a
+  local **study day** (`study_timezone`, `day_start_hour` 4am) in the pure **`src/lib/study-day.ts`**.
+  **Nothing rewrites `srs_due`** — capping the *display* achieves the same thing without corrupting the
+  elapsed-time signal FSRS trains on. **(b) Every due count now means "left today"** — nav badge
+  (`(app)/layout.tsx`), dashboard StatCard (with the true backlog as a muted sub-line), review header
+  ("N left today" + "985 more waiting · about 13 days at this pace"), and a terminal **"Today's done"**
+  screen with an opt-in `?over=1` escape hatch. `bumpReviewDue(-1)` is now **unconditional** (every grade
+  spends a budget slot, relearning included). `/tests` deliberately keeps the *lifetime* due definition —
+  a practice test is a different activity — and `insights.ts` keeps `due` as the backlog so the coach-note
+  cache signature doesn't churn (a new `dueToday` rides alongside). **(c) FSRS fuzz enabled**
+  (`srs.ts`) so same-day cohorts stop returning on the same day forever. **(d) Park/suspend**
+  (`srs_suspended`): auto-extracted junk leaves every queue for good but stays in the library, with a
+  toggle there and on the flashcard. **(e) Keyboard grading** (`review/use-review-keys.ts`): Anki-style
+  `Space` (reveal → Good) + `1/2/3/4`, plus `S`/`D`/`N`/`?`/`Esc`. Guards on `e.repeat`, modifier keys, and
+  input/textarea/contenteditable focus — mandatory, since the note editor is `autoFocus`ed and the image
+  search portals to `document.body`. **(f) Cursor** rebuilt as two layers: the dot is written straight to
+  `transform` (rAF-coalesced, **zero lag** — it replaced a `gsap.quickTo` at `duration: 0.35`, ~21 frames
+  behind the hand) with a separate ring trailing at 0.28s; Lenis softened 1.1→0.8.
+  All new columns **degrade gracefully** if 0024 hasn't run (`hasSuspendColumn` probe + defaulted profile
+  reads), so the app is deployable before the migration.
+- 🐛 v4.4 bug fixes: `grade()` had **no double-submit guard** (only the rating grid unmounting protected
+  the mouse path — key-repeat would have fired N grades); `SESSION_TTL_MS` was exported but never enforced,
+  so a stale tab resumed yesterday's cards — now enforced plus a **versioned sessionStorage key**
+  (`review-session-v2`), a shape guard, and a `dayKey` rollover check; `buildMeta` awaited ~3 round-trips
+  **per card serially** (~90 sequential hops per batch) → `Promise.all`; "Keep studying" did a hard
+  `window.location.assign` that replayed the 1.75s splash every 30 cards → `router.refresh()` + splash now
+  **once per tab**; single-item review (`?item=`) wrongly decremented the nav badge; `elapsed_days` fell
+  back to `last_seen` so a first review logged "days since added" instead of null; `useMagnetic(0)` still
+  attached listeners on every Button, and its per-move `getBoundingClientRect()` **included its own
+  transform** so the magnet chased its own centre and settled short of `strength`; `cursor: none` also
+  killed the text I-beam; dashboard/activity charts bucketed by **UTC** (07:00 local in Bangkok) →
+  `calendarDayKey`. Dead code removed (`appendNoteSummary`).
 - ⏳ Next ideas (not built): an **SNS growth view** that aggregates `sns_corrections.errors[].type` over
   time (the error log is being collected now); library multi-select bulk source-tag (per-lesson editor covers backfill for
   now); per-page knowledge granularity (page color currently aggregates the whole lesson's items); a
@@ -463,6 +505,14 @@ The **data lives in Supabase (cloud)**, so chats/vocab/lessons sync automaticall
   we're on the latest stable). Bump to `next@16.3.0` when it ships stable and the advisories clear.
 
 ## Decisions log
+- **The visible "due" number is today's budgeted workload, not the lifetime pile — and we cap the
+  *display*, never rewrite `srs_due`.** Anki's FSRS Helper offers a bulk "Postpone" that pushes overdue
+  cards forward; we deliberately don't. It only changes the dates you're shown, which the daily budget
+  already fixes, while feeding FSRS a false elapsed time — and elapsed time is exactly the signal the
+  memory model is fitted on. The backlog is instead shown once, quietly, with a "~N days at this pace"
+  estimate, because a finite pile with a date on it is motivating and an ever-growing badge is not.
+  For the same reason there is **no streak**: it would turn a missed day into a punishment, which is the
+  failure mode this whole change exists to undo.
 - Hybrid AI (Gemini OCR/embeddings + Claude chat/lessons) for best quality-per-cost.
 - Single-user auth kept (RLS needs a user); email confirmation off so it's effectively
   "log in once." No service-role key — RLS via the user session.

@@ -508,19 +508,29 @@ rt {
 }
 
 /* ---------------------------------------------------------------------------
-   Custom cursor (mounted by components/motion/cursor.tsx) — a bold cobalt
-   triangle pointer with a white outline so it reads on any tone. The Cursor
-   component adds `.has-cursor` to <html> only on fine pointers + motion-OK,
-   which hides the native cursor and reveals the triangle — degrades gracefully.
+   Custom cursor (mounted by components/motion/cursor.tsx) — two layers: a solid
+   cobalt DOT with a white outline that is pinned exactly to the pointer (no
+   smoothing, because the native cursor is hidden and any lag reads as the app
+   not responding), plus a faint RING that trails behind it on a GSAP tween,
+   which is where the editorial motion character lives. The Cursor component adds
+   `.has-cursor` to <html> only on fine pointers + motion-OK, which hides the
+   native cursor and reveals these — degrades gracefully.
 --------------------------------------------------------------------------- */
 html.has-cursor,
 html.has-cursor * {
   cursor: none !important;
 }
+/* ...except text entry, where the caret affordance matters more than the theme
+   (the dot also fades out over these — see `.cursor.is-text`). */
+html.has-cursor input,
+html.has-cursor textarea,
+html.has-cursor [contenteditable]:not([contenteditable="false"]) {
+  cursor: text !important;
+}
 .cursor {
-  /* A zero-size point pinned to the pointer by GSAP quickTo (x/y transform).
-     The visible dot/label are children offset from this point, so GSAP's
-     per-frame transform never fights their own transitions. */
+  /* A zero-size anchor. The dot and the ring are each transformed
+     independently (dot: direct write per frame; ring: gsap.quickTo), so this
+     element itself never moves. */
   position: fixed;
   top: 0;
   left: 0;
@@ -528,7 +538,16 @@ html.has-cursor * {
   height: 0;
   pointer-events: none;
   z-index: 9999;
-  will-change: transform;
+  opacity: 0;
+  transition: opacity 0.15s var(--ease);
+}
+/* Revealed once the pointer has actually been seen, so neither layer flies in
+   from the top-left corner on load; removed again when it leaves the window. */
+.cursor.is-live {
+  opacity: 1;
+}
+.cursor.is-text {
+  opacity: 0;
 }
 .cursor__dot {
   position: absolute;
@@ -541,11 +560,26 @@ html.has-cursor * {
   background: color-mix(in srgb, var(--accent) 80%, transparent);
   border: 2px solid #fff;
   box-shadow: 0 1px 5px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(0, 0, 0, 0.18);
+  will-change: transform;
   transition: width 0.2s var(--ease), height 0.2s var(--ease),
     margin 0.2s var(--ease), background-color 0.2s var(--ease),
     border-color 0.2s var(--ease);
 }
-/* Hover: grows + shifts to cyan (the color-change effect). */
+.cursor__ring {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 34px;
+  height: 34px;
+  margin: -17px 0 0 -17px;
+  border-radius: 50%;
+  border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  will-change: transform;
+  transition: width 0.2s var(--ease), height 0.2s var(--ease),
+    margin 0.2s var(--ease), border-color 0.2s var(--ease),
+    opacity 0.2s var(--ease);
+}
+/* Hover: both layers grow and shift to cyan (the color-change effect). */
 .cursor.is-hover .cursor__dot,
 .cursor.is-label .cursor__dot {
   width: 30px;
@@ -554,10 +588,32 @@ html.has-cursor * {
   background: color-mix(in srgb, #18c4d6 70%, transparent);
   border-color: #18c4d6;
 }
+.cursor.is-hover .cursor__ring,
+.cursor.is-label .cursor__ring {
+  width: 52px;
+  height: 52px;
+  margin: -26px 0 0 -26px;
+  border-color: color-mix(in srgb, #18c4d6 60%, transparent);
+}
+/* Press feedback — the dot dips, the ring snaps in behind it. */
+.cursor.is-down .cursor__dot {
+  width: 12px;
+  height: 12px;
+  margin: -6px 0 0 -6px;
+}
+.cursor.is-down .cursor__ring {
+  width: 24px;
+  height: 24px;
+  margin: -12px 0 0 -12px;
+  opacity: 0.6;
+}
+/* Anchored to the dot's centre (50%/50% is the pointer whatever size the dot
+   currently is), so the label doesn't shift when the dot grows on hover. */
 .cursor__label {
   position: absolute;
-  left: 16px;
-  top: 12px;
+  left: 50%;
+  top: 50%;
+  margin: 12px 0 0 16px;
   white-space: nowrap;
   padding: 2px 7px;
   border-radius: 4px;
@@ -574,6 +630,33 @@ html.has-cursor * {
 .cursor.is-label .cursor__label {
   opacity: 1;
   transform: translateY(0);
+}
+
+/* ---------------------------------------------------------------------------
+   Keyboard-shortcut affordances on the flashcard screen. Hidden on coarse
+   pointers, where there is no keyboard to hint at and the space is precious.
+--------------------------------------------------------------------------- */
+.kbd-hint {
+  display: none;
+}
+@media (pointer: fine) {
+  .kbd-hint {
+    display: flex;
+  }
+}
+.kbd {
+  display: inline-block;
+  padding: 1px 5px;
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--foreground);
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  line-height: 1.4;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
 }
 
 /* ---------------------------------------------------------------------------

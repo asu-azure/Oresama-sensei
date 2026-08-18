@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import {
   Check,
@@ -12,6 +13,7 @@ import {
   FastForward,
   Info,
   ExternalLink,
+  Archive,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AskSensei } from "@/components/ask-sensei/ask-sensei";
@@ -30,11 +32,17 @@ import { bumpReviewDue } from "@/lib/use-review-due";
 import { masteryInfo, type MasteryLevel } from "@/lib/mastery";
 import { sourceMeta } from "@/lib/source";
 import { cn } from "@/lib/utils";
-import { savePersonalNote, appendPersonalNote } from "./actions";
+import {
+  savePersonalNote,
+  appendPersonalNote,
+  setItemSuspended,
+} from "./actions";
+import { useReviewKeys, REVIEW_SHORTCUTS } from "./use-review-keys";
 import {
   useReviewSession,
   saveReviewSession,
   clearReviewSession,
+  isResumable,
 } from "./use-review-session";
 import type { Rating, IntervalPreview } from "@/lib/srs";
 
@@ -71,6 +79,43 @@ export type CardMeta = {
   /** Signed urls for the item's picture (shown on reveal), or null. */
   image?: { thumb: string; full: string } | null;
   imageSource?: string | null;
+};
+
+/** Today's plan, as the server computed it. Replaces the old uncapped
+ *  `totalDue`: the headline number is now the work left TODAY, with the true
+ *  pile reported separately as context. */
+export type QueueSummary = {
+  /** Cards in today's plan (the number the learner is asked to finish). */
+  plannedToday: number;
+  newCount: number;
+  reviewCount: number;
+  /** Reviews already logged today, across every surface (tests included). */
+  doneToday: number;
+  backlogReviews: number;
+  backlogNew: number;
+  daysToClear: number;
+  reviewLimit: number;
+  newLimit: number;
+  nextResetIso: string;
+  /** review_log missing → the cap is per-load, not per-day. Say so. */
+  degradedLog: boolean;
+  /** This batch was requested beyond the daily plan (?over=1). */
+  overBudget: boolean;
+};
+
+const EMPTY_SUMMARY: QueueSummary = {
+  plannedToday: 0,
+  newCount: 0,
+  reviewCount: 0,
+  doneToday: 0,
+  backlogReviews: 0,
+  backlogNew: 0,
+  daysToClear: 0,
+  reviewLimit: 0,
+  newLimit: 0,
+  nextResetIso: "",
+  degradedLog: false,
+  overBudget: false,
 };
 
 const RATINGS: { rating: Rating; label: string; cls: string }[] = [
@@ -116,18 +161,28 @@ const FLASH: Record<
 export function ReviewClient({
   cards,
   previews = {},
-  totalDue,
+  summary,
   aheadCards = [],
   aheadPreviews = {},
   meta = {},
   single = false,
+  nowMs,
+  dayKey,
+  canPark = false,
 }: {
   cards: ReviewCard[];
   previews?: Record<string, IntervalPreview>;
-  totalDue?: number;
+  summary?: QueueSummary;
   aheadCards?: ReviewCard[];
   aheadPreviews?: Record<string, IntervalPreview>;
   meta?: Record<string, CardMeta>;
+  /** Whether the Park control can be shown (migration 0024 applied). */
+  canPark?: boolean;
+  /** Server render time. Passed in rather than read with Date.now() so the
+   *  resume check stays a pure render. */
+  nowMs: number;
+  /** The study day this page was built for (see lib/study-day). */
+  dayKey?: string;
   /** Focused single-item review (from a library "Review" link): never persists
    *  or resumes a session. */
   single?: boolean;
@@ -135,8 +190,11 @@ export function ReviewClient({
   // Resume an in-progress session if one was saved, so leaving and coming back
   // keeps your place instead of restarting at item 1. sessionStorage clears when
   // the tab closes, so a resumed batch is always from the current sitting.
+  // ...but only if it is still fresh (SESSION_TTL_MS) and belongs to the same
+  // study day. A stale batch carries FSRS interval previews computed hours ago
+  // and cards that may already have been graded elsewhere.
   const saved = useReviewSession();
-  const useSaved = !single && saved != null;
+  const useSaved = !single && isResumable(saved, dayKey, nowMs);
 
   const activeMode: "due" | "ahead" = useSaved ? saved!.mode : "due";
   const activeCards = useSaved ? saved!.cards : cards;
@@ -144,7 +202,11 @@ export function ReviewClient({
   const activeMeta = useSaved ? saved!.meta : meta;
   const startIndex = useSaved ? saved!.index : 0;
   const startReviewed = useSaved ? saved!.reviewed : 0;
-  const activeTotalDue = useSaved ? saved!.totalDue : totalDue ?? cards.length;
+  const baseSummary = summary ?? {
+    ...EMPTY_SUMMARY,
+    plannedToday: cards.length,
+  };
+  const activeSummary = useSaved ? saved!.summary ?? baseSummary : baseSummary;
   // Stable across grades (so the card list doesn't remount mid-session); flips
   // once when a fresh batch first persists (fresh -> resume).
   const flashKey = single ? "single" : useSaved ? "resume" : "fresh";
@@ -152,27 +214,31 @@ export function ReviewClient({
   function persist(index: number, reviewed: number) {
     if (single) return;
     saveReviewSession({
-      savedAt: useSaved ? saved!.savedAt : Date.now(),
+      savedAt: useSaved ? saved!.savedAt : nowMs,
       mode: activeMode,
+      dayKey,
       cards: activeCards,
       previews: activePreviews,
       meta: activeMeta,
       index,
       reviewed,
-      totalDue: activeTotalDue,
+      totalDue: activeSummary.plannedToday,
+      summary: activeSummary,
     });
   }
 
   function startAhead() {
     saveReviewSession({
-      savedAt: Date.now(),
+      savedAt: nowMs,
       mode: "ahead",
+      dayKey,
       cards: aheadCards,
       previews: aheadPreviews,
       meta,
       index: 0,
       reviewed: 0,
       totalDue: aheadCards.length,
+      summary: { ...EMPTY_SUMMARY, plannedToday: aheadCards.length },
     });
   }
 
@@ -198,7 +264,7 @@ export function ReviewClient({
         cards={activeCards}
         previews={activePreviews}
         meta={activeMeta}
-        totalDue={activeTotalDue}
+        summary={activeSummary}
         ahead={activeMode === "ahead"}
         aheadAvailable={single ? 0 : aheadCards.length}
         startIndex={startIndex}
@@ -206,6 +272,8 @@ export function ReviewClient({
         onStudyAhead={startAhead}
         onProgress={persist}
         onExit={single ? undefined : clearReviewSession}
+        single={single}
+        canPark={canPark}
       />
     </div>
   );
@@ -215,7 +283,7 @@ function Flashcards({
   cards,
   previews,
   meta = {},
-  totalDue,
+  summary,
   ahead,
   aheadAvailable,
   startIndex = 0,
@@ -223,11 +291,13 @@ function Flashcards({
   onStudyAhead,
   onProgress,
   onExit,
+  single = false,
+  canPark = false,
 }: {
   cards: ReviewCard[];
   previews: Record<string, IntervalPreview>;
   meta?: Record<string, CardMeta>;
-  totalDue: number;
+  summary: QueueSummary;
   ahead: boolean;
   aheadAvailable: number;
   /** Where to resume from when a saved session is restored. */
@@ -238,7 +308,11 @@ function Flashcards({
   onProgress?: (index: number, reviewed: number) => void;
   /** Clear the saved session when the learner leaves the finished batch. */
   onExit?: () => void;
+  /** Focused single-item review: never touches the live due badge. */
+  single?: boolean;
+  canPark?: boolean;
 }) {
+  const router = useRouter();
   const pitchOn = usePitch();
   const reduce = useReducedMotion();
   const [index, setIndex] = useState(startIndex);
@@ -254,31 +328,111 @@ function Flashcards({
   const [flash, setFlash] = useState<{ rating: Rating; seq: number } | null>(
     null,
   );
+  // In-flight guard for grade(): set on grade, cleared when the next card's
+  // answer is revealed. A ref (not state) so it takes effect immediately rather
+  // than on the next render — which is the whole point.
+  const gradingRef = useRef(false);
+  const [showHelp, setShowHelp] = useState(false);
+  const [parking, setParking] = useState(false);
+  const flashSeqRef = useRef(0);
+  // Wrapper around the card's SpeakButton, so the "S" shortcut can reuse its
+  // exact click path rather than duplicating the speech-synthesis logic.
+  const speakRef = useRef<HTMLSpanElement>(null);
+
+  const backlogTotal = summary.backlogReviews + summary.backlogNew;
+  // Is there a card on screen? `card` is only defined past the early returns
+  // below, so every keyboard handler must be inert when this is false.
+  const onCard = cards.length > 0 && index < cards.length;
+
+  /** Reveal the answer. Shared by the button and the keyboard handler. */
+  function reveal() {
+    if (revealed) return;
+    gradingRef.current = false;
+    setRevealed(true);
+    playReveal();
+  }
+
+  // Anki-compatible bindings. grade() is a hoisted function declaration further
+  // down, so these closures can call it even though it is defined after the
+  // early returns; `onCard` keeps them inert when it would be unsafe.
+  useReviewKeys(
+    {
+      reveal: () => (revealed ? grade("good") : reveal()),
+      again: () => revealed && grade("again"),
+      hard: () => revealed && grade("hard"),
+      good: () => revealed && grade("good"),
+      easy: () => revealed && grade("easy"),
+      speak: () => speakRef.current?.querySelector("button")?.click(),
+      details: () => setShowDetails((v) => !v),
+      note: () => revealed && setEditingNote(true),
+      help: () => setShowHelp((v) => !v),
+      escape: () => {
+        if (editingNote) setEditingNote(false);
+        else if (showHelp) setShowHelp(false);
+        else (document.activeElement as HTMLElement | null)?.blur();
+      },
+    },
+    onCard,
+  );
 
   if (cards.length === 0) {
+    // An empty batch means one of two very different things, and saying "all
+    // caught up" when a backlog is waiting would just be a lie.
+    const budgetSpent = !ahead && backlogTotal > 0;
     return (
       <div className="py-12 text-center">
         <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-600/10 text-emerald-600">
           <Check className="h-6 w-6" />
         </div>
-        <h1 className="text-xl font-semibold">Nothing due right now</h1>
+        <h1 className="text-xl font-semibold">
+          {budgetSpent ? "Today's done 🎉" : "Nothing due right now"}
+        </h1>
         <p className="mx-auto mt-1 max-w-sm text-sm text-muted">
-          You are all caught up. New items become reviewable as you chat and make
-          lessons; scheduled ones come back when they are due.
+          {budgetSpent ? (
+            <>
+              You&apos;ve finished today&apos;s plan.{" "}
+              {backlogTotal.toLocaleString()} still waiting — about{" "}
+              {Math.max(1, summary.daysToClear)}{" "}
+              {Math.max(1, summary.daysToClear) === 1 ? "day" : "days"} at this
+              pace. Come back tomorrow and it keeps shrinking.
+            </>
+          ) : (
+            <>
+              You are all caught up. New items become reviewable as you chat and
+              make lessons; scheduled ones come back when they are due.
+            </>
+          )}
         </p>
         <div className="mt-5 flex flex-wrap justify-center gap-2">
-          {aheadAvailable > 0 && (
-            <Button onClick={onStudyAhead}>
-              <FastForward className="h-4 w-4" /> Study ahead · {aheadAvailable} cards
-            </Button>
+          {budgetSpent ? (
+            <>
+              <Link href="/dashboard">
+                <Button>See progress</Button>
+              </Link>
+              <Link
+                href="/review?over=1"
+                className="self-center text-xs text-muted underline underline-offset-4 hover:text-foreground"
+              >
+                Study beyond today&apos;s plan
+              </Link>
+            </>
+          ) : (
+            <>
+              {aheadAvailable > 0 && (
+                <Button onClick={onStudyAhead}>
+                  <FastForward className="h-4 w-4" /> Study ahead ·{" "}
+                  {aheadAvailable} cards
+                </Button>
+              )}
+              <Link href="/chat">
+                <Button variant={aheadAvailable > 0 ? "outline" : "primary"}>
+                  Study something new
+                </Button>
+              </Link>
+            </>
           )}
-          <Link href="/chat">
-            <Button variant={aheadAvailable > 0 ? "outline" : "primary"}>
-              Study something new
-            </Button>
-          </Link>
         </div>
-        {aheadAvailable > 0 && (
+        {!budgetSpent && aheadAvailable > 0 && (
           <p className="mx-auto mt-3 max-w-sm text-xs text-muted">
             These aren&apos;t due yet — get ahead on the ones closest to fading.
           </p>
@@ -288,36 +442,63 @@ function Flashcards({
   }
 
   if (index >= cards.length) {
-    // Cards just graded are rescheduled into the future, so anything still due
-    // is beyond this batch. Force a fresh load to pull the next due cards.
-    const remaining = ahead ? 0 : Math.max(0, totalDue - reviewed);
+    // What's left of TODAY'S plan — not the lifetime pile. Cards just graded are
+    // rescheduled into the future, so anything still planned is beyond this
+    // batch and needs a fresh server render to fetch.
+    const remaining = ahead ? 0 : Math.max(0, summary.plannedToday - reviewed);
+    const dayDone = !ahead && remaining === 0;
+    const backlog = summary.backlogReviews + summary.backlogNew;
     return (
       <div className="py-12 text-center">
         <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-600/10 text-emerald-600">
           <Check className="h-6 w-6" />
         </div>
-        <h1 className="text-xl font-semibold">Done! 🎉</h1>
+        <h1 className="text-xl font-semibold">
+          {ahead ? "Done! 🎉" : dayDone ? "Today's done 🎉" : "Batch done 🎉"}
+        </h1>
         <p className="mt-1 text-sm text-muted">
           You reviewed {reviewed} {reviewed === 1 ? "item" : "items"}.
           {ahead
             ? " Nice — you got ahead of the schedule."
             : remaining > 0
-              ? ` ${remaining} still due.`
-              : " You're all caught up."}
+              ? ` ${remaining} left in today's plan.`
+              : " That's the whole plan for today."}
         </p>
+        {/* The backlog is context, not a demand: a finite pile with a date on
+            it reads very differently from an ever-growing badge. */}
+        {dayDone && backlog > 0 && (
+          <p className="mx-auto mt-2 max-w-sm text-xs text-muted">
+            {backlog.toLocaleString()} still waiting — about{" "}
+            {Math.max(1, summary.daysToClear)}{" "}
+            {Math.max(1, summary.daysToClear) === 1 ? "day" : "days"} at this
+            pace. Nothing is lost by stopping here.
+          </p>
+        )}
         <div className="mt-5 flex flex-wrap justify-center gap-2">
           <Link href="/dashboard" onClick={() => onExit?.()}>
-            <Button variant="outline">See progress</Button>
+            <Button variant={dayDone ? "primary" : "outline"}>
+              See progress
+            </Button>
           </Link>
           {!ahead && remaining > 0 ? (
             <Button
               onClick={() => {
                 onExit?.();
-                window.location.assign("/review");
+                router.refresh();
               }}
             >
-              Keep studying ({remaining} due)
+              Continue ({remaining} left today)
             </Button>
+          ) : dayDone && backlog > 0 ? (
+            // Opt-in, de-emphasised: a cap with no override turns a keen day
+            // into a wall, and walls get features deleted.
+            <Link
+              href="/review?over=1"
+              onClick={() => onExit?.()}
+              className="self-center text-xs text-muted underline underline-offset-4 hover:text-foreground"
+            >
+              Study beyond today&apos;s plan
+            </Link>
           ) : (
             <Link href="/chat" onClick={() => onExit?.()}>
               <Button>Study something new</Button>
@@ -334,8 +515,20 @@ function Flashcards({
   const cardMeta = meta[card.id];
 
   function grade(rating: Rating) {
+    // One grade per card, no matter how the input arrives. Nothing used to
+    // guard this: the mouse path survived only because setRevealed(false)
+    // unmounts the rating grid on the next render, which is far too slow to
+    // stop OS key-repeat or a double-click. Released when the next card's
+    // answer is revealed (see reveal()).
+    if (gradingRef.current) return;
+    if (!revealed) return;
+    gradingRef.current = true;
+
     playGrade();
-    const seq = Date.now();
+    // A monotonic counter, not Date.now(): two grades inside the same
+    // millisecond would collide on a timestamp, and reading the clock here is
+    // an impure call in a render-scoped function.
+    const seq = ++flashSeqRef.current;
     setFlash({ rating, seq });
     window.setTimeout(
       () => setFlash((f) => (f?.seq === seq ? null : f)),
@@ -345,19 +538,20 @@ function Flashcards({
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ itemId: card.id, rating }),
-    })
-      .then((r) => r.json())
-      .then((res: { due?: string | null }) => {
-        // A graded "due" card leaves the due-now set unless it's rescheduled to
-        // right now/the past (it isn't — even "again" gets a minutes-ahead due,
-        // which matches the server's `srs_due <= now` definition). Decrement the
-        // live nav badge instantly. Don't touch it when reviewing ahead.
-        if (ahead) return;
-        const stillDue =
-          res?.due != null && new Date(res.due).getTime() <= Date.now();
-        if (!stillDue) bumpReviewDue(-1);
-      })
-      .catch(() => {});
+    }).catch(() => {});
+    // The badge now means "work left today", and EVERY grade spends one unit of
+    // the daily budget — including an "again" that returns in five minutes,
+    // because the server counts review_log rows, which include relearning ones.
+    // So this decrements unconditionally now; it used to fire only when the card
+    // left the due set, which no longer matches what the number means.
+    //
+    // Skipped when reviewing ahead (not part of today's plan), in single-item
+    // mode (a library "Review" link is usually not a due card, so decrementing
+    // invented progress), and when studying past the cap.
+    if (!ahead && !single && !summary.overBudget) bumpReviewDue(-1);
+    // Safe to derive from this render's values: gradingRef guarantees only one
+    // grade runs per card, so there is no second call in this tick reading the
+    // same stale `index`.
     const nextIndex = index + 1;
     const nextReviewed = reviewed + 1;
     setReviewed(nextReviewed);
@@ -366,6 +560,23 @@ function Flashcards({
     setShowDetails(false);
     setIndex(nextIndex);
     onProgress?.(nextIndex, nextReviewed);
+  }
+
+  /** Park the current word and move on WITHOUT grading it, so it never enters
+   *  review_log and never spends a slot of today's budget. */
+  async function park() {
+    if (parking || gradingRef.current) return;
+    setParking(true);
+    const res = await setItemSuspended(card.id, true);
+    setParking(false);
+    if (!res.ok) return;
+    if (!ahead && !single && !summary.overBudget) bumpReviewDue(-1);
+    const nextIndex = index + 1;
+    setRevealed(false);
+    setEditingNote(false);
+    setShowDetails(false);
+    setIndex(nextIndex);
+    onProgress?.(nextIndex, reviewed);
   }
 
   async function saveNote(value: string) {
@@ -419,12 +630,12 @@ function Flashcards({
           Reviewing ahead — these aren&apos;t due yet.
         </div>
       )}
-      <div className="mb-4 flex items-center justify-between text-sm text-muted">
+      <div className="mb-1 flex items-center justify-between text-sm text-muted">
         <span>
           Review · {index + 1} / {cards.length}
           {!ahead && (
             <span className="ml-2 text-foreground">
-              · {Math.max(0, totalDue - reviewed)} due left
+              · {Math.max(0, summary.plannedToday - reviewed)} left today
             </span>
           )}
         </span>
@@ -432,6 +643,19 @@ function Flashcards({
           <RotateCcw className="h-3.5 w-3.5" /> spaced repetition
         </span>
       </div>
+      {/* The pile, stated once, quietly, with an end date on it. */}
+      {!ahead && !summary.degradedLog && backlogTotal > 0 && (
+        <p className="mb-3 text-xs text-muted">
+          {backlogTotal.toLocaleString()} more waiting · about{" "}
+          {Math.max(1, summary.daysToClear)}{" "}
+          {Math.max(1, summary.daysToClear) === 1 ? "day" : "days"} at this pace
+        </p>
+      )}
+      {summary.overBudget && (
+        <p className="mb-3 text-xs text-primary">
+          Studying beyond today&apos;s plan.
+        </p>
+      )}
       <div className="mb-4 h-1.5 w-full overflow-hidden rounded-full bg-surface-2">
         <div
           className="h-full bg-primary transition-all"
@@ -439,13 +663,17 @@ function Flashcards({
         />
       </div>
 
+      {/* `mode="wait"` stays — the cards are in normal flow, so overlapping
+          them would stack two and jump the layout. But exit-then-enter at 0.18s
+          each was ~360ms of churn per card, the real ceiling on how fast you can
+          key through a deck; 0.09 halves it and still reads as a transition. */}
       <AnimatePresence mode="wait">
         <motion.div
           key={card.id}
           initial={{ opacity: 0, x: reduce ? 0 : -8 }}
           animate={{ opacity: 1, x: 0 }}
           exit={{ opacity: 0, x: reduce ? 0 : 8 }}
-          transition={{ duration: 0.18 }}
+          transition={{ duration: 0.09 }}
           className="relative overflow-hidden rounded-2xl border border-border bg-surface p-8 text-center"
         >
           {/* Sweep light bar — re-fires on advance (card id) and on reveal. */}
@@ -519,6 +747,20 @@ function Flashcards({
                   ? `Memory strength ~${cardMeta.retr}% · ${masteryInfo(cardMeta.mastery).label}`
                   : "New — not scheduled yet"}
               </div>
+              {/* Words arrive here automatically from chats and photographed
+                  pages, so some of them are simply not worth studying. Parking
+                  removes one from the queues for good without deleting it —
+                  it stays in the library and can be brought back. */}
+              {canPark && (
+                <button
+                  onClick={park}
+                  disabled={parking}
+                  className="mt-1 flex items-center gap-1 text-[11px] text-muted underline underline-offset-2 transition-colors hover:text-foreground disabled:opacity-50"
+                >
+                  <Archive className="h-3 w-3" />
+                  {parking ? "Parking…" : "Park this word (stop reviewing it)"}
+                </button>
+              )}
             </div>
           )}
 
@@ -531,7 +773,9 @@ function Flashcards({
             <RubyText>{card.term}</RubyText>
           </div>
           <div className="mt-2 flex justify-center">
-            <SpeakButton text={stripFurigana(card.reading || card.term)} />
+            <span ref={speakRef}>
+              <SpeakButton text={stripFurigana(card.reading || card.term)} />
+            </span>
           </div>
 
           {revealed ? (
@@ -622,15 +866,12 @@ function Flashcards({
             </div>
           ) : (
             <div className="mt-8">
-              <Button
-                onClick={() => {
-                  setRevealed(true);
-                  playReveal();
-                }}
-                size="lg"
-              >
+              <Button onClick={reveal} size="lg">
                 Show answer
               </Button>
+              <p className="kbd-hint mt-3 items-center justify-center gap-1.5 text-[11px] text-muted">
+                press <span className="kbd">Space</span>
+              </p>
             </div>
           )}
         </motion.div>
@@ -638,14 +879,20 @@ function Flashcards({
 
       {revealed && (
         <div className="mt-4 grid grid-cols-4 gap-2">
-          {RATINGS.map((r) => {
+          {RATINGS.map((r, i) => {
             const eta = previews[card.id]?.[r.rating];
             return (
               <button
                 key={r.rating}
                 onClick={() => grade(r.rating)}
-                className={`flex flex-col items-center gap-0.5 rounded-xl px-2 py-2.5 text-sm font-medium transition-transform active:scale-95 ${r.cls}`}
+                aria-label={`${r.label}${eta ? ` — next in ${eta}` : ""}`}
+                aria-keyshortcuts={String(i + 1)}
+                className={`relative flex flex-col items-center gap-0.5 rounded-xl px-2 py-2.5 text-sm font-medium transition-transform active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background ${r.cls}`}
               >
+                {/* Desktop-only digit hint, in the editorial mono label style. */}
+                <span className="kbd-hint absolute left-1.5 top-1 text-[9px] font-normal opacity-70">
+                  {i + 1}
+                </span>
                 {r.label}
                 {eta && (
                   <span className="text-[10px] font-normal opacity-80">
@@ -655,6 +902,20 @@ function Flashcards({
               </button>
             );
           })}
+        </div>
+      )}
+
+      {/* Shortcut cheatsheet ("?"). Desktop-only affordance, but rendered on
+          demand so it never occupies layout. */}
+      {showHelp && (
+        <div className="kbd-hint mt-4 flex-col gap-1 rounded-xl border border-border bg-surface-2/50 px-3 py-2.5 text-xs text-muted">
+          <div className="mono mb-1 text-[10px]">KEYBOARD</div>
+          {REVIEW_SHORTCUTS.map((s) => (
+            <div key={s.keys} className="flex items-baseline gap-2">
+              <span className="kbd shrink-0">{s.keys}</span>
+              <span>{s.what}</span>
+            </div>
+          ))}
         </div>
       )}
 
