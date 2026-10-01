@@ -1,580 +1,144 @@
-@AGENTS.md
-
 # 俺様先生 (oresama-sensei) — Project Brief for AI Agents
 
-> **Read this first.** It explains what this project is, who it's for, and how to work on it.
-> **Keep it updated:** whenever you make a meaningful change or decision, edit the relevant
-> section below (especially "Status & Roadmap" and "Decisions log") in the same commit.
+> **Read this first.** What this is, who it's for, and how to work on it.
+> **Keep it updated:** when you make a meaningful change or decision, edit the relevant section
+> (especially "Status" and "Decisions") in the same commit.
 
 ## What this is
-A **private, single-user web app** that helps the owner study Japanese toward **JLPT N2–N1**.
-Two core features:
-1. **AI chat with persistent memory** — a tutor that answers questions about grammar,
-   vocabulary, and usage, and **remembers everything** across sessions (it builds a personal
-   knowledge base and recalls it to personalize and avoid re-teaching).
-2. **Photo → lesson** — the owner photographs a book/manga page; the app reads it (OCR) and
-   writes a meaningful, personalized lesson.
+A **private, single-user web app** for studying Japanese toward **JLPT N2–N1**. Since v5 it does
+four things, all built around spaced-repetition flashcards:
 
-## Who it's for (the owner)
-- Thai, age 30, a **manga-style artist** active on X with Japanese artists; wants to belong in
-  that community and converse naturally.
-- Has a background in **English-language teaching** and **Data Science**.
-- Strongly prefers **meaningful learning** — lots of contextual examples, nuance, and things
-  tied to real life — over rote memorization. Lessons should be vivid and memorable.
-- Is **not** a web developer; keep explanations friendly and concrete. Default to doing the
-  work rather than handing back long to-do lists.
+1. **Review** (`/`) — today's flashcards, FSRS-scheduled, with a daily budget.
+2. **Words** (`/words`) — every saved word, searchable (kanji/kana/rōmaji/English), plus quick-add.
+3. **Kanji** (`/kanji`, `/kanji/view?c=字`) — the 2,211 JLPT kanji: stroke order, readings, parts,
+   personal mnemonics, coverage.
+4. **Settings** (`/settings`) — profile (shapes Sensei's examples), study pace, device prefs.
 
-## How it works (architecture)
-- **Next.js 16** (App Router) + React 19 + TypeScript + Tailwind v4 + Framer Motion, with
-  **GSAP** + **Lenis** added for the v4.3 motion layer (custom cursor, magnetic buttons,
-  smooth scroll). Hosted on **Vercel**; code on GitHub (`asu-azure/oresama-sensei`).
-- **Design language is "Editorial FUI"** (since v4.3) — see the v4.3 changelog entry and the
-  Decisions log for the stack, the legacy→new rationale, and the reusable motion kit.
-- **Supabase** — Auth (single account), Postgres + **pgvector**, Storage. All data is scoped to
-  the user via **RLS**; the app uses the user session (no service-role key).
-- **Claude** (`claude-sonnet-4-6`; `claude-opus-4-8` for "deep" lessons) — chat answers, lesson
-  writing, and structured knowledge extraction.
-- **Gemini** (`gemini-2.5-flash` for OCR, `gemini-embedding-001` for embeddings) — reads photos
-  and powers vector search. Hybrid setup chosen because Gemini is best/cheapest at Japanese OCR
-  and gives native embeddings, while Claude writes the best pedagogy.
-- **The "memory" feature** = RAG: text is embedded (Gemini) → stored in pgvector → most relevant
-  past items are injected into Claude's system prompt. New items are **deduplicated** by cosine
-  similarity (re-asking bumps `times_seen` instead of duplicating). See `src/lib/memory.ts` and
-  the `match_knowledge` SQL function.
+Everything else from v4 (chat tutor, photo→lesson, SNS helper, tests, map, books, insights,
+dashboard) was **dropped on purpose** — usage data on 2026-10-01 showed only flashcards were still
+used (4,302 grades; nothing else since 2026-07-12). The last Next.js version is tag **`nextjs-v4.4`**.
+**The database was not changed** — the old tables are still there and Hisho still reads them.
+
+## Who it's for
+- Thai, 30, a **manga-style artist** active on X with Japanese artists; background in
+  **English-language teaching** and **Data Science**.
+- Prefers **meaningful learning** — contextual examples, nuance, real life — over rote.
+- **Not** a web developer: keep explanations friendly and concrete; do the work rather than hand back
+  to-do lists.
+
+## Stack
+**Astro 7 (static shells) + Svelte 5 islands + supabase-js in the browser**, hosted on **Vercel**.
+Same stack and design system as `../pressroom`. No React, Next.js, Tailwind, GSAP, Lenis, Framer or
+Anthropic SDK.
+
+- Every page is a **static shell** (`src/pages/*.astro`) with one `client:only="svelte"` island.
+  The island signs in (`requireUser()`), reads/writes Supabase **under RLS with the publishable key**,
+  and renders. There is no server-side rendering of user data.
+- **Only `src/pages/api/*` run on the server** (`prerender = false`), because they hold the Gemini
+  key. Each verifies the browser's bearer token and acts as the user under RLS (`src/server/auth.ts`).
+  There is **no service-role key** anywhere.
+  - `POST /api/ask` — Ask Sensei (streams text). `POST /api/draft` — quick-add drafts a card (writes
+    nothing). `POST /api/words` — save a card (embeds it). `POST /api/mnemonic` — kanji mnemonic +
+    2–3 example words (cached per user in `kanji`). `GET /api/image-search` / `image-fetch` — pictures
+    for cards (Pixabay → Openverse, no AI).
+- **AI is Gemini only** (`gemini-2.5-flash`, `gemini-embedding-001`) over plain REST
+  (`src/server/gemini.ts`). Prompts are in `src/server/prompts.ts` — carried over from v4 and tuned;
+  change them deliberately.
+- Old routes (`/review`, `/chat`, `/library`, …) **301 to their v5 home** (`astro.config.mjs`),
+  because an installed home-screen app keeps its old start URL until it's re-added.
 
 ## Key files
-- `src/app/api/chat/route.ts` — chat pipeline (recall → stream Claude → extract+store).
-- `src/app/api/lesson/route.ts` — OCR (Gemini) → write lesson (Claude) → save + extract.
-- `src/lib/claude.ts`, `src/lib/gemini.ts` — model clients (lazy, with Gemini retry/backoff).
-- `src/lib/memory.ts` — embed, recall, dedupe-insert.
-- `src/lib/prompts.ts` — the pedagogy system prompts (the heart of teaching quality).
-- `src/lib/supabase/{client,server,middleware}.ts` + `src/proxy.ts` — auth/session.
-- `supabase/migrations/0001_init.sql` — schema, pgvector, RLS, `match_knowledge`, storage, profile trigger.
+- `src/components/review/Review.svelte` — the flashcard screen (the heart of the app).
+- `src/lib/review-queue.ts` — today's queue + budget. `src/lib/study-day.ts` — when a day rolls over.
+  `src/lib/pace.ts` — the learner's budget from `profiles`.
+- `src/lib/srs.ts` — FSRS (`ts-fsrs`), **runs in the browser**. `src/lib/outbox.ts` — persistent grade
+  queue. `src/lib/review-session.ts` — resume a batch. `src/lib/review-keys.ts` — keyboard grading.
+- `src/lib/due.ts` — the header badge. `src/lib/images.ts` — pictures (re-encode, upload, sign).
+- `src/components/shared/` — Ruby, Pitch, Speak, Conjugation, KanjiChips, ItemImage (+ DrawPad,
+  WebImages), AskSensei, Modal, Icon.
+- `src/layouts/Base.astro` — head, PWA meta, the inline **auth guard** and tone script, the topbar.
+- `src/styles/global.css` (tokens — the only place they live), `mv.css` (motion), `fonts.css`.
 
 ## Running it
-1. Supabase project → run the SQL files in `supabase/migrations/` (0001–0024) in order in the SQL editor.
-2. `.env.local` (NOT committed) with: `NEXT_PUBLIC_SUPABASE_URL`,
-   `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`. See `.env.example`.
-3. `npm install` → `npm run dev` → http://localhost:3000. Restart dev after editing `.env.local`
-   (Next reads env only at startup).
+1. `.env.local` (gitignored): `NEXT_PUBLIC_SUPABASE_URL` + `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
+   (or the `PUBLIC_SUPABASE_*` names), `GEMINI_API_KEY`, optional `PIXABAY_KEY`. See `.env.example`.
+   Without `GEMINI_API_KEY`, Ask Sensei / quick-add drafts / mnemonics fail; everything else works.
+2. `npm install` → `npm run dev` → http://localhost:4321.
+3. `npm run check` (astro check + svelte-check), `npm test` (vitest), `npm run build`.
+4. Database: run `supabase/migrations/` 0001–0024 in order (all already applied to the live project).
 
 ### Supabase MCP (optional, for AI agents)
-`.mcp.json` (committed) wires Claude Code to the **hosted Supabase MCP server**
-(`https://mcp.supabase.com/mcp`), scoped to this project (`project_ref`) and **read-only**
-(inspect schema, verify migrations, run read-only debug queries — no writes). To enable it,
-set a **Supabase personal access token** in the environment Claude Code runs in (NOT in git):
-`SUPABASE_ACCESS_TOKEN` (create at Supabase dashboard → Account → Access Tokens). On Windows:
-`setx SUPABASE_ACCESS_TOKEN "<token>"` then reopen the terminal. The project ref in `.mcp.json`
-is public (same as the `NEXT_PUBLIC_SUPABASE_URL` subdomain), so only the token is secret.
-To let an agent **apply** migrations, drop `read_only=true` from the URL temporarily.
+`.mcp.json` wires Claude Code to the hosted Supabase MCP, scoped to this project and **read-only**.
+Needs `SUPABASE_ACCESS_TOKEN` in the environment (never in git). Drop `read_only=true` from the URL
+temporarily to let an agent apply a migration.
 
 ## Shared database with Hisho (since 2026-07-16)
-The **same Supabase project** also hosts the tables of **Hisho** (`../hisho`,
-`asu-azure/hisho` — a separate Streamlit life-hub app). All of its tables are prefixed
-**`hisho_`** (daily_logs, activities, workouts, workout_sets, habits, habit_ticks,
-transactions, debts, content_items) and are managed by **Hisho's own migration series**
-(`hisho/supabase/migrations/`) — they do NOT appear in this repo's `supabase/migrations/`
-and must never be modified from here. Hisho reads this app's `review_log` /
-`knowledge_items` **read-only** (study stats on its dashboard) and never writes to any
-Oresama-sensei table. Same auth user, RLS-scoped, anon key only on both sides.
+The same Supabase project hosts **Hisho** (`../hisho`, `asu-azure/hisho`). Its tables are prefixed
+**`hisho_`**, managed by Hisho's own migrations, and must never be modified from here. Hisho reads this
+app's `review_log` / `knowledge_items` **read-only**. So: keep writing `review_log` exactly as before,
+and keep new `knowledge_items` embedded (the `match_knowledge` RPC and Hisho expect it).
 
-## Working across computers (IMPORTANT)
-The **data lives in Supabase (cloud)**, so chats/vocab/lessons sync automatically. Only the
-**code** syncs via GitHub. Workflow:
-- **Start of a session:** `npm run pull` (get the latest).
-- **When done / periodically:** `npm run sync` (pulls, commits with a timestamp, pushes).
-- On a new computer: install Node + Git → `git clone https://github.com/asu-azure/oresama-sensei.git`
-  → `npm install` → recreate `.env.local` (keep keys in a password manager) → `npm run dev`.
+## Working across computers
+Data lives in Supabase; only code syncs via GitHub. `npm run pull` at the start, `npm run sync` (pull,
+timestamped commit, push) when done.
+
+## Design system ("Editorial FUI", from pressroom)
+- **Ink is the default tone**; **Paper** (cream proof-sheet stock) is a per-device choice in Settings
+  (`html[data-tone='paper']`, set before first paint). `.spread--paper` flips any section — the
+  flashcard is always a cream proof sheet with crop marks.
+- Serif narrates (Fraunces), grotesk punches (Space Grotesk), mono labels (JetBrains Mono). **Japanese
+  uses system mincho/gothic stacks, never a webfont subset** — the words come from the database and can
+  contain any kanji.
+- One cobalt accent `#2742f0` (lifted to `--accent-text` on ink), sunflower amber `#e8a31a` as the
+  warm counterpoint. Mastery, pitch-type and rating colours are tokens too.
+- Motion: MV vocabulary (`mv.css` + `src/lib/mv.ts`): `converge` (RGB split) on headings and the card
+  term, `strike` rings on button presses, a short glitch cut before the page wipe. Page changes are
+  cross-document **View Transitions** (no router). Everything ≤ 600 ms and lands on its final state under
+  `prefers-reduced-motion`. **No custom cursor, no magnetic buttons, no smooth-scroll library** — the
+  same rules as pressroom.
 
 ## Conventions
-- TypeScript strict; path alias `@/*` → `src/*`.
-- Tailwind v4 (CSS-first; tokens in `src/app/globals.css`).
-- Furigana is rendered as `<ruby>漢字<rt>かんじ</rt></ruby>` (allowed through sanitization in
-  `src/components/markdown.tsx`); prompts instruct Claude to use it.
-- Embeddings are 768-dim and L2-normalized (pgvector index limit). Keep schema dim in sync with
-  `EMBED_DIM` in `src/lib/gemini.ts`.
+- TypeScript strict. Svelte 5 runes. Islands are `client:only`, so `location`/`localStorage` are safe in
+  component scripts.
+- Furigana: `<ruby>漢字<rt>かんじ</rt></ruby>` or 漢字（かんじ） in data; render short strings with
+  `Ruby.svelte` (builds elements, never HTML) and model output with `renderMarkdown()` (escapes
+  everything first; ruby is rebuilt from escaped parts). Never `{@html}` anything else.
+- Full-list queries page past PostgREST's 1,000-row cap with `fetchAllRows` and a **stable order**
+  (`id` as tiebreaker).
+- Embeddings are 768-dim, L2-normalised (`EMBED_DIM` in `src/server/gemini.ts`).
+- Offline data is **sharded** in `public/data/` (layout in `scripts/lib/shards.mjs`; the client halves
+  are `src/lib/pitch.ts` and `src/lib/kanji.ts` — change both together; `shards.test.ts` checks parity).
+  `npm run kanji:build` / `npm run pitch:build` regenerate it. Credits: KanjiVG (CC BY-SA 3.0),
+  kanji-data (MIT), kanjium (CC BY-SA 4.0) — shown on the kanji page and by the Pitch toggle.
 
-## Status & roadmap
-- ✅ v1 shipped: auth, chat-with-memory, photo→lesson, settings/profile.
-- ✅ v2 shipped: chat history windowing + past-chats drawer; **vocab/grammar library**
-  (`/library`) color-coded by SRS mastery; richer **practice exercises** (multiple-choice,
-  sentence-arrangement, fill-in-the-blank) generated per-lesson and as on-demand review tests.
-- ✅ v2.1 shipped: TTS pronunciation (browser Web Speech API) in library/flashcards;
-  library → single-item review (`/review?item=`) + due-count badge on the Review nav;
-  conversation rename/delete in the chat drawer; furigana now renders in exercise options/tokens;
-  map/library/flashcards hide redundant kana readings; tasteful tap/entrance animations (reduced-motion aware).
-- ✅ v2.2 shipped (mobile/PWA polish): proper `viewport` export (fixes iOS "zoomed in") +
-  `viewportFit: cover` with `env(safe-area-inset-*)`; installable **PWA** — `app/manifest.ts`
-  (`scope:"/"`, `display:standalone`, `start_url:/chat`) + `appleWebApp` meta, which fixes the iOS
-  home-screen app opening every tab in a hovering Safari overlay; generated app icons
-  (`app/icon.tsx`, `app/apple-icon.tsx`, `app/icons/{192,512}`, art in `src/lib/icon-art.tsx`);
-  `loading.tsx` skeletons on `/library`, `/dashboard`, `/map` so tab switches paint instantly;
-  header title 俺様先生 no longer wraps (scrollable tab strip). **Library redesigned**: GitHub-style
-  calendar heat-map (`library-calendar.tsx`) that filters the list by day; compact rows (term + mastery
-  dot) that expand on tap; initial fetch trimmed from 2000 → 150 with infinite scroll (`actions.ts`
-  `loadMoreItems`/`loadItemsForDay`).
-- ✅ v2.3 shipped (interactive map): the `/map` **Graph** view is now draggable (React Flow used
-  uncontrolled via `defaultNodes`/`defaultEdges`; drags persist into `knowledge_maps.data.positions`
-  via `map/actions.ts` `saveMapPositions`, debounced). Layout no longer overlaps — ring radius +
-  grid spacing scale with item count and nodes size to content. Tapping a node (or a Board row)
-  opens a detail panel with **Practice this** (`/review?item=`) and **Lessons mentioning this**
-  (`findLessonsForTerm`, an `ilike` text search since items have no lesson FK).
-- ✅ v2.4 shipped (search + test bank + richer prompts): new **Search** tab (`/search`) — live,
-  no-Enter lookup over saved items by kanji/kana/**rōmaji**/English with typo tolerance (`fuse.js`
-  + `wanakana`, all client-side) plus a debounced lesson text-search (`search/actions.ts`); new
-  **Tests** tab (`/tests`) — a saved **test bank** (table `review_tests`, migration **0006**) with a
-  scope picker (Struggling / New / Due / by level+type, counts from SQL = $0) that generates once and
-  **replays for free** (`/api/tests`, `/api/tests/[id]`); Review is now flashcards-only and links to
-  Tests (old `/api/review-test` deleted). `arrange` exercises are now the JLPT **★ 並べ替え** format
-  (context sentence with four blanks, one ★; drag **or** tap to place via `@dnd-kit/core`; graded on
-  the ★ slot) — see `ArrangeExercise.star_index`, the `{{BLANKS}}` marker, and `StarArrangeView`.
-  Prompts enriched in `lib/prompts.ts` (`LEARNER_CONTEXT` + `CONTEXT_VARIETY`) so answers reflect the
-  full learner profile (manga + English-teaching + music + world news) and span authentic JLPT topics.
-- ✅ v2.5 **Stage A** shipped (kanji): new **Kanji** tab (`/kanji`) — browse the full **JLPT N5–N1**
-  set (2211 kanji) with **stroke-order animation**, on/kun **readings + meanings + JLPT/strokes**, and
-  **component/radical breakdown** (tappable to drill in); kanji from your saved words are badged, and
-  each card lists your words containing it. **Offline**: data is bundled in `src/data/kanji/*`
-  (built by `scripts/build-kanji-data.mjs`, `npm run kanji:build`) from **KanjiVG** (CC-BY-SA 3.0,
-  strokes+components) + **kanji-data** (MIT, readings/meanings/levels), split per level and
-  lazy-loaded. Stroke animation is our own `StrokeOrder` SVG component (not markdown).
-- ✅ v2.5 **Stage B** shipped (kanji): per-kanji **AI mnemonic** — Claude builds a vivid, personalized
-  memory story from the components + learner profile (`generateKanjiMnemonic` + `KANJI_MNEMONIC_INSTRUCTION`),
-  cached per-user in the **`kanji`** table (migration **0007**) so revisiting is free; a **Mark learned**
-  toggle; and **tappable kanji chips** on each vocab word in Library/Search (`KanjiChips`) that open the
-  kanji card. Kanji actions (`kanji/actions.ts`) degrade gracefully if `0007` hasn't been run yet.
-- ExercisePlayer holds a **local copy** of the exercises (so Check & fix can replace a question in
-  place) and is **remounted via `key={playToken}`** by tests-client/lesson-practice when a new set
-  loads — don't reintroduce a render-time prop→state sync (it trips `react-hooks`). `refineExercise`
-  persists to whichever of `review_tests`/`lessons` the caller names by `index`. Deep-dive + chat→lesson
-  degrade gracefully without their migrations (`0008`; chat reuses the existing text-lesson route with
-  an optional `kind:"chat"`).
-- Pitch accent: `src/lib/pitch.ts` is client-safe (`pitchPattern` pure; `lookupAccent` lazy-imports the
-  4.4 MB `src/data/pitch/accents.json` only on first use). The toggle uses `useSyncExternalStore`
-  (no effects → lint-clean). Accent = downstep mora (0 heiban). Show the **kanjium CC BY-SA 4.0** credit
-  if surfacing attribution. `npm run pitch:build` regenerates the data (raw cached in `scripts/.cache`).
-- SRS is **FSRS** via `ts-fsrs` (`src/lib/srs.ts`). It's **server-only** (imports ts-fsrs); client code
-  imports only the `Rating`/`IntervalPreview` **types** (`import type`, erased). `schedule(row,rating)`
-  returns the column bag written by `api/srs`; `previewIntervals(row)` (used by `review/page.tsx`) powers
-  the per-button ETAs. `cardFromRow` seeds legacy SM-2 rows (stability ≈ old interval, difficulty 5). Don't
-  reintroduce `srs_ease` logic — mastery/scopes now key on `srs_stability`/`srs_difficulty`.
-- Deep-dive explanations are **prefetched server-side** (`library/explanations.ts` `loadExplanations`)
-  and passed into `DeepDiveSection` as `initialExplanation`/`initialExamples` so cached ones render
-  instantly (open by default) — don't rely only on the on-tap fetch. Rows with an explanation get a ✨
-  badge (`explainedIds`). The nav tab strip scrolls on mobile but **wraps on `md+`** (`min-h-14`,
-  `md:flex-wrap`) so all tabs are visible on desktop. The library has a "How are these levels decided?"
-  `<details>` explaining the SRS-derived mastery levels (`src/lib/mastery.ts`).
-- ✅ v2.6 shipped (exercise quality + chat→lesson + deep-dive): **★ arrange** hardened — the player
-  now **swaps** tiles on drop (was evicting), and `normalizeExercise` forces the tiles to be exactly
-  the four answer pieces (kills "excess options") + de-dupes MCQ choices; a per-question **Check & fix**
-  button (`refineExercise` in `claude.ts` + `tests/actions.ts`) verifies/repairs a flagged exercise and
-  **persists** it back into `review_tests.exercises` / `lessons.exercises`. Chat answers have a **Save
-  as lesson** button (reuses `/api/lesson/text` with `kind:"chat"`). Saved vocab/grammar rows have an
-  **Explain more** deep-dive (`generateDeepDive` + `knowledge_explanations` table, migration **0008**,
-  `DeepDiveSection`) shown inline in Library + Search.
-- ✅ v2.7 shipped (FSRS scheduler): spaced repetition moved from the hand-rolled SM-2 to **FSRS**
-  (`ts-fsrs`, FSRS v6, target retention 0.9) — see `src/lib/srs.ts` (`schedule`/`previewIntervals`,
-  legacy items seeded from their old interval on first review). New columns `srs_stability/
-  srs_difficulty/srs_state/srs_last_review` (migration **0009**; `srs_ease` now legacy). Mastery
-  labels derive from **stability** (`src/lib/mastery.ts`), the Tests "Struggling" scope uses
-  `srs_difficulty>=7`, and flashcards now show the **predicted next interval under each rating
-  button** (Again/Hard/Good/Easy).
-- ✅ v2.8 shipped (pitch accent): optional **pitch-accent marks** on vocab readings — a global
-  **Pitch** toggle (`PitchToggle`/`use-pitch.ts`, localStorage, per-device) in Library/Search/Review;
-  when on, readings render the classic **overline + downstep** notation (`PitchAccent` +
-  `src/lib/pitch.ts` `splitMora`/`pitchPattern`). Data is the **kanjium** dictionary (CC BY-SA 4.0),
-  built into `src/data/pitch/accents.json` by `scripts/build-pitch-data.mjs` (`npm run pitch:build`)
-  and **lazy-loaded** only when pitch is enabled. Word-level only (sentence intonation isn't in free
-  offline data). No DB change.
-- ✅ v2.9 shipped (pitch colors + study coach): **(a)** pitch marks are now **colored by accent type**
-  (平板/頭高/中高/尾高 → blue/rose/amber/emerald) with a small JP type tag + a `PitchLegend` shown by the
-  toggle (`accentType`/`ACCENT_TYPE_META` in `src/lib/pitch.ts`). **(b)** a personalized **study coach**:
-  `src/lib/insights.ts` derives strengths/weaknesses **live from FSRS state** (`computeInsights` reuses
-  `masteryLevel`; zero LLM/DB cost — a struggling item self-resolves as it stabilizes). A **Study-next**
-  widget + **Coach's note** sit on `/dashboard`; the chat tutor's system prompt now carries a compact
-  `statsDigest` (`<learner_progress>` in `prompts.ts`) so Sensei adapts emphasis each turn. The coach
-  note is the only paid call: `generateCoachNote` (**Haiku**, `COACH_MODEL`) via `/api/insights/coach`,
-  **cached in `learner_insights`** (migration **0010**, owner runs it) keyed by a stats **signature** so
-  it regenerates only when weaknesses shift or after 24h.
-- ✅ v3.0 shipped (sources + books/collections + multi-page fix): **(a)** photo→lesson now **scales
-  with page count** — `buildLessonSystemPrompt(profile, recalled, pageCount)` raises the word/vocab/grammar
-  budget and tells the model to cover EVERY page (pages are wrapped in `<page n>` tags, not weak `--- Page ---`
-  markers); `streamLesson(..., pageCount)` scales `max_tokens` (`base + 1800·(pages−1)`, cap 12k); recall
-  is sampled across all pages (was page-1 only); **all** page images are saved (`lessons.image_paths`,
-  migration **0011**); OCR default is now Gemini. Fixes the old "only the first page got attention" bug.
-  **(b)** Every lesson/item carries a **source**: a material-type picker on upload (textbook/series/game/
-  internet/real-world) + a **select-or-add collection** (book/game/series) with cover + page range
-  (`src/lib/source.ts`, `src/lib/collections.ts`, migration **0012** adds `collections`, lessons
-  `material_type/collection_id/page_start/page_end`, and items `source_type/collection_id/lesson_id` — the
-  real `lesson_id` link finally replaces the title-ilike heuristic). `storeKnowledge` takes a
-  `KnowledgeAttribution` (set on insert only; dedupe keeps the original source). Source badges + a source
-  filter in Library; per-lesson **backfill** editor (`updateLessonSource` stamps items by `lesson_id`, or by
-  term-in-text for legacy items). **(c)** New **Books** tab (`/books`, `/books/[id]`): collection cards,
-  editable total pages, a **page grid colored by FSRS mastery** (`pageMastery()` in `lib/mastery.ts`;
-  cover/index/skip flags via `collection_pages`, migration **0013**), tap-a-page → its lesson + items,
-  per-collection vocab/grammar list, and a cached **AI summary** button (`generateCollectionSummary` +
-  `buildCollectionSummaryPrompt`, cached in `collections.summary_md`). Run migrations **0011–0013** in order.
-- ✅ v3.1 shipped (study-page AI helper, cost toggle, UX polish): **(a)** the in-test discuss drawer
-  became a **floating "Ask Sensei" bubble** (`src/components/ask-sensei/ask-sensei.tsx`) reused on
-  **tests, lessons, flashcards, and kanji** — context-aware via a discriminated `AskContext` union
-  (`exercise|vocab|kanji|lesson|free`) that `buildDiscussSystemPrompt(context)` branches on; on mobile
-  it's a bottom **sheet** so the close X is never trapped under the top nav (the old bug). Hosts lift
-  the active item: `ExercisePlayer` reports `onIndexChange`; the old `ExerciseDiscussPanel`/in-player
-  "Ask AI" button are gone (file now unused). **(b)** Lessons get a **Quick (Gemini) / Standard
-  (Claude Sonnet) / Deep (Opus)** writer toggle (`lessonModel` form field → `runClaudeLessonStream` /
-  `runGeminiLessonStream`); **deep no longer silently uses Opus** — only when picked. `generateExercises`
-  `max_tokens` trimmed. **(c)** Library mastery legend + source filter now count the **whole DB**
-  (`page.tsx` aggregates SRS fields for all items via `masteryLevel`), not just the loaded 150.
-  **(d)** Books page grid collapses into **ranges of 50** with a mini mastery bar + "N studied" and a
-  **jump-to-page** box (`book-detail.tsx`). **(e)** Kanji: detail remembers the level you came from via
-  `?level=`/`?from=` + sessionStorage **scroll restore**; **learned (top-right) and has-words
-  (bottom-right) badges no longer overlap**; the **mnemonic generator is structured** (`KANJI_MNEMONIC_SCHEMA`
-  → `{mnemonic, examples}`) with a **Gemini/Claude model picker**, and its 2–3 example words are
-  **auto-saved to the library** tagged `source_type:"kanji"` (new SourceType + badge) and cached in
-  `kanji.examples` (migration **0014**, degrades gracefully). **(f)** After a flashcard session you get
-  **"Keep studying (N due)"** (review page returns a total due count); the test/lesson completion screen
-  supports an `onContinue`. **(g)** Check & fix takes a **free-text note** (`refineExercise(ex, note)` →
-  `<learner_note>`); exercise prompts tightened against **answer-giveaway MCQs** and **duplicate arrange
-  tiles** (`normalizeExercise` rejects a ★-tile already present in the visible sentence). **(h)** Lesson
-  prompt now adds a **問題の解説** section that solves/explains any exercises present in the photo.
-  **(i)** Dashboard "Added in 14 days" → **Activity** (added + reviewed, with a min bar height and an
-  empty-state link to Review). **(j)** Every action that spends API tokens now shows a tiny
-  **`CostHint`** (`src/components/cost-hint.tsx`) — a coin icon + the model name (e.g. "Claude Sonnet",
-  "Gemini Flash", "Claude Haiku") with a hover tooltip — on chat send, lesson/summary/exercise/test/map/
-  coach/deep-dive/collection generation, Check & fix, Ask Sensei, and kanji mnemonics. Run migration
-  **0014** after 0011–0013. *(Search/Library scroll-position memory was intentionally left out —
-  restoring it needs setState-in-effect, which the lint forbids.)*
-- ✅ v3.2 shipped (Gemini-default engine, lesson model options, mobile & ruby fixes): **(a)** a global
-  **AI engine** setting (`profiles.ai_engine`, migration **0015**, Settings toggle, default **gemini**)
-  routes the *secondary* AI calls to Gemini, switchable to Claude. Mixed tiers via `AiEngine` +
-  `resolveEngine` (`src/lib/claude.ts`) and `getAiEngine` (`src/lib/ai-engine.ts`): structured/cheap →
-  **Gemini Flash** (`generateExercises`, `refineExercise`, `extractKnowledge`, `generateKnowledgeMap`,
-  `generateDeepDive`, `generateCoachNote`), conversational → **Gemini Pro** (`runDiscussStream`,
-  `runSummaryStream`, `generateCollectionSummary`). Each generator takes an `engine` param and branches
-  to shared Gemini helpers (`geminiStructured`/`geminiText`/`runGeminiStream` in `src/lib/gemini.ts`,
-  reusing each function's existing parser). **The main chat tutor (`streamChat`) and OCR always stay on
-  their own models** — chat = Claude. Routes/actions read `ai_engine` and thread it (discuss + summary
-  routes refactored to the `onDelta` ReadableStream shape). `CostHint` on these shows **"AI engine"**
-  (model follows the toggle). **(b)** Lesson uploads gain a **Quick+ (Gemini Pro)** option (4th choice;
-  `gemini-pro` was already wired). **(c)** Lessons now **force English** output (explicit directive in
-  `buildLessonSystemPrompt` + reinforced in `runGeminiLessonStream`) — fixes Flash writing lessons in
-  Japanese. **(d)** **Ruby fix**: Gemini JSON HTML-escapes `<ruby>` (→ literal `&lt;ruby&gt;`);
-  `decodeRubyEntities` (safe `&lt;`/`&gt;`/`&amp;`, never `&quot;`) runs on all Gemini JSON, plus
-  `cleanRuby` strips stray backticks around ruby in `parseKanjiMnemonic`. **(e)** **iOS keyboard zoom**:
-  `@media (pointer: coarse) { input,textarea,select { font-size:16px } }` in `globals.css` (touch only;
-  no `maximum-scale`, pinch-zoom preserved). Run migration **0015** after 0011–0014.
-- ✅ v3.3 shipped (Ask-Sensei fixes + selectable chat model + SNS helper): **(a)** **Ask Sensei**
-  bottom-sheet now **lifts above the on-screen keyboard** (`useKeyboardInset` via `visualViewport`,
-  `useSyncExternalStore` so it's lint-clean) — fixes the iOS bug where the input was hidden behind the
-  keyboard and only the suggestion chips were tappable; the discuss prompt switched from `<ruby>` HTML
-  to **parenthetical furigana** 漢字（かんじ） (Gemini was HTML-escaping the tags) with a client-side
-  `decodeRubyEntities` (now in `src/lib/furigana.ts`) as defense; and **Save to notes** now stores a
-  cheap **1-line AI summary** (`summarizeNote` in `claude.ts` → `appendNoteSummary` in
-  `review/actions.ts`) instead of the whole reply. **(b)** Flashcard reveal shows a **tappable kanji
-  breakdown** (char + primary meaning, linking to `/kanji/[char]`) — computed server-side in
-  `review/page.tsx` (`kanjiGlosses` via `@/lib/kanji` `getInfo`; `buildMeta` is now async, stored in
-  `CardMeta.kanji`); resume-after-navigation already works via `use-review-session.ts`. **(c)** The
-  **main chat tutor is now model-selectable** — a header dropdown (Gemini Flash default / Pro / Sonnet /
-  Opus) persisted in `profiles.chat_model` (**migration 0018**). `streamChat` was replaced by
-  `runChatStream({model,onDelta})` in `claude.ts` (`ChatModel`/`resolveChatModel`; Claude via Anthropic
-  stream, Gemini via `runGeminiStream`); `/api/chat` takes a `model` body field (falls back to the saved
-  default), `chat-client` sends it + persists via `setChatModel` and the `CostHint` follows the choice.
-  OCR + lesson writing keep their own pickers. **(d)** New **SNS** tab (`/sns`) — a natural X/Twitter
-  communication helper: pick a **mode** (Reply / New post / Explain) + **tone**, give light context
-  (their message / what you want to say in Thai or rough JP), and get **3 natural Japanese phrasings**
-  each with a **Thai translation + nuance note** (+ a short ちょい学び kanji/grammar aside), or a Thai
-  **explanation** of a pasted tweet. `buildSnsSystemPrompt`/`buildSnsUserMessage` in `prompts.ts` adapt
-  the owner's Thai gem prompt (male, casual SNS-savvy, respects the user's word choices, N2 woven in but
-  **not capped — N1+ too**); explanations stay in **Thai** via a new `geminiStructured({english:false})`
-  flag. `generateSnsOptions` (structured, Gemini Pro / Claude) in `claude.ts`; `/api/sns` saves history
-  (`sns_interactions`, **migration 0019**) and **auto-extracts** vocab/grammar into the library
-  (`source_type:"sns"`, all levels). A refine chat reuses the **Ask Sensei** bubble via a new
-  `AskContext` `kind:"sns"`. Run migrations **0018**+**0019** after 0015.
-- ✅ v3.4 shipped (mobile UI/UX polish): **(a)** **Pitch-accent alignment** — marked morae no longer sit
-  ~3px lower; every mora now reserves a uniform transparent `border-t-[3px]` and only the overline
-  (top)/downstep (right) get color via new per-side classes (`over`/`drop`) in `ACCENT_TYPE_META`
-  (`pitch.ts`) — see `pitch-accent.tsx`. **(b)** **Dashboard 14-day chart** no longer overflows on
-  mobile: per-day columns got `min-w-0`, labels `truncate`, bars row `overflow-hidden`
-  (`dashboard/page.tsx`). **(c)** **Safe-area / Dynamic Island** — `appleWebApp.statusBarStyle` is now
-  **`black-translucent`** so the installed PWA paints edge-to-edge under the island (header keeps its
-  `env(safe-area-inset-top)` padding; mobile header bg made opaque). NOTE: Dynamic Island **Live
-  Activities are native-iOS-only (ActivityKit) — a PWA cannot use them**; re-add the home-screen app
-  after deploy for the status-bar change. **(d)** **Flashcard "hologram glitch"** transition — RGB-split
-  `glitch-in` CSS keyframe (`globals.css`) on reveal + card advance in `review-client.tsx`, gated by
-  `useReducedMotion()` (plain fade when reduced). **(e)** **Tap sounds + haptics** (default ON) — tiny
-  synthesized Web Audio blips + `navigator.vibrate`, no asset files (`src/lib/use-sound.ts`,
-  `useSyncExternalStore` flag like `use-pitch`); hooked into the shared **Button**, flashcard
-  reveal/grade, and nav taps; **SoundToggle** in Settings ("Device preferences"). **(f)** **Tap-registered
-  feedback** — each nav link shows a pending spinner via Next 16 **`useLinkStatus`** (`NavLinkSpinner`
-  in `nav.tsx`), and new **`loading.tsx`** skeletons added for `review/chat/books/lessons/settings/sns`
-  (reuse `GeometricLoader`). No DB migration. Settings AI-engine help text updated (chat now has its own
-  model picker).
-- ✅ v3.5 shipped (pitch render rewrite + modern sound): **(a)** `PitchAccent` (`pitch-accent.tsx`)
-  no longer draws the overline with per-mora transparent borders (low morae were falling back to a
-  visible border → "line over everything"); it now renders **explicit** `.pitch-line`/`.pitch-drop`
-  elements **only on high/drop morae**, so atamadaka shows the overline on mora 1 only. The line
-  **draws left→right** (`pitch-draw` keyframe, staggered `--pitch-delay`) with a soft fuse-like glow
-  (`pitch-glow`) colored by accent type via a new `cssColor` (`var(--color-*)`) field in
-  `ACCENT_TYPE_META`; reduced-motion shows a static line. Keyframes/classes in `globals.css`.
-  **(b)** UI sound (`src/lib/use-sound.ts`) swapped from chiptune oscillator sweeps to **soft sine
-  ticks** through a low-pass filter with a smooth envelope (tap/reveal/grade); on/off + haptics unchanged.
-- ✅ v3.6 shipped (SNS reliability + feedback loop, futuristic splash, chat UX): **(a)** **SNS helper
-  reliability** — `generateSnsOptions` (`claude.ts`) no longer silently returns empty on a bad model
-  response: it now runs a **fast primary** (Gemini **Flash**, or Claude Sonnet when engine=claude) and,
-  if that comes back with zero options/explanation, **retries once on the other engine's stronger tier**
-  (Gemini **Pro** / Claude Sonnet); parse failures are now `console.error`'d (was a silent `catch`). The
-  502 "try rephrasing" only fires when **both** attempts fail. Refactored into `runSnsAttempt` +
-  `parseSnsResult` + `isEmptySns`. **(b)** **"Edit & check" teacher feedback** — each SNS option now has
-  an inline editor (`sns-client.tsx`, pre-filled with the option's furigana-stripped Japanese); submitting
-  calls **`POST /api/sns/review`** → `reviewSnsDraft` (`claude.ts`, same fast+fallback pattern,
-  `SNS_REVIEW_SCHEMA`/`buildSnsReviewSystemPrompt` in `prompts.ts`) which returns a corrected version,
-  1–5 naturalness rating, an encouraging note, and **tagged errors** (`{type,wrong,right,note}`). Each
-  check is logged to a **learner error corpus** — new table **`sns_corrections`** (migration **0020**,
-  best-effort insert, degrades if unrun). New types `SnsReview`/`SnsError`/`SnsCorrection` in `types.ts`.
-  **(c)** **"Save chat as lesson" is now model-selectable** — `saveAsLesson` (`chat-client.tsx`) gained a
-  small dropdown (Quick Gemini Flash / Quick+ Gemini Pro / Standard Sonnet / Deep Opus) sent as
-  `lessonModel`; was hard-locked to Sonnet. `/api/lesson/text` already accepted the field. **(d)** **Chat
-  starter questions fill the input** instead of auto-sending (`fillSuggestion` strips the trailing "(hint)"
-  + focuses the textarea) — saves a wasted API call so you can attach your words first. **(e)** **Splash
-  redesign (superseded by v3.7).** **(f)** **Merge fix:** removed a duplicate `inputRef` declaration in
-  `chat-client.tsx` (a clean-but-wrong 3-way autostash merge had added it twice). Run migration **0020**
-  after 0016–0019.
-- ✅ v3.7 shipped (splash redesign — stroke draw + RGB glitch): `splash-screen.tsx` rewritten to feel like
-  the **flashcard reveal**. Each title kanji 俺様先生 **draws its strokes one-by-one** (KanjiVG paths via the
-  `stroke-dashoffset` technique from `stroke-order.tsx`, scaled to a fixed ~0.46s per-char window), a
-  **box sweep** wipes the slot (new `.splash-sweep` in `globals.css`), then the crisp glyph **RGB-glitches**
-  in (reuses the flashcard `glitch-in` keyframe) as the stroke layer fades; finish with a rainbow+green
-  underline. **Theme-aware** (uses `--background`/`--primary`/`--foreground`/`--pop-*` tokens — green/white
-  in light, dark/neon-green in dark; rainbow accents in both) and **reduced-motion safe** (just a quick
-  glyph fade). Stroke paths are **hardcoded** in new `src/lib/splash-art.ts` (`SPLASH_STROKES`) so the
-  splash never loads the large per-level kanji bundles; `俺` is outside the JLPT set so it was fetched once
-  from the KanjiVG CDN (`04ffb.svg`) and inlined. The v3.6 navy `splash-grid` keyframe was removed. No DB
-  change.
-- ✅ v3.8 shipped (Ask-Sensei UX + splash simplify): **(a)** **Close button always reachable** — the
-  Ask-Sensei panel (`ask-sensei.tsx`) no longer lifts the whole sheet with `translateY(-kbInset)` (which
-  shoved the header X up behind the top bar on a long reply). It now raises the sheet's **bottom** by the
-  keyboard overlap (`--kb` custom prop) and **shrinks max-height** by `--kb` + `--top-nav`, so the panel
-  top is pinned just below the top nav regardless of keyboard/content. **(b)** **Bigger input** — textarea
-  auto-grow cap 112→176px (`max-h-44`) and desktop panel 400→**440px** so multi-line drafts are readable.
-  **(c)** **Draggable bubble** — the floating Ask-Sensei button is now `drag`-gable (Framer, bounded to a
-  `constraintsRef` viewport box, `touch-none`); a `draggingRef` guard stops a drag from also opening the
-  panel. Resets per page mount (no persistence). **(d)** **Splash simplified** — per the owner the strokes
-  felt mismatched with the bold final glyphs; `splash-screen.tsx` now glitches the **whole title in at
-  once** (reuses `glitch-in` + `.splash-sweep` + glow + underline, theme-aware, reduced-motion safe). The
-  stroke-draw + `src/lib/splash-art.ts` (`SPLASH_STROKES`) were removed. No DB change.
-- ✅ v3.9 shipped (images on knowledge items): a vocab/grammar item can carry **one picture** (a visual
-  memory aid) shown on the **flashcard reveal** and in the **library/search** rows, added three ways:
-  **Upload** from device, **Draw** a doodle (`draw-canvas.tsx`, HTML5 canvas → PNG), or **Find online**
-  (`web-image-search.tsx` via proxy `GET /api/items/image-search`; **uses no AI tokens**). The proxy is
-  **multi-source with automatic fallback**: **Pixabay** → **Openverse**. A provider with no env key
-  returns `[]` (skipped); one that errors throws and the next is tried; Openverse (no key) is the
-  always-available final fallback. Optional key in `.env.local`: `PIXABAY_KEY` — see `.env.example`.
-  (Google Programmable Search was evaluated but dropped: Google deprecated whole-web custom search
-  engines, so they can only search fixed site lists now.) The response includes the `source` used (shown
-  in the modal footer). "Find online" shows
-  **keyword chips** (English meaning default + Japanese term/reading, built locally from the item — no AI)
-  plus an editable box for a custom keyword. The
-  shared control is `src/components/knowledge/item-image.tsx` (current image via `ImagePreview` lightbox +
-  an Upload/Draw/Find/Remove menu), used by `review-client` (on reveal), `library-client`, and
-  `search-client`. Bytes go to the existing private **`lesson-images`** bucket under `<uid>/items/...`;
-  server actions in **`src/lib/item-image-actions.ts`** (`uploadItemImage`/`setItemImageFromUrl`/
-  `removeItemImage`/`getItemImageUrls`) handle upload/download/sign/remove (web picks are **downloaded
-  into storage** so they persist privately, with a stored attribution `image_source`). Migration **0021**
-  adds `knowledge_items.image_path` + `image_source` (degrades gracefully). Review signs urls server-side
-  in `buildMeta`; library/search sign **lazily** when a row expands (`getItemImageUrls`). Known limit:
-  deleting an item doesn't delete its storage object (orphan; fine for one user). Run migration **0021**.
-- ✅ v4.0 shipped (forgetting curve + sawtooth history): **(a)** a **forgetting-curve** section on
-  `/dashboard` (`ForgettingCurve` in `src/components/insights/forgetting-curve.tsx`) — a current
-  **memory-health** distribution bar (strong ≥85% / fading 60–84% / weak <60% / new) plus a **30-day
-  decay forecast** line ("if you stop reviewing, average recall drops like this"). Both are pure local
-  FSRS math (**$0**, no model call): new `healthBuckets` (buckets the existing `retrievability()`) and
-  `retentionForecast` (averages `ts-fsrs` `get_retrievability` at future dates) in `src/lib/srs.ts`.
-  **(b)** **Per-review history is now logged** — previously every review **overwrote** the `srs_*` state
-  on `knowledge_items` (no history anywhere), so the classic SRS **sawtooth** was impossible. New table
-  **`review_log`** (migration **0022**): `/api/srs` inserts one row per grade (rating, retrievability
-  *before*, stability before/after, elapsed days, interval) **best-effort** — a missing table or insert
-  error never breaks a review. History is **forward-only** ("from now on"); the past can't be
-  reconstructed. **(c)** **Per-item sawtooth** drill-in: expand a word in `/library` → **Memory history**
-  (`MemoryHistory` in `src/components/insights/sawtooth-chart.tsx`) lazy-loads its log via
-  `loadItemHistory` (`library/actions.ts`) and draws recall snapping to ~100% on each review then decaying
-  (`buildSawtooth` in `src/lib/review-history.ts`, a shared **no-ts-fsrs** module using the
-  `R(t)=0.9^(t/S)` approximation so the client never imports the server-only scheduler). **(d)** an
-  **aggregate review-history** chart on `/dashboard` (reviews/day bars + an avg-**stability** trend line)
-  showing the library getting sturdier overall. Both history views degrade to friendly empty-states until
-  data accrues. Run migration **0022**.
-- ✅ v4.1 shipped (insights analytics + lesson/book/map/kanji round): a new **/insights** data-mining
-  page (`src/lib/insights-mining.ts` pure helpers + `src/components/insights/charts.tsx` hand-rolled
-  SVG/flex charts — composition by source/level/type, **difficulty-vs-stability scatter**, maturity
-  buckets, rating mix, study-rhythm by local hour, **pass-rate by source**, FSRS **calibration** actual
-  vs predicted, leech table). New **Insights** nav tab. **Lessons**: re-uploading a page that already has
-  a lesson now **asks** Add-to-existing vs Create-separate (`findLessonForPage` + `mode:"extend"` in
-  `api/lesson/route.ts` appends article/images/source/exercises into the same lesson, dedupe avoids dup
-  items); editing a lesson's book/page **fully moves** it — `updateLessonSource` deletes stale
-  `collection_pages` before re-placing. New **chapter** layer (migration **0023**: free-text
-  `lessons.chapter` + independent `chapter_page`; uploader + source-editor inputs; collapsible chapter
-  sections in the book view; degrades gracefully if 0023 unrun). **Map** at scale: a **scope picker**
-  (All / book / JLPT level / source → `/api/map` filters before the 200-cap, scope stored in
-  `knowledge_maps.data.scope`) + a client **search/filter overlay** (highlight/dim graph nodes, filter
-  board). **Kanji coverage**: shared `src/lib/kanji-coverage.ts` → full **% learned** section on `/kanji`
-  (overall + per-level bars + status heatmap of all 2211 kanji) and a compact card on `/insights`.
-  **Books**: first tap on a page previews its items, second tap opens the lesson. Run migration **0023**.
-- ✅ v4.2 shipped (review UX): the insights "Compare forgetting curves" became **Compare review
-  history** — real per-word **sawtooth** from `review_log` (reuses `buildSawtooth` + the exported
-  `SawtoothChart`), with **Separate** (small multiples) and **Overlay** (aligned to each word's first
-  review) views; the insights page groups its already-fetched logs by item (added `stability_after` to
-  `LOG_COLUMNS`), no new query. Flashcard review now shows **"N due left"**. The **Review nav badge is
-  live + uncapped**: a `useSyncExternalStore` store (`src/lib/use-review-due.ts`) seeded each navigation
-  by `ReviewDueSync` in the layout and decremented in the grade handler from `/api/srs`'s `due` (an
-  "again" with a minutes-ahead due correctly stays counted) — updates without a refresh and shows the
-  real number (no "99+").
-- ✅ v4.3 shipped (**"Editorial FUI" retheme** — visual + motion, presentation-only): the whole app was
-  reskinned from the original **Japanese pop-art** look (bright green `#16a34a` / rose `#f43f5e`, halftone,
-  pixel "buddies", glitch reveals, rainbow dividers, graph-paper) to **"Editorial FUI"** — a magazine
-  grammar borrowed from the owner's portfolio: warm **paper** (light) / ink **charcoal** (dark) signature
-  tones, **one cobalt accent** (`#2742f0`, lifted to periwinkle `#5b78ff`/`#6a86ff` on dark for legibility),
-  **serif narrates / grotesk punches / mono labels** (Fraunces + Space Grotesk + JetBrains Mono, + Noto
-  Serif/Sans JP), a blueprint grid, and award-site kineticism. **No engine/framework change** — same
-  Next.js/React/Tailwind; the change is the design-token + typography rewrite in `globals.css` + `layout.tsx`
-  and a new **motion layer** (`gsap` + `lenis` added; Framer Motion kept). New reusable kit in
-  **`src/components/motion/`**: `smooth-scroll` (Lenis), `cursor` (a visible circle dot that grows + shifts
-  cyan on hover; fine-pointer only), `magnetic` (`useMagnetic`/`Magnetic`), `reveal`+`use-in-view`
-  (mask/decode/`.is-in` triggers), and the **editorial kit** (`editorial.tsx`: `Gline` drawing gradient
-  line, `Highlight` box-sweep, `FlowText` flowing-gradient display words, `RunningLine` global top bar,
-  `Marquee`, `InView`, `JpDisplay` big-fat JP type) + `PageHeading` (mono kicker + gline + JP accent +
-  optional vertical `.vtext`). **Applied across** all main pages (PageHeading + big JP on dashboard 記録 /
-  insights 記憶 / books 蔵書 / lessons 学び / sns 言葉 / chat 会話 watermark); **insights charts made kinetic**
-  (forgetting-curve line draws in, bars grow/rise, scatter dots fade in — opacity-only after a blur-perf
-  fix); **review** got distinct rating-button colors + a viewport-fixed bottom **gline answer-flash**
-  (red→amber→sky-blue `#3b82f6`→glowing green). The old pop-art look is preserved in tag
-  **`aesthetic/pop-art-v1`** + the **`legacy/pop-art/`** archive (verbatim `globals.css` + components +
-  restore README). Reduced-motion is honored throughout. **No DB/API/Supabase/RAG/SRS change.** Done as
-  branch `feat/editorial-fui` → PRs #4/#5.
-- ✅ v4.4 shipped (**daily study budget, keyboard grading, faster cursor**). Run migration **0024**.
-  **(a) The backlog fix.** Root cause: `knowledge_items` are inserted by `lib/memory.ts` with no `srs_*`
-  fields, so `srs_due` is NULL — and the queue counted NULL as *due* **and** sorted it first
-  (`nullsFirst`). Every word extracted from a chat or a photographed page therefore jumped to the head of
-  the queue the instant it was created, burying real overdue reviews under an unbounded pile of unseen
-  words (~1,065 "due", of which ~985 were new). Now split into two budgeted buckets by
-  **`src/lib/review-queue.ts`**: reviews ordered by **relative overdueness** (`(now−due)/max(1d, interval)`
-  — a 1-day card 3 days late outranks a 200-day card 3 days late), new words oldest-first, **interleaved**
-  (one new every ~6th slot) so a session never opens with 15 unknown words. Work done today is counted from
-  `review_log` since the study-day start, using `stability_before IS NULL` as an exact "new card introduced"
-  marker (no new column). Budgets live on `profiles` (`daily_new_limit` 15 / `daily_review_limit` 80) with a
-  local **study day** (`study_timezone`, `day_start_hour` 4am) in the pure **`src/lib/study-day.ts`**.
-  **Nothing rewrites `srs_due`** — capping the *display* achieves the same thing without corrupting the
-  elapsed-time signal FSRS trains on. **(b) Every due count now means "left today"** — nav badge
-  (`(app)/layout.tsx`), dashboard StatCard (with the true backlog as a muted sub-line), review header
-  ("N left today" + "985 more waiting · about 13 days at this pace"), and a terminal **"Today's done"**
-  screen with an opt-in `?over=1` escape hatch. `bumpReviewDue(-1)` is now **unconditional** (every grade
-  spends a budget slot, relearning included). `/tests` deliberately keeps the *lifetime* due definition —
-  a practice test is a different activity — and `insights.ts` keeps `due` as the backlog so the coach-note
-  cache signature doesn't churn (a new `dueToday` rides alongside). **(c) FSRS fuzz enabled**
-  (`srs.ts`) so same-day cohorts stop returning on the same day forever. **(d) Park/suspend**
-  (`srs_suspended`): auto-extracted junk leaves every queue for good but stays in the library, with a
-  toggle there and on the flashcard. **(e) Keyboard grading** (`review/use-review-keys.ts`): Anki-style
-  `Space` (reveal → Good) + `1/2/3/4`, plus `S`/`D`/`N`/`?`/`Esc`. Guards on `e.repeat`, modifier keys, and
-  input/textarea/contenteditable focus — mandatory, since the note editor is `autoFocus`ed and the image
-  search portals to `document.body`. **(f) Cursor** rebuilt as two layers: the dot is written straight to
-  `transform` (rAF-coalesced, **zero lag** — it replaced a `gsap.quickTo` at `duration: 0.35`, ~21 frames
-  behind the hand) with a separate ring trailing at 0.28s; Lenis softened 1.1→0.8.
-  All new columns **degrade gracefully** if 0024 hasn't run (`hasSuspendColumn` probe + defaulted profile
-  reads), so the app is deployable before the migration.
-- 🐛 v4.4 bug fixes: `grade()` had **no double-submit guard** (only the rating grid unmounting protected
-  the mouse path — key-repeat would have fired N grades); `SESSION_TTL_MS` was exported but never enforced,
-  so a stale tab resumed yesterday's cards — now enforced plus a **versioned sessionStorage key**
-  (`review-session-v2`), a shape guard, and a `dayKey` rollover check; `buildMeta` awaited ~3 round-trips
-  **per card serially** (~90 sequential hops per batch) → `Promise.all`; "Keep studying" did a hard
-  `window.location.assign` that replayed the 1.75s splash every 30 cards → `router.refresh()` + splash now
-  **once per tab**; single-item review (`?item=`) wrongly decremented the nav badge; `elapsed_days` fell
-  back to `last_seen` so a first review logged "days since added" instead of null; `useMagnetic(0)` still
-  attached listeners on every Button, and its per-move `getBoundingClientRect()` **included its own
-  transform** so the magnet chased its own centre and settled short of `strength`; `cursor: none` also
-  killed the text I-beam; dashboard/activity charts bucketed by **UTC** (07:00 local in Bangkok) →
-  `calendarDayKey`. Dead code removed (`appendNoteSummary`).
-- ⏳ Next ideas (not built): an **SNS growth view** that aggregates `sns_corrections.errors[].type` over
-  time (the error log is being collected now); library multi-select bulk source-tag (per-lesson editor covers backfill for
-  now); per-page knowledge granularity (page color currently aggregates the whole lesson's items); a
-  standalone personalized-lesson generator; Anki export; paginate
-  `/dashboard` and `/map` (still fetch all items — covered for now by `loading.tsx`); real
-  brand icon to replace the placeholder seal in `src/lib/icon-art.tsx`; a true `lesson_id` link on
-  `knowledge_items` (would replace the text-match in "Lessons mentioning this", future items only).
-- ⏳ Maintenance / `npm audit`: 2 moderate advisories (GHSA-qx2v-qp2m-jg93, `postcss < 8.5.10` XSS)
-  come **only** from the `postcss@8.4.31` bundled inside `next@16.2.9` (our own postcss via
-  `@tailwindcss/postcss` is 8.5.15, already patched). Not exploitable here — Next's postcss processes
-  our own build-time CSS, not user input. **Do NOT run `npm audit fix --force`** (it would downgrade
-  next 16→9). The real fix lands in **Next 16.3.0** (only `16.3.0-preview.*` exists as of 2026-06-18,
-  we're on the latest stable). Bump to `next@16.3.0` when it ships stable and the advisories clear.
+## Status
+- ✅ **v5.0** (2026-10-01/02) — the lean rewrite: Astro + Svelte 5, flashcards first. Review with the
+  v4.4 daily budget, keyboard grading (Space / 1–4 / S / D / N / ? / Esc), park, notes, pictures,
+  pitch accent, conjugation, kanji breakdown, Ask Sensei with "save to note", study-ahead and `?over=1`;
+  Words with fuzzy search, mastery filters and quick-add; Kanji browser with coverage and bulk
+  mark-learned; kanji detail with stroke order and mnemonics; Settings (profile, pace, tone, sound,
+  pitch, sign out); PWA manifest + icons; vitest suite.
+- ⏳ Ideas: Anki export; a "learning" chip that isn't always empty (every low-stability word is
+  currently "struggling" by the lapses/difficulty rule — see `lib/mastery.ts`); offline review
+  (the outbox already survives offline grading; the queue still needs a connection to load).
 
-## Decisions log
+## Decisions
+- **v5 is a lean rewrite, not a port.** Only what was actually used survives. The old app is
+  `nextjs-v4.4`; the old look is `aesthetic/pop-art-v1`. Restore from those, not from memory.
+- **Grading happens in the browser and goes through the outbox.** FSRS runs client-side; each grade is
+  appended to localStorage first and flushed in order under a Web Lock, so a dropped connection never
+  loses a review and the next card never waits on the network. A fresh queue first awaits `flush()` and
+  skips items whose update hasn't landed (`pendingItemIds()`), and subtracts pending grades from
+  today's count.
 - **The visible "due" number is today's budgeted workload, not the lifetime pile — and we cap the
-  *display*, never rewrite `srs_due`.** Anki's FSRS Helper offers a bulk "Postpone" that pushes overdue
-  cards forward; we deliberately don't. It only changes the dates you're shown, which the daily budget
-  already fixes, while feeding FSRS a false elapsed time — and elapsed time is exactly the signal the
-  memory model is fitted on. The backlog is instead shown once, quietly, with a "~N days at this pace"
-  estimate, because a finite pile with a date on it is motivating and an ever-growing badge is not.
-  For the same reason there is **no streak**: it would turn a missed day into a punishment, which is the
-  failure mode this whole change exists to undo.
-- Hybrid AI (Gemini OCR/embeddings + Claude chat/lessons) for best quality-per-cost.
-- Single-user auth kept (RLS needs a user); email confirmation off so it's effectively
-  "log in once." No service-role key — RLS via the user session.
-- Practice exercises use Claude structured outputs, generated BOTH automatically at lesson time
-  (cached in `lessons.exercises`) and on demand (review tests from due items). Sonnet (`CHAT_MODEL`)
-  for cost; review-test exercises carry `item_id`s so answers feed the SRS scheduler.
-- "Mastery" coloring is derived purely from existing `srs_*` fields (`src/lib/mastery.ts`); no new
-  data is stored. New helpers: `src/components/exercises/exercise-player.tsx`, `src/app/(app)/library/*`,
-  chat drawer + windowing in `src/app/(app)/chat/*`.
-- Learner strengths/weaknesses are **derived live** from the FSRS `srs_*` columns (`src/lib/insights.ts`),
-  NOT stored in a separate maintained table — the SRS state already IS a self-updating capability model,
-  so a derived view can't drift and costs nothing. The only persisted thing is the AI **coach narrative**
-  (`learner_insights`), cached by a weakness **signature** + 24h TTL so the Haiku call rarely fires.
-  Chat awareness is the same digest injected into the prompt (no per-message LLM analysis).
-- TTS uses the browser Web Speech API (ja-JP) — free, no API cost; `SpeakButton` no-ops where unsupported.
-- Furigana in short fields (exercise options/tokens) renders via `RubyText` (`src/components/ruby-text.tsx`);
-  `showReading()`/`stripFurigana()` in `src/lib/furigana.ts` hide redundant kana and normalize answer checks.
-- PWA scope fix relies on `app/manifest.ts` (`scope:"/"`, `display:standalone`); the iOS home-screen app
-  must be **removed and re-added** after deploy for a new manifest to take effect. App icons are generated
-  at build with `ImageResponse` (no binary assets) — `LIBRARY_COLS` lives in `library/columns.ts` because a
-  `"use server"` module may only export async functions. Calendar buckets by **UTC** day (matches dashboard);
-  acceptable for a single user, revisit if local-tz day boundaries matter.
-- Map Graph uses React Flow **uncontrolled** (`defaultNodes`/`defaultEdges` + `key={version}` to remount on
-  Regenerate) so dragging works without `useNodesState`; positions are snapshotted in a ref on
-  `onNodeDragStop` and saved into `knowledge_maps.data.positions` (jsonb, no migration). Node positions key
-  on item id / `group-<id>`. Lesson-fetch + loading state run in the click handler (not an effect) to stay
-  clear of the `react-hooks/set-state-in-effect` lint rule.
-- Search (`/search`) matches client-side with `fuse.js` over `term/reading/romaji/meaning`, querying both
-  the raw text and `wanakana.toHiragana(query)` so rōmaji/kana/kanji/English all hit; debounced server
-  actions (driven from the input handler, not an effect) do the lesson `ilike`. Test "scopes" are pure SQL
-  on `srs_*` (free); tokens are only spent in `POST /api/tests`; replays (`GET /api/tests/[id]`) are free.
-  Generated tests persist in `review_tests`. `arrange` is JLPT ★-mode when the model emits a `{{BLANKS}}`
-  marker + valid `star_index` + exactly four pieces; otherwise it falls back to the legacy whole-sentence
-  arrange (old cached exercises keep working). Grading checks only the ★ slot.
-- Kanji data is **bundled offline**: `npm run kanji:build` (`scripts/build-kanji-data.mjs`) downloads
-  KanjiVG (per-glyph SVG via jsDelivr, cached in gitignored `scripts/.cache`) + kanji-data `kanji.json`,
-  and emits `src/data/kanji/{levels,info/n*,strokes/n*}.json` grouped by JLPT (common-first). `src/lib/kanji.ts`
-  eagerly loads the tiny `levels.json` for `levelOf`/lists and **lazy-loads** per-level info/strokes via
-  dynamic `import()` (memoized). Components come from KanjiVG `kvg:element` group nesting (root's direct
-  children); strokes are the ordered `<path d>`. Attribution (CC-BY-SA) is shown on the Kanji page.
-- Supabase queries that fetch a **full list** for display/aggregation must page past PostgREST's
-  default **1000-row cap** via `fetchAllRows` (`src/lib/fetch-all.ts`) with a stable `.order()`
-  (add `id` as a tiebreaker on non-unique sorts). Used by dashboard, library stats, search, kanji
-  seen-set, chat/coach digests, conversation drawer, and per-collection items. Queries with an
-  intentional small bound (`review`/`tests`/`map`/`summary` `.limit(...)`, infinite-scroll
-  `.range`, `count:"exact",head:true`) are left as-is.
-- **Supabase MCP** for AI agents is wired via committed `.mcp.json` (hosted server, project-scoped,
-  **read-only** by default); the access token is env-only (`SUPABASE_ACCESS_TOKEN`), never committed.
-  See "Supabase MCP" under Running it. Chosen because this repo is DB-heavy (schema/migration work,
-  live-data debugging); read-only + project scope keeps the blast radius small for the single private DB.
-- **The v4.3 "Editorial FUI" revamp is a reskin, not a re-platform.** Common confusion: the *portfolio*
-  this look was copied from is built on **Astro**; **this app is and stays Next.js**. What makes the new
-  look is (1) a rewritten **design-token + typography system** (CSS custom properties in `globals.css`,
-  fonts via `next/font` in `layout.tsx`) and (2) an **animation stack** — **GSAP** (custom cursor,
-  magnetic buttons, `quickTo` tweens) + **Lenis** (smooth/inertia scroll) layered on top of the existing
-  **Framer Motion** (component enter/exit) and IntersectionObserver-driven reveals. Legacy vs new differs
-  technically only by those two added libs + the token/font rewrite + the new `src/components/motion/`
-  primitives; aesthetically it's pop-art→editorial (loud/playful → restrained/typographic/kinetic).
-  This "Awwwards-style" toolkit has well-known alternatives if we ever extend it: smooth scroll =
-  **Lenis** (ours) / Locomotive Scroll / native View Transitions; animation = **GSAP**(+ScrollTrigger) /
-  **Framer Motion / Motion** / Motion One / react-spring / anime.js; WebGL = **Three.js** / React Three
-  Fiber / **OGL** (the portfolio uses OGL for image distortion); designer assets = **Rive** / **Lottie**;
-  page transitions = Barba.js / Swup. Next natural upgrades toward the portfolio ceiling would be **GSAP
-  ScrollTrigger** (scroll-scrubbed timelines) and an **OGL/Three.js** WebGL hero — deliberately skipped
-  for now since this is a study *tool*, not a showcase (motion should not get in the way of studying).
+  display, never rewrite `srs_due`.** A bulk "postpone" would feed FSRS a false elapsed time, which is
+  the signal it is fitted on. The backlog is shown once, quietly, with a "~N days at this pace" estimate.
+  **No streak**: it would turn a missed day into a punishment.
+- `review_log.stability_before IS NULL` marks a card's first-ever review — that's how "new cards
+  introduced today" is counted, with no extra column. Keep writing it as `srs_stability ?? null`.
+- Single-user auth (RLS needs a user). The inline guard in `Base.astro` only checks that a session key
+  exists — UX, not security; `requireUser()` catches a session that can't refresh.
+- Pictures are re-encoded in the browser (≤1280 px WebP, JPEG on Safari) before upload, so no Storage
+  image transform is needed; signed URLs are batched and cached (`signPaths`).
+- Mastery is derived from FSRS state (`lib/mastery.ts`); nothing extra is stored.
+- TTS is the browser's Web Speech API (ja-JP) — free.
