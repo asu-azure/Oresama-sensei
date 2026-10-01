@@ -1,0 +1,96 @@
+/* ==========================================================================
+   MV motion — pressroom's cut-down vocabulary of the owner's music-video
+   engine. Things ARRIVE with an RGB split converging, a press RINGS a strike,
+   page cuts land hard. Every effect is ≤ 600 ms, first view or interaction
+   only, and lands on its final state under prefers-reduced-motion.
+   ========================================================================== */
+
+:root {
+  --mv-ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --mv-r: rgba(255, 61, 77, 0.75);
+  --mv-c: rgba(24, 196, 214, 0.75);
+}
+
+/* ---- RGB split converging ------------------------------------------------
+   Two coloured copies of the glyphs start a third of an em apart and slide into
+   the real one while two clip bands jump. text-shadow only inside the
+   keyframes, so nothing is duplicated in the DOM. Re-triggered by re-adding
+   the class (see lib/mv.ts converge()). */
+.mv-converge {
+  animation: mv-converge 0.42s var(--mv-ease) both;
+}
+@keyframes mv-converge {
+  0%   { text-shadow: -0.35em 0 var(--mv-r), 0.35em 0 var(--mv-c); clip-path: inset(0 0 58% 0); translate: -0.03em 0; }
+  7%   { clip-path: inset(46% 0 12% 0); translate: 0.05em 0; }
+  14%  { clip-path: inset(12% 0 50% 0); translate: -0.02em 0; }
+  24%  { clip-path: inset(-20% -5% -20% -5%); translate: 0 0; }
+  100% { text-shadow: 0 0 rgba(255, 61, 77, 0), 0 0 rgba(24, 196, 214, 0); clip-path: none; }
+}
+
+/* A softer arrival for blocks of body copy (no clip bands over prose). */
+.mv-rise {
+  animation: mv-rise 0.32s var(--mv-ease) both;
+}
+@keyframes mv-rise {
+  from { opacity: 0; translate: 0 6px; }
+  to { opacity: 1; translate: 0 0; }
+}
+
+/* ---- Punch: a 180 ms scale kick ------------------------------------------ */
+.mv-punch {
+  animation: mv-punch 0.18s var(--mv-ease);
+}
+@keyframes mv-punch {
+  from { scale: 1.08; }
+  to { scale: 1; }
+}
+
+/* ---- Note strike: a ring of light at the pointer, fixed to the viewport -- */
+.mv-strike {
+  position: fixed;
+  z-index: 95;
+  width: 44px;
+  height: 44px;
+  margin: -22px 0 0 -22px;
+  border-radius: 50%;
+  border: 1.5px solid var(--accent);
+  box-shadow: 0 0 18px 2px rgba(39, 66, 240, 0.45), inset 0 0 10px rgba(106, 160, 255, 0.35);
+  pointer-events: none;
+  animation: mv-strike 0.48s var(--mv-ease) forwards;
+}
+.mv-strike--amber {
+  border-color: #e8a31a;
+  box-shadow: 0 0 18px 2px rgba(232, 163, 26, 0.45), inset 0 0 10px rgba(255, 214, 102, 0.35);
+}
+@keyframes mv-strike {
+  from { scale: 0.4; opacity: 1; }
+  to { scale: 2.2; opacity: 0; }
+}
+
+/* ---- Page change: a hard cut before the wipe ----------------------------- */
+::view-transition-new(root) {
+  animation:
+    mv-vt-cut 0.11s steps(3, end) both,
+    vt-in 0.36s cubic-bezier(0.7, 0, 0.3, 1) both;
+}
+html[data-vt='back']::view-transition-new(root) {
+  animation:
+    mv-vt-cut 0.11s steps(3, end) both,
+    vt-in-back 0.36s cubic-bezier(0.7, 0, 0.3, 1) both;
+}
+@keyframes mv-vt-cut {
+  0%   { translate: -14px 0; filter: drop-shadow(6px 0 0 var(--mv-r)) drop-shadow(-6px 0 0 var(--mv-c)); }
+  50%  { translate: 10px 0; }
+  100% { translate: 0 0; filter: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mv-converge,
+  .mv-rise,
+  .mv-punch {
+    animation: none;
+  }
+  .mv-strike {
+    display: none;
+  }
+}

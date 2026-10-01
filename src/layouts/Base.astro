@@ -1,0 +1,161 @@
+---
+import '../styles/fonts.css';
+import '../styles/global.css';
+import '../styles/mv.css';
+import { SUPABASE_URL } from '../lib/supabase';
+
+interface Props {
+  title?: string;
+  /** Signed-in pages only. The login page turns this off. */
+  guard?: boolean;
+  /** Site header. The login page turns it off. */
+  topbar?: boolean;
+}
+
+const { title, guard = true, topbar = guard } = Astro.props;
+const fullTitle = title ? `${title} · 俺様先生` : '俺様先生';
+
+const path = Astro.url.pathname.replace(/\/$/, '') || '/';
+const nav = [
+  { href: '/', label: 'Review', current: path === '/', badge: true },
+  { href: '/words', label: 'Words', current: path === '/words' },
+  { href: '/kanji', label: 'Kanji', current: path.startsWith('/kanji') },
+];
+
+// supabase-js keeps the session under sb-<project ref>-auth-token. The guard
+// below only checks that one exists — UX, not security (RLS is the boundary);
+// requireUser() in each island catches a session that can no longer refresh.
+let authKey = '';
+try {
+  authKey = `sb-${new URL(SUPABASE_URL).hostname.split('.')[0]}-auth-token`;
+} catch {}
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="theme-color" content="#0c0c0d" />
+    <meta name="color-scheme" content="dark light" />
+    <title>{fullTitle}</title>
+
+    <!-- Paper/ink tone, before first paint (Settings → Device). -->
+    <script is:inline>
+      try {
+        if (localStorage.getItem('tone') === 'paper') {
+          document.documentElement.dataset.tone = 'paper';
+          document.querySelector('meta[name="theme-color"]').setAttribute('content', '#e9e4d8');
+        }
+      } catch {}
+    </script>
+    {
+      guard && authKey && (
+        <script is:inline define:vars={{ authKey }}>
+          try {
+            if (!localStorage.getItem(authKey)) {
+              location.replace('/login?next=' + encodeURIComponent(location.pathname + location.search));
+            }
+          } catch {}
+        </script>
+      )
+    }
+
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="俺様先生" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+
+    <link rel="preload" href="/fonts/Fraunces-var.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="/fonts/SpaceGrotesk-var.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="/fonts/JetBrainsMono-var.woff2" as="font" type="font/woff2" crossorigin />
+  </head>
+  <body data-guard={guard ? '' : undefined}>
+    <div class="grid-bg" aria-hidden="true"></div>
+
+    {
+      topbar && (
+        <header class="topbar">
+          <a class="topbar__mark" href="/" aria-label="俺様先生 — review">
+            俺様先生<span class="mono">v5</span>
+          </a>
+          <nav class="topbar__nav" aria-label="Primary">
+            {nav.map((n) => (
+              <a href={n.href} aria-current={n.current ? 'page' : undefined} data-astro-prefetch>
+                {n.label}
+                {n.badge && <span class="badge" data-due aria-label="cards left today" />}
+              </a>
+            ))}
+            <a
+              class="topbar__gear"
+              href="/settings"
+              aria-label="Settings"
+              aria-current={path === '/settings' ? 'page' : undefined}
+              data-astro-prefetch
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+                <circle cx="12" cy="12" r="3.2" />
+                <path d="M12 2.8v2.4M12 18.8v2.4M21.2 12h-2.4M5.2 12H2.8M18.5 5.5l-1.7 1.7M7.2 16.8l-1.7 1.7M18.5 18.5l-1.7-1.7M7.2 7.2 5.5 5.5" />
+              </svg>
+            </a>
+          </nav>
+        </header>
+      )
+    }
+
+    <slot />
+
+    <script>
+      import { initMv } from '../lib/mv';
+
+      initMv();
+
+      // --- Page-change direction (cross-document View Transitions) ---------
+      // Back = history traversal or a link marked data-vt="back": the wipe runs
+      // top-down instead of bottom-up.
+      let backLink = false;
+      document.addEventListener('click', (e) => {
+        const a = (e.target as Element | null)?.closest?.('a');
+        backLink = (a as HTMLElement | null)?.dataset.vt === 'back';
+      });
+      window.addEventListener('pageswap', (e) => {
+        const ev = e as Event & { viewTransition?: unknown; activation?: { navigationType?: string } };
+        if (!ev.viewTransition) return;
+        try {
+          sessionStorage.setItem('vt', ev.activation?.navigationType === 'traverse' || backLink ? 'back' : 'fwd');
+        } catch {}
+      });
+      window.addEventListener('pagereveal', (e) => {
+        const ev = e as Event & { viewTransition?: unknown };
+        let dir: string | null = null;
+        try {
+          dir = sessionStorage.getItem('vt');
+          sessionStorage.removeItem('vt');
+        } catch {}
+        if (ev.viewTransition && dir === 'back') {
+          document.documentElement.dataset.vt = 'back';
+          setTimeout(() => delete document.documentElement.dataset.vt, 600);
+        }
+      });
+    </script>
+
+    <script>
+      // Signed-in pages: the header badge (cards left TODAY) and any grades that
+      // were still queued when the last page closed.
+      import { loadDue, onDue } from '../lib/due';
+      import { flush, pendingCount } from '../lib/outbox';
+
+      if (document.body.hasAttribute('data-guard')) {
+        const badges = document.querySelectorAll<HTMLElement>('[data-due]');
+        const show = (n: number) => badges.forEach((b) => (b.textContent = n > 0 ? String(n) : ''));
+        onDue(show);
+        void loadDue(show);
+        if (pendingCount()) void flush();
+      }
+    </script>
+  </body>
+</html>

@@ -1,0 +1,26 @@
+---
+import Base from '../layouts/Base.astro';
+---
+
+<Base title="Not found" guard={false} topbar={true}>
+  <main class="page nf">
+    <p class="mono">404 · 見つかりません</p>
+    <h1 class="head__title nf__title">That page isn't here.</h1>
+    <p class="dim">v5 kept the flashcards, your words and the kanji. Everything else retired with the old app.</p>
+    <a class="btn btn--lead" href="/">Go to review</a>
+  </main>
+</Base>
+
+<style>
+  .nf {
+    min-height: 70svh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+  .nf__title {
+    font-size: clamp(2.2rem, 8vw, 3.2rem);
+  }
+</style>

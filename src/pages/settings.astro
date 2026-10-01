@@ -1,0 +1,10 @@
+---
+import Base from '../layouts/Base.astro';
+import Settings from '../components/settings/Settings.svelte';
+---
+
+<Base title="Settings">
+  <main class="page">
+    <Settings client:only="svelte" />
+  </main>
+</Base>

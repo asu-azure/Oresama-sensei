@@ -1,0 +1,12 @@
+---
+// One static shell for every kanji: the character rides in ?c=, so there is no
+// per-kanji page to build or serve.
+import Base from '../../layouts/Base.astro';
+import KanjiDetail from '../../components/kanji/KanjiDetail.svelte';
+---
+
+<Base title="Kanji">
+  <main class="page">
+    <KanjiDetail client:only="svelte" />
+  </main>
+</Base>

@@ -1,0 +1,10 @@
+---
+import Base from '../layouts/Base.astro';
+import Review from '../components/review/Review.svelte';
+---
+
+<Base title="Review">
+  <main class="page">
+    <Review client:only="svelte" />
+  </main>
+</Base>

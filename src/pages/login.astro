@@ -1,0 +1,21 @@
+---
+import Base from '../layouts/Base.astro';
+import Login from '../components/auth/Login.svelte';
+---
+
+<Base title="Sign in" guard={false}>
+  <main class="shell">
+    <Login client:only="svelte" />
+  </main>
+</Base>
+
+<style>
+  .shell {
+    position: relative;
+    z-index: 1;
+    min-height: 100svh;
+    display: grid;
+    place-items: center;
+    padding: var(--pad);
+  }
+</style>

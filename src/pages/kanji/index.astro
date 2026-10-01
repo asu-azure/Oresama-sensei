@@ -1,0 +1,10 @@
+---
+import Base from '../../layouts/Base.astro';
+import KanjiBrowser from '../../components/kanji/KanjiBrowser.svelte';
+---
+
+<Base title="Kanji">
+  <main class="page page--wide">
+    <KanjiBrowser client:only="svelte" />
+  </main>
+</Base>

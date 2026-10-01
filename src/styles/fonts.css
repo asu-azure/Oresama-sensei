@@ -1,0 +1,33 @@
+/* Latin faces, self-hosted (copied from pressroom). Japanese deliberately has
+   NO webfont: the words come from the database and can contain any kanji, so a
+   subset would leave holes. The JP stacks in global.css name real system
+   mincho / gothic faces instead — one font per word, zero bytes downloaded. */
+
+@font-face {
+  font-family: 'Fraunces';
+  src: url('/fonts/Fraunces-var.woff2') format('woff2');
+  font-weight: 300 600;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Fraunces';
+  src: url('/fonts/Fraunces-Italic-var.woff2') format('woff2');
+  font-weight: 300 500;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Space Grotesk';
+  src: url('/fonts/SpaceGrotesk-var.woff2') format('woff2');
+  font-weight: 300 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('/fonts/JetBrainsMono-var.woff2') format('woff2');
+  font-weight: 400 500;
+  font-style: normal;
+  font-display: swap;
+}

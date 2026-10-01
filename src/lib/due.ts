@@ -39,6 +39,13 @@ export function bumpDue(delta: number) {
   if (c) setDue(c.n + delta, c.day);
 }
 
+/** Forget the cached number (the pace changed, or the user signed out). */
+export function clearDue() {
+  try {
+    sessionStorage.removeItem(KEY);
+  } catch {}
+}
+
 export function onDue(cb: (n: number) => void): () => void {
   const h = (e: Event) => cb((e as CustomEvent<number>).detail);
   window.addEventListener(EVT, h);

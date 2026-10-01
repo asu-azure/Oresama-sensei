@@ -1,0 +1,854 @@
+/* ============================================================
+   俺様先生 v5 — global styles
+   "Editorial FUI", the subset of pressroom's system this app needs: ink by
+   default, cream proof-sheet paper as the other tone, serif narrates / grotesk
+   punches / mono labels, one cobalt accent with sunflower amber as its warm
+   counterpoint, short motion that lands on its final state.
+
+   Tokens only live here. Components use var(--…) and never hardcode a colour
+   that should follow the tone.
+   ============================================================ */
+
+:root {
+  /* ---- Ink (dark) tone — the default ---- */
+  --ink-bg: #0c0c0d;
+  --ink-bg-soft: #151517;
+  --ink-bg-raise: #1c1c1f;
+  --ink-fg: #f4f1ea;
+  --ink-fg-dim: #9a968c;
+  --ink-fg-faint: #57544c;
+  --ink-line: rgba(244, 241, 234, 0.1);
+  --ink-line-strong: rgba(244, 241, 234, 0.22);
+
+  /* ---- Paper tone — cream proof-sheet stock ---- */
+  --paper-bg: #e9e4d8;
+  --paper-bg-soft: #f1ece2;
+  --paper-bg-raise: #f7f3eb;
+  --paper-fg: #16140f;
+  --paper-fg-dim: #5f5a4e;
+  --paper-fg-faint: #a8a08e;
+  --paper-line: rgba(22, 20, 15, 0.14);
+  --paper-line-strong: rgba(22, 20, 15, 0.3);
+  --paper-mark: rgba(22, 20, 15, 0.45);
+
+  /* One cobalt accent; sunflower amber is the warm counterpoint. */
+  --accent: #2742f0;
+  --accent-soft: rgba(39, 66, 240, 0.16);
+  --amber: #e8a31a;
+
+  /* Active semantic tokens — the ink tone */
+  --bg: var(--ink-bg);
+  --bg-soft: var(--ink-bg-soft);
+  --bg-raise: var(--ink-bg-raise);
+  --fg: var(--ink-fg);
+  --fg-dim: var(--ink-fg-dim);
+  --fg-faint: var(--ink-fg-faint);
+  --line: var(--ink-line);
+  --line-strong: var(--ink-line-strong);
+  /* Cobalt is too dark to read as text on ink; links and labels lift it. */
+  --accent-text: #6a86ff;
+
+  /* Mastery (lib/mastery.ts) */
+  --m-new: #8a8579;
+  --m-learning: #18c4d6;
+  --m-young: #6a86ff;
+  --m-mastered: #3fbf7f;
+  --m-struggling: #ff5d6c;
+
+  /* Pitch-accent types (lib/pitch.ts) */
+  --pitch-heiban: #6a86ff;
+  --pitch-atamadaka: #ff5d8b;
+  --pitch-nakadaka: #e8a31a;
+  --pitch-odaka: #3fbf7f;
+
+  /* Ratings, distinct from the cobalt accent */
+  --r-again: #f43f5e;
+  --r-hard: #f59e0b;
+  --r-good: #3b82f6;
+  --r-easy: #10b981;
+
+  /* Type. Latin face first in every stack, then real Japanese system faces —
+     never a subsetted webfont (see fonts.css). */
+  --jp-serif: 'Yu Mincho', 'YuMincho', 'Hiragino Mincho ProN', 'Noto Serif CJK JP', 'Noto Serif JP', 'MS Mincho', serif;
+  --jp-sans: 'Hiragino Kaku Gothic ProN', 'Yu Gothic Medium', 'Yu Gothic', 'YuGothic', 'Noto Sans CJK JP', 'Noto Sans JP', 'Meiryo', sans-serif;
+  --font-serif: 'Fraunces', var(--jp-serif);
+  --font-display: 'Space Grotesk', var(--jp-sans), system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', var(--jp-sans), ui-monospace, monospace;
+
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --pad: clamp(1rem, 4vw, 3rem);
+  --radius: 12px;
+  --col: 40rem; /* the reading column */
+
+  --topbar-h: 3.25rem;
+  color-scheme: dark;
+}
+@media (min-width: 761px) {
+  :root { --topbar-h: 3.5rem; }
+}
+
+/* Paper tone, chosen in Settings (html[data-tone], set before first paint). */
+html[data-tone='paper'] {
+  --bg: var(--paper-bg);
+  --bg-soft: var(--paper-bg-soft);
+  --bg-raise: var(--paper-bg-raise);
+  --fg: var(--paper-fg);
+  --fg-dim: var(--paper-fg-dim);
+  --fg-faint: var(--paper-fg-faint);
+  --line: var(--paper-line);
+  --line-strong: var(--paper-line-strong);
+  --accent-text: var(--accent);
+  --m-new: #8c8676;
+  --m-learning: #0f9fb0;
+  --m-young: #2742f0;
+  --m-mastered: #23915c;
+  --m-struggling: #d6334a;
+  --pitch-heiban: #2742f0;
+  --pitch-atamadaka: #d42f6a;
+  --pitch-nakadaka: #b97a00;
+  --pitch-odaka: #1f8a55;
+  color-scheme: light;
+}
+
+/* A section can flip its own tone, whatever the page is in. */
+.spread--paper {
+  --bg: var(--paper-bg);
+  --bg-soft: var(--paper-bg-soft);
+  --bg-raise: var(--paper-bg-raise);
+  --fg: var(--paper-fg);
+  --fg-dim: var(--paper-fg-dim);
+  --fg-faint: var(--paper-fg-faint);
+  --line: var(--paper-line);
+  --line-strong: var(--paper-line-strong);
+  --accent-text: var(--accent);
+  background-color: var(--bg);
+  color: var(--fg);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  min-height: 100svh;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-display);
+  font-weight: 400;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overflow-x: hidden;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+button,
+input,
+textarea,
+select {
+  font: inherit;
+  color: inherit;
+}
+button {
+  cursor: pointer;
+  background: none;
+  border: 0;
+}
+button:disabled {
+  cursor: default;
+}
+img {
+  max-width: 100%;
+  display: block;
+}
+:focus-visible {
+  outline: 2px solid var(--accent-text);
+  outline-offset: 2px;
+}
+::selection {
+  background: var(--fg);
+  color: var(--bg);
+}
+[hidden] {
+  display: none !important;
+}
+
+/* iOS zooms the page when a focused field is under 16px. */
+@media (pointer: coarse) {
+  input,
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
+}
+
+/* ---- Type helpers ---- */
+.mono {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--fg-dim);
+}
+.serif {
+  font-family: var(--font-serif);
+  font-optical-sizing: auto;
+}
+.jp {
+  font-family: var(--jp-sans);
+}
+.jp-serif {
+  font-family: var(--jp-serif);
+}
+.dim {
+  color: var(--fg-dim);
+}
+.faint {
+  color: var(--fg-faint);
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+.link {
+  color: var(--accent-text);
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+  text-decoration-thickness: 1px;
+}
+rt {
+  font-size: 0.5em;
+  font-family: var(--jp-sans);
+  color: var(--fg-dim);
+  letter-spacing: 0;
+}
+
+/* ---- A faint blueprint grid behind everything ---- */
+.grid-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(var(--line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--line) 1px, transparent 1px);
+  background-size: clamp(48px, 8vw, 96px) clamp(48px, 8vw, 96px);
+  mask-image: radial-gradient(ellipse at 50% 30%, #000 25%, transparent 80%);
+  -webkit-mask-image: radial-gradient(ellipse at 50% 30%, #000 25%, transparent 80%);
+  opacity: 0.6;
+}
+
+/* ---- Site header ---- */
+.topbar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 85;
+  height: calc(var(--topbar-h) + env(safe-area-inset-top));
+  padding: env(safe-area-inset-top) max(var(--pad), env(safe-area-inset-right)) 0
+    max(var(--pad), env(safe-area-inset-left));
+  display: flex;
+  align-items: center;
+  gap: clamp(0.8rem, 2.4vw, 2rem);
+  background: color-mix(in srgb, var(--bg) 86%, transparent);
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  border-bottom: 1px solid var(--line);
+  view-transition-name: topbar;
+}
+.topbar__mark {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.6em;
+  white-space: nowrap;
+  font-family: var(--jp-serif);
+  font-weight: 600;
+  font-size: 1rem;
+  letter-spacing: 0.06em;
+  color: var(--fg);
+}
+.topbar__mark .mono {
+  font-size: 0.56rem;
+  letter-spacing: 0.22em;
+  color: var(--accent-text);
+}
+.topbar__nav {
+  display: flex;
+  align-items: center;
+  gap: clamp(0.85rem, 2.2vw, 1.8rem);
+  margin-left: auto;
+}
+.topbar__nav a {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45em;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--fg-dim);
+  padding-block: 0.6rem;
+  transition: color 0.25s var(--ease);
+}
+.topbar__nav a:hover,
+.topbar__nav a[aria-current='page'] {
+  color: var(--fg);
+}
+.topbar__nav a[aria-current='page']::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0.3rem;
+  height: 1px;
+  background: var(--accent-text);
+}
+.topbar__gear svg {
+  width: 1rem;
+  height: 1rem;
+}
+.badge {
+  min-width: 1.5em;
+  padding: 0.15em 0.45em;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  letter-spacing: 0.02em;
+  line-height: 1.3;
+  text-align: center;
+}
+.badge:empty {
+  display: none;
+}
+@media (max-width: 480px) {
+  .topbar__mark .mono {
+    display: none;
+  }
+  .topbar__nav {
+    gap: 0.9rem;
+  }
+  .topbar__nav a {
+    font-size: 0.58rem;
+    letter-spacing: 0.1em;
+  }
+}
+
+/* ---- Page shell ---- */
+.page {
+  position: relative;
+  z-index: 1;
+  width: min(100%, calc(var(--col) + 2 * var(--pad)));
+  margin-inline: auto;
+  padding: calc(var(--topbar-h) + env(safe-area-inset-top) + clamp(1.2rem, 4vh, 2.4rem)) var(--pad)
+    calc(4rem + env(safe-area-inset-bottom));
+}
+.page--wide {
+  --col: 60rem;
+}
+
+/* Page heading: mono kicker, serif title, JP accent. */
+.head {
+  display: grid;
+  gap: 0.35rem;
+  margin-bottom: 1.4rem;
+}
+.head__row {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.head__title {
+  font-family: var(--font-serif);
+  font-weight: 400;
+  font-size: clamp(1.9rem, 6vw, 2.7rem);
+  line-height: 1.02;
+  letter-spacing: -0.015em;
+}
+.head__title .jp-serif {
+  margin-left: 0.35em;
+  font-size: 0.55em;
+  color: var(--fg-faint);
+  letter-spacing: 0.08em;
+}
+.head__sub {
+  color: var(--fg-dim);
+  font-size: 0.92rem;
+  max-width: 36rem;
+}
+
+/* ---- Buttons: pill, hairline, accent fill on hover ---- */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6em;
+  min-height: 2.5rem;
+  padding: 0.75em 1.35em;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--fg);
+  background: none;
+  white-space: nowrap;
+  transition:
+    background 0.25s var(--ease),
+    border-color 0.25s var(--ease),
+    color 0.25s var(--ease),
+    opacity 0.25s var(--ease);
+}
+@media (hover: hover) {
+  .btn:hover:not(:disabled) {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+  }
+}
+.btn--lead {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+@media (hover: hover) {
+  .btn--lead:hover:not(:disabled) {
+    background: var(--fg);
+    border-color: var(--fg);
+    color: var(--bg);
+  }
+}
+.btn--sm {
+  min-height: 2rem;
+  padding: 0.5em 1em;
+  font-size: 0.6rem;
+}
+.btn--lg {
+  min-height: 3rem;
+  padding: 0.95em 2em;
+  font-size: 0.72rem;
+}
+.btn:disabled {
+  opacity: 0.45;
+}
+.btn svg {
+  width: 1.1em;
+  height: 1.1em;
+}
+
+/* Quiet text-ish button for secondary actions. */
+.quiet {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--fg-dim);
+  padding: 0.35em 0;
+  transition: color 0.2s var(--ease);
+}
+.quiet:hover:not(:disabled) {
+  color: var(--fg);
+}
+.quiet:disabled {
+  opacity: 0.5;
+}
+.quiet svg {
+  width: 1.15em;
+  height: 1.15em;
+}
+
+/* Small square icon button (speak, close…). */
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 999px;
+  color: var(--fg-dim);
+  transition:
+    color 0.2s var(--ease),
+    background 0.2s var(--ease);
+}
+.icon-btn:hover {
+  color: var(--fg);
+  background: var(--line);
+}
+.icon-btn svg {
+  width: 1.1rem;
+  height: 1.1rem;
+}
+.icon-btn[aria-pressed='true'] {
+  color: var(--accent-text);
+}
+
+/* ---- Chips (labels and filters) ---- */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45em;
+  padding: 0.3em 0.75em;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--fg-dim);
+  white-space: nowrap;
+}
+button.chip,
+a.chip {
+  transition:
+    color 0.2s var(--ease),
+    border-color 0.2s var(--ease),
+    background 0.2s var(--ease);
+}
+button.chip:hover,
+a.chip:hover {
+  color: var(--fg);
+  border-color: var(--line-strong);
+}
+.chip[aria-pressed='true'],
+.chip--on {
+  color: var(--fg);
+  border-color: var(--accent-text);
+  background: var(--accent-soft);
+}
+.chip--accent {
+  color: var(--accent-text);
+  border-color: color-mix(in srgb, var(--accent-text) 45%, transparent);
+}
+.chip .n {
+  opacity: 0.6;
+}
+.dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--c, var(--fg-faint));
+}
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+/* ---- Fields ---- */
+.field {
+  display: grid;
+  gap: 0.4rem;
+}
+.field > span:first-child {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--fg-dim);
+}
+.input,
+.field input,
+.field select,
+.field textarea {
+  width: 100%;
+  background: var(--bg-soft);
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  color: var(--fg);
+  padding: 0.65em 0.85em;
+  font-size: 0.95rem;
+  transition: border-color 0.2s var(--ease);
+}
+.input:focus,
+.field input:focus,
+.field select:focus,
+.field textarea:focus {
+  outline: none;
+  border-color: var(--accent-text);
+}
+.field textarea,
+textarea.input {
+  resize: vertical;
+  line-height: 1.5;
+}
+.field small {
+  color: var(--fg-faint);
+  font-size: 0.78rem;
+}
+.search {
+  position: relative;
+}
+.search svg {
+  position: absolute;
+  left: 0.85rem;
+  top: 50%;
+  translate: 0 -50%;
+  width: 1rem;
+  height: 1rem;
+  color: var(--fg-faint);
+  pointer-events: none;
+}
+.search .input {
+  padding-left: 2.4rem;
+}
+
+/* ---- Panels ---- */
+.panel {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-soft);
+}
+.rule {
+  border: 0;
+  border-top: 1px solid var(--line);
+}
+
+/* ---- Proof-sheet marks (the house flavour) ---- */
+.crop {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  pointer-events: none;
+}
+.crop::before,
+.crop::after {
+  content: '';
+  position: absolute;
+  background: var(--paper-mark);
+}
+.crop::before {
+  top: 0;
+  left: 38%;
+  right: 0;
+  height: 1px;
+}
+.crop::after {
+  left: 0;
+  top: 38%;
+  bottom: 0;
+  width: 1px;
+}
+.crop--tl { top: 0.6rem; left: 0.6rem; }
+.crop--tr { top: 0.6rem; right: 0.6rem; transform: scaleX(-1); }
+.crop--bl { bottom: 0.6rem; left: 0.6rem; transform: scaleY(-1); }
+.crop--br { bottom: 0.6rem; right: 0.6rem; transform: scale(-1); }
+
+/* ---- Keyboard hints: only where there is a keyboard ---- */
+.kbd {
+  display: inline-block;
+  min-width: 1.6em;
+  padding: 0.05em 0.45em;
+  border: 1px solid var(--line-strong);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  text-align: center;
+  color: var(--fg-dim);
+}
+@media (hover: none), (pointer: coarse) {
+  .kbd-only {
+    display: none !important;
+  }
+}
+
+/* ---- Spinner ---- */
+.spin {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  border: 1.5px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  vertical-align: -0.15em;
+}
+@keyframes spin {
+  to { rotate: 360deg; }
+}
+
+/* ---- Pitch-accent marks (components/shared/Pitch.svelte) ----
+   A line over HIGH morae only, a hook where the pitch falls. Each line draws
+   left→right, staggered per mora, coloured by accent type. */
+.pitch {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  font-family: var(--jp-sans);
+}
+.pitch__morae {
+  display: inline-flex;
+  align-items: flex-start;
+  color: var(--fg);
+}
+.pitch__mora {
+  position: relative;
+  display: inline-block;
+  padding-top: 0.28em;
+}
+.pitch__line,
+.pitch__drop {
+  position: absolute;
+  background: var(--pitch-c);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--pitch-c) 55%, transparent);
+  animation-delay: var(--pitch-delay, 0s);
+  animation-fill-mode: both;
+}
+.pitch__line {
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  transform-origin: left center;
+  animation-name: pitch-draw;
+  animation-duration: 0.12s;
+  animation-timing-function: linear;
+}
+.pitch__drop {
+  top: 0;
+  right: 0;
+  width: 2px;
+  height: 0.62em;
+  transform-origin: top center;
+  animation-name: pitch-drop;
+  animation-duration: 0.1s;
+}
+.pitch__tag {
+  margin-left: 0.35em;
+  align-self: flex-start;
+  font-size: 0.55em;
+  line-height: 1.6;
+  white-space: nowrap;
+  color: var(--pitch-c);
+}
+@keyframes pitch-draw {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+@keyframes pitch-drop {
+  from { transform: scaleY(0); }
+  to { transform: scaleY(1); }
+}
+
+/* Rendered model output (lib/markdown.ts). */
+.prose {
+  font-size: 0.95rem;
+  line-height: 1.65;
+}
+.prose > * + * {
+  margin-top: 0.7em;
+}
+.prose h3,
+.prose h4 {
+  font-family: var(--font-serif);
+  font-weight: 500;
+  font-size: 1.05rem;
+}
+.prose ul,
+.prose ol {
+  padding-left: 1.3em;
+}
+.prose li + li {
+  margin-top: 0.25em;
+}
+.prose blockquote {
+  padding-left: 0.9em;
+  border-left: 2px solid var(--line-strong);
+  color: var(--fg-dim);
+}
+.prose code {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+  background: var(--line);
+}
+.prose pre {
+  overflow-x: auto;
+  padding: 0.8em;
+  border-radius: 8px;
+  background: var(--line);
+}
+.prose pre code {
+  background: none;
+  padding: 0;
+}
+.prose a {
+  color: var(--accent-text);
+  text-decoration: underline;
+}
+.prose strong {
+  font-weight: 600;
+}
+.prose hr {
+  border: 0;
+  border-top: 1px solid var(--line);
+}
+
+/* ---- Page change: cross-document View Transitions ----
+   No router, no JS on the critical path; unsupported browsers just navigate.
+   Forward wipes bottom-up, back (history, or a link with data-vt="back") wipes
+   top-down. The topbar has its own name, so it stays put. mv.css layers the
+   short glitch cut on top. */
+@view-transition {
+  navigation: auto;
+}
+::view-transition-old(root) {
+  animation: vt-out 0.36s cubic-bezier(0.7, 0, 0.3, 1) both;
+}
+::view-transition-new(root) {
+  animation: vt-in 0.36s cubic-bezier(0.7, 0, 0.3, 1) both;
+}
+html[data-vt='back']::view-transition-old(root) {
+  animation-name: vt-out-back;
+}
+html[data-vt='back']::view-transition-new(root) {
+  animation-name: vt-in-back;
+}
+@keyframes vt-out { to { opacity: 0.4; translate: 0 -2%; } }
+@keyframes vt-in { from { clip-path: inset(100% 0 0 0); } to { clip-path: inset(0 0 0 0); } }
+@keyframes vt-out-back { to { opacity: 0.4; translate: 0 2%; } }
+@keyframes vt-in-back { from { clip-path: inset(0 0 100% 0); } to { clip-path: inset(0 0 0 0); } }
+
+/* Everything lands on its final state when motion is reduced. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
+}

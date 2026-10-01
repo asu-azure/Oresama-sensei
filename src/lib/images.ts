@@ -11,13 +11,30 @@ export const BUCKET = "lesson-images";
 const MAX_SIDE = 1280;
 const SIGN_TTL = 2 * 60 * 60; // seconds; a review session lasts well under this
 
+/** Signed URLs already issued this page, reused until they near expiry — the
+ *  review page signs a whole batch up front, and each card's picture then
+ *  costs nothing. */
+const signed = new Map<string, { url: string; until: number }>();
+const REUSE_MS = (SIGN_TTL - 15 * 60) * 1000;
+
 /** Signed URLs for many paths in one request. Missing/failed paths are absent. */
 export async function signPaths(paths: string[]): Promise<Record<string, string>> {
-  const unique = [...new Set(paths.filter(Boolean))];
-  if (!unique.length) return {};
-  const { data } = await sb().storage.from(BUCKET).createSignedUrls(unique, SIGN_TTL);
   const out: Record<string, string> = {};
-  for (const d of data ?? []) if (d.path && d.signedUrl) out[d.path] = d.signedUrl;
+  const now = Date.now();
+  const need: string[] = [];
+  for (const p of new Set(paths.filter(Boolean))) {
+    const hit = signed.get(p);
+    if (hit && hit.until > now) out[p] = hit.url;
+    else need.push(p);
+  }
+  if (!need.length) return out;
+  const { data } = await sb().storage.from(BUCKET).createSignedUrls(need, SIGN_TTL);
+  for (const d of data ?? []) {
+    if (d.path && d.signedUrl) {
+      out[d.path] = d.signedUrl;
+      signed.set(d.path, { url: d.signedUrl, until: now + REUSE_MS });
+    }
+  }
   return out;
 }
 

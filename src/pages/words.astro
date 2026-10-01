@@ -1,0 +1,10 @@
+---
+import Base from '../layouts/Base.astro';
+import Words from '../components/words/Words.svelte';
+---
+
+<Base title="Words">
+  <main class="page">
+    <Words client:only="svelte" />
+  </main>
+</Base>

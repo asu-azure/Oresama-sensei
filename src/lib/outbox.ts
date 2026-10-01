@@ -46,6 +46,12 @@ export function pendingCount(): number {
   return read().length;
 }
 
+/** Items whose grade hasn't reached the database yet. A fresh queue must skip
+ *  them: their srs_due there is still the old one. */
+export function pendingItemIds(): Set<string> {
+  return new Set(read().filter((o) => !o.updated).map((o) => o.itemId));
+}
+
 /** Network failure (no PostgREST code) → worth retrying. */
 const retryable = (e: { code?: string } | null) => !!e && !e.code;
 
