@@ -1,22 +1,17 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { startOfStudyDay, studyDayKey, nextStudyDayStart } from "./study-day";
-import type { StudyPace } from "./study-pace";
+import type { StudyPace } from "./pace";
 
 // Builds the day's review queue.
 //
-// The problem this solves: knowledge_items are inserted by lib/memory.ts with no
-// srs_* fields, so srs_due is NULL — and the old queue counted NULL as "due" AND
-// sorted it first. Every word the tutor extracted from a chat or an OCR'd page
-// therefore landed at the head of the queue instantly, burying the genuinely
-// overdue reviews behind an unbounded pile of never-seen words.
-//
-// Here the two are separated and each gets its own daily budget, work already
-// done today is measured from review_log, and whatever is left over is reported
-// as a backlog with an honest "days at this pace" estimate rather than a scary
-// uncapped badge.
+// New words (srs_reps = 0) and due reviews are separate buckets, each with its
+// own daily budget. Work already done today is measured from review_log, and
+// whatever is left over is reported as a backlog with an honest "days at this
+// pace" estimate rather than a scary uncapped badge.
 //
 // Nothing rewrites srs_due. FSRS handles late reviews correctly on its own; the
 // only real problem was which cards get shown and what number gets displayed.
+// (See "Decisions" in CLAUDE.md for why there is no bulk postpone and no streak.)
 
 const DAY_MS = 86_400_000;
 
@@ -48,8 +43,6 @@ export interface TodayLoad {
   plannedToday: { newCards: number; reviews: number; total: number };
   /** Rough days to clear the review backlog at the current pace. */
   daysToClear: number;
-  /** Which graceful-degradation paths are active (missing migrations). */
-  degraded: { log: boolean; suspend: boolean };
 }
 
 export interface QueuePlan extends TodayLoad {
@@ -58,40 +51,7 @@ export interface QueuePlan extends TodayLoad {
   plan: { newCards: number; reviews: number };
 }
 
-// --- srs_suspended capability probe (migration 0024) -------------------------
-// Filtering on a column that does not exist makes PostgREST fail the whole
-// query, which would empty the review page rather than degrade. Probe once and
-// cache only the positive result, so we re-probe cheaply until the migration is
-// actually run. Mirrors how 0015 (ai_engine) and 0022 (review_log) degrade.
-let suspendSupported = false;
-
-export async function hasSuspendColumn(
-  supabase: SupabaseClient,
-): Promise<boolean> {
-  if (suspendSupported) return true;
-  const { error } = await supabase
-    .from("knowledge_items")
-    .select("srs_suspended")
-    .limit(1);
-  if (!error) suspendSupported = true;
-  return suspendSupported;
-}
-
-/** Apply srs_suspended = false only when the column exists.
- *
- *  Deliberately unconstrained + cast: a self-referential `Q extends { eq(): Q }`
- *  bound sends tsc into "type instantiation is excessively deep" against
- *  PostgREST's builder generics. */
-function notParked<T>(q: T, canPark: boolean): T {
-  if (!canPark) return q;
-  return (q as unknown as { eq(c: string, v: unknown): T }).eq(
-    "srs_suspended",
-    false,
-  );
-}
-
-/** The predicate the app has always used for "due": NULL counts as due. Kept
- *  verbatim so a row can never fall out of both buckets and become invisible. */
+/** "Due": NULL counts as due, so a row can never fall out of both buckets. */
 function dueFilter(nowIso: string): string {
   return ["srs_due.is.null", "srs_due.lte." + nowIso].join(",");
 }
@@ -108,7 +68,6 @@ export async function getTodayLoad(
   const dayStart = startOfStudyDay(now, pace.timeZone, pace.dayStartHour);
   const dayStartIso = dayStart.toISOString();
   const nowIso = now.toISOString();
-  const canPark = await hasSuspendColumn(supabase);
 
   const [doneTotalRes, doneNewRes, backNewRes, backRevRes] = await Promise.all([
     supabase
@@ -117,40 +76,35 @@ export async function getTodayLoad(
       .eq("user_id", userId)
       .gte("reviewed_at", dayStartIso),
     // stability_before IS NULL marks the first-ever FSRS review of a card
-    // (api/srs writes `item.srs_stability ?? null`, and srs_stability is only
-    // null before a card has ever been scheduled). So this is an exact count of
-    // NEW cards introduced today, needing no extra column.
+    // (grading writes `srs_stability ?? null`, and srs_stability is only null
+    // before a card has ever been scheduled). So this is an exact count of NEW
+    // cards introduced today, needing no extra column.
     supabase
       .from("review_log")
       .select("id", { count: "exact", head: true })
       .eq("user_id", userId)
       .gte("reviewed_at", dayStartIso)
       .is("stability_before", null),
-    notParked(
-      supabase
-        .from("knowledge_items")
-        .select("id", { count: "exact", head: true })
-        .eq("user_id", userId)
-        .eq("srs_reps", 0),
-      canPark,
-    ),
-    notParked(
-      supabase
-        .from("knowledge_items")
-        .select("id", { count: "exact", head: true })
-        .eq("user_id", userId)
-        .gt("srs_reps", 0)
-        .or(dueFilter(nowIso)),
-      canPark,
-    ),
+    supabase
+      .from("knowledge_items")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .eq("srs_reps", 0)
+      .eq("srs_suspended", false),
+    supabase
+      .from("knowledge_items")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .gt("srs_reps", 0)
+      .eq("srs_suspended", false)
+      .or(dueFilter(nowIso)),
   ]);
+  for (const r of [doneTotalRes, doneNewRes, backNewRes, backRevRes]) {
+    if (r.error) throw r.error;
+  }
 
-  // review_log missing (migration 0022 unrun) → treat today as untouched. The
-  // budget then behaves as a per-load cap rather than a per-day one, which the
-  // UI says out loud instead of claiming "0 of 80 done today".
-  const logDegraded = !!doneTotalRes.error || !!doneNewRes.error;
-  const total = logDegraded ? 0 : doneTotalRes.count ?? 0;
-  const newCards = logDegraded ? 0 : doneNewRes.count ?? 0;
+  const total = doneTotalRes.count ?? 0;
+  const newCards = doneNewRes.count ?? 0;
   const reviews = Math.max(0, total - newCards);
 
   const backlog = {
@@ -167,11 +121,7 @@ export async function getTodayLoad(
   return {
     dayStartIso,
     dayKey: studyDayKey(now, pace.timeZone, pace.dayStartHour),
-    nextResetIso: nextStudyDayStart(
-      now,
-      pace.timeZone,
-      pace.dayStartHour,
-    ).toISOString(),
+    nextResetIso: nextStudyDayStart(now, pace.timeZone, pace.dayStartHour).toISOString(),
     pace,
     doneToday: { total, newCards, reviews },
     remaining,
@@ -182,7 +132,6 @@ export async function getTodayLoad(
       total: plannedNew + plannedRev,
     },
     daysToClear: Math.ceil(backlog.reviews / Math.max(1, pace.reviewLimit)),
-    degraded: { log: logDegraded, suspend: !canPark },
   };
 }
 
@@ -235,7 +184,6 @@ export async function buildQueue(
   const load = await getTodayLoad(supabase, userId, pace, now);
   const nowIso = now.toISOString();
   const nowMs = now.getTime();
-  const canPark = !load.degraded.suspend;
 
   // ignoreBudget powers the explicit "study beyond today's plan" escape hatch.
   // A cap with no override turns a keen day into a wall.
@@ -248,36 +196,33 @@ export async function buildQueue(
 
   const [revRes, newRes] = await Promise.all([
     takeReviews > 0
-      ? notParked(
-          supabase
-            .from("knowledge_items")
-            .select("id,srs_due,srs_interval")
-            .eq("user_id", userId)
-            .gt("srs_reps", 0)
-            .or(dueFilter(nowIso))
-            .order("srs_due", { ascending: true, nullsFirst: true })
-            .order("id", { ascending: true })
-            .limit(CANDIDATE_CAP),
-          canPark,
-        )
-      : Promise.resolve({ data: [] as ReviewCandidate[] }),
+      ? supabase
+          .from("knowledge_items")
+          .select("id,srs_due,srs_interval")
+          .eq("user_id", userId)
+          .gt("srs_reps", 0)
+          .eq("srs_suspended", false)
+          .or(dueFilter(nowIso))
+          .order("srs_due", { ascending: true, nullsFirst: true })
+          .order("id", { ascending: true })
+          .limit(CANDIDATE_CAP)
+      : Promise.resolve({ data: [] as ReviewCandidate[], error: null }),
     takeNew > 0
-      ? notParked(
-          supabase
-            .from("knowledge_items")
-            .select("id")
-            .eq("user_id", userId)
-            .eq("srs_reps", 0)
-            // Oldest first, so every auto-extracted word eventually gets looked
-            // at once (and can then be parked) instead of being buried forever
-            // by newer extractions.
-            .order("created_at", { ascending: true })
-            .order("id", { ascending: true })
-            .limit(takeNew),
-          canPark,
-        )
-      : Promise.resolve({ data: [] as { id: string }[] }),
+      ? supabase
+          .from("knowledge_items")
+          .select("id")
+          .eq("user_id", userId)
+          .eq("srs_reps", 0)
+          .eq("srs_suspended", false)
+          // Oldest first, so every word eventually gets looked at once (and can
+          // then be parked) instead of being buried forever by newer additions.
+          .order("created_at", { ascending: true })
+          .order("id", { ascending: true })
+          .limit(takeNew)
+      : Promise.resolve({ data: [] as { id: string }[], error: null }),
   ]);
+  if (revRes.error) throw revRes.error;
+  if (newRes.error) throw newRes.error;
 
   // PostgREST cannot express the overdueness ratio, so the DB hands us the most
   // absolutely-overdue window and we re-rank inside it. The cap is a deliberate
@@ -286,7 +231,7 @@ export async function buildQueue(
   // favours) go overdue soonest and so already cluster at the front of the
   // srs_due sort. If the backlog ever routinely exceeds CANDIDATE_CAP, move this
   // sort into SQL as a stable security-invoker function rather than raising the
-  // cap and shipping thousands of rows on every page load.
+  // cap and shipping thousands of rows on every load.
   const reviewIds = [...((revRes.data ?? []) as ReviewCandidate[])]
     .sort((a, b) => {
       const d = overdueRatio(b, nowMs) - overdueRatio(a, nowMs);
@@ -324,7 +269,8 @@ export async function fetchByIdsInOrder<T extends { id: string }>(
     chunks.map((c) => supabase.from(table).select(select).in("id", c)),
   );
   const found = new Map<string, T>();
-  for (const { data } of results) {
+  for (const { data, error } of results) {
+    if (error) throw error;
     for (const row of (data ?? []) as unknown as T[]) found.set(row.id, row);
   }
   return ids.map((id) => found.get(id)).filter((r): r is T => r !== undefined);

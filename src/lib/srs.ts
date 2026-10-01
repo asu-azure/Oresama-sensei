@@ -2,9 +2,8 @@
 // modern Difficulty/Stability/Retrievability model). We wrap `ts-fsrs` and map
 // its Card <-> our knowledge_items columns.
 //
-// SERVER-ONLY: this imports ts-fsrs. Client code may import the `Rating` *type*
-// only (`import type`), which is erased — never import a value from here client-side.
-
+// Runs in the browser: grading computes the next state here and writes it
+// straight to Supabase (RLS-scoped), so a review needs no server round-trip.
 import {
   fsrs,
   generatorParameters,
@@ -111,7 +110,7 @@ export function schedule(
 
 /** FSRS-predicted probability (0–100) that the learner recalls this item right
  *  now, given its stability and time elapsed. Returns null for brand-new items
- *  (no reps yet), which have no meaningful score. Server-only (imports ts-fsrs). */
+ *  (no reps yet), which have no meaningful score. */
 export function retrievability(
   row: SrsRow,
   now: Date = new Date(),
@@ -120,64 +119,6 @@ export function retrievability(
   const r = f.get_retrievability(cardFromRow(row, now), now, false);
   if (typeof r !== "number" || Number.isNaN(r)) return null;
   return Math.round(r * 100);
-}
-
-/** A point on the projected aggregate forgetting curve. */
-export interface ForecastPoint {
-  day: number; // days from `now`
-  retention: number; // 0–1, averaged over reviewed items
-}
-
-/** Project the library-wide average recall over the next `days`, assuming NO
- *  further reviews. For each future day we ask FSRS for each reviewed item's
- *  retrievability at that date and average them. Day 0 ≈ "right now". Items with
- *  no reps yet are ignored (they have no curve). Server-only (imports ts-fsrs). */
-export function retentionForecast(
-  rows: SrsRow[],
-  days = 30,
-  now: Date = new Date(),
-): ForecastPoint[] {
-  const reviewed = rows.filter((r) => (r.srs_reps ?? 0) > 0);
-  const out: ForecastPoint[] = [];
-  for (let d = 0; d <= days; d++) {
-    const at = new Date(now.getTime() + d * 86_400_000);
-    if (reviewed.length === 0) {
-      out.push({ day: d, retention: 0 });
-      continue;
-    }
-    let sum = 0;
-    for (const r of reviewed) {
-      const v = f.get_retrievability(cardFromRow(r, at), at, false);
-      sum += typeof v === "number" && !Number.isNaN(v) ? v : 0;
-    }
-    out.push({ day: d, retention: sum / reviewed.length });
-  }
-  return out;
-}
-
-/** Current memory-health distribution: how many reviewed items are at strong /
- *  fading / weak recall right now, plus how many are still new. Buckets on the
- *  same retrievability() the review page already shows. */
-export interface HealthBuckets {
-  strong: number; // recall >= 85%
-  fading: number; // 60–84%
-  weak: number; // < 60%
-  new: number; // not yet reviewed
-}
-
-export function healthBuckets(
-  rows: SrsRow[],
-  now: Date = new Date(),
-): HealthBuckets {
-  const b: HealthBuckets = { strong: 0, fading: 0, weak: 0, new: 0 };
-  for (const r of rows) {
-    const score = retrievability(r, now);
-    if (score === null) b.new++;
-    else if (score >= 85) b.strong++;
-    else if (score >= 60) b.fading++;
-    else b.weak++;
-  }
-  return b;
 }
 
 export type IntervalPreview = Record<Rating, string>;

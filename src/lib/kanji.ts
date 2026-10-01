@@ -1,7 +1,8 @@
-// Helpers for the bundled offline kanji dataset (built by scripts/build-kanji-data.mjs).
-// Level data is split per JLPT level and lazy-loaded so the app only pulls what it shows.
+// Helpers for the offline kanji dataset (built by scripts/build-kanji-data.mjs).
+// The level lists are bundled (13 KB); readings/meanings are fetched per JLPT
+// level and stroke paths per codepoint bucket, only when something shows them.
 
-import levelsData from "@/data/kanji/levels.json";
+import levelsData from "../data/kanji-levels.json";
 
 export type Level = "N5" | "N4" | "N3" | "N2" | "N1";
 export const LEVELS: Level[] = ["N5", "N4", "N3", "N2", "N1"];
@@ -54,41 +55,35 @@ export function uniqueKanji(text: string): string[] {
   return out;
 }
 
-// --- Lazy per-level loaders (memoized) ---
-
-const infoImport: Record<Level, () => Promise<{ default: unknown }>> = {
-  N5: () => import("@/data/kanji/info/n5.json"),
-  N4: () => import("@/data/kanji/info/n4.json"),
-  N3: () => import("@/data/kanji/info/n3.json"),
-  N2: () => import("@/data/kanji/info/n2.json"),
-  N1: () => import("@/data/kanji/info/n1.json"),
-};
-const strokeImport: Record<Level, () => Promise<{ default: unknown }>> = {
-  N5: () => import("@/data/kanji/strokes/n5.json"),
-  N4: () => import("@/data/kanji/strokes/n4.json"),
-  N3: () => import("@/data/kanji/strokes/n3.json"),
-  N2: () => import("@/data/kanji/strokes/n2.json"),
-  N1: () => import("@/data/kanji/strokes/n1.json"),
-};
-
-const infoCache = new Map<Level, Record<string, KanjiInfo>>();
-const strokeCache = new Map<Level, Record<string, KanjiStrokes>>();
-
-export async function loadInfo(level: Level): Promise<Record<string, KanjiInfo>> {
-  if (!infoCache.has(level)) {
-    const mod = await infoImport[level]();
-    infoCache.set(level, mod.default as Record<string, KanjiInfo>);
-  }
-  return infoCache.get(level)!;
+/** Link to a kanji's page. `from` is where Back should return to. */
+export function kanjiHref(ch: string, from?: string): string {
+  const q = new URLSearchParams({ c: ch });
+  if (from) q.set("from", from);
+  return `/kanji/view?${q}`;
 }
-export async function loadStrokes(
-  level: Level,
-): Promise<Record<string, KanjiStrokes>> {
-  if (!strokeCache.has(level)) {
-    const mod = await strokeImport[level]();
-    strokeCache.set(level, mod.default as Record<string, KanjiStrokes>);
+
+// --- fetched shards (layout: scripts/lib/shards.mjs) -------------------------
+
+const STROKE_BUCKETS = 64;
+export const strokeBucket = (ch: string) =>
+  String(ch.codePointAt(0)! % STROKE_BUCKETS).padStart(2, "0");
+
+const jsonCache = new Map<string, Promise<unknown>>();
+function getJson<T>(url: string): Promise<T> {
+  let p = jsonCache.get(url);
+  if (!p) {
+    p = fetch(url).then((r) => {
+      if (!r.ok) throw new Error(`${r.status} ${url}`);
+      return r.json();
+    });
+    p.catch(() => jsonCache.delete(url));
+    jsonCache.set(url, p);
   }
-  return strokeCache.get(level)!;
+  return p as Promise<T>;
+}
+
+export function loadInfo(level: Level): Promise<Record<string, KanjiInfo>> {
+  return getJson(`/data/kanji/info/${level.toLowerCase()}.json`);
 }
 
 export async function getInfo(ch: string): Promise<KanjiInfo | null> {
@@ -96,8 +91,19 @@ export async function getInfo(ch: string): Promise<KanjiInfo | null> {
   if (!lvl) return null;
   return (await loadInfo(lvl))[ch] ?? null;
 }
+
 export async function getStrokes(ch: string): Promise<KanjiStrokes | null> {
-  const lvl = levelOf(ch);
-  if (!lvl) return null;
-  return (await loadStrokes(lvl))[ch] ?? null;
+  if (!levelOf(ch)) return null;
+  const bucket = await getJson<Record<string, KanjiStrokes>>(
+    `/data/kanji/strokes/${strokeBucket(ch)}.json`,
+  );
+  return bucket[ch] ?? null;
+}
+
+/** Kanji in a term we have data for, each with its primary English meaning. */
+export async function kanjiGlosses(term: string): Promise<{ char: string; meaning: string }[]> {
+  const chars = uniqueKanji(term).filter((c) => levelOf(c));
+  return Promise.all(
+    chars.map(async (c) => ({ char: c, meaning: (await getInfo(c))?.meanings?.[0] ?? "" })),
+  );
 }

@@ -5,10 +5,11 @@
 //    levels (jlpt_new), stroke count, grade, frequency.
 //  - KanjiVG (CC-BY-SA 3.0): per-kanji stroke paths + component/radical structure.
 //
-// Output (committed; split per JLPT level so the app lazy-loads only what it shows):
-//  - src/data/kanji/levels.json          { N5:[…chars], …, N1:[…] }  (common-first)
-//  - src/data/kanji/info/n{1..5}.json     char → { jlpt, strokes, grade, on[], kun[], meanings[] }
-//  - src/data/kanji/strokes/n{1..5}.json  char → { strokes:[pathD…], components:[{el,isRadical}] }
+// Output (committed):
+//  - src/data/kanji-levels.json           { N5:[…chars], …, N1:[…] } (common-first; bundled)
+//  - public/data/kanji/info/n{1..5}.json   fetched per level
+//  - public/data/kanji/strokes/<nn>.json   fetched per codepoint bucket
+//  Shard rules: scripts/lib/shards.mjs.
 //
 // Re-runnable: fetched KanjiVG SVGs are cached under scripts/.cache (gitignored).
 //
@@ -18,10 +19,12 @@ import { mkdir, writeFile, readFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { writeKanjiShards } from "./lib/shards.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
-const OUT = path.join(ROOT, "src", "data", "kanji");
+const OUT = path.join(ROOT, "public", "data", "kanji");
+const LEVELS_FILE = path.join(ROOT, "src", "data", "kanji-levels.json");
 const CACHE = path.join(__dirname, ".cache", "kanjivg");
 
 const KANJI_DATA_URL =
@@ -103,8 +106,6 @@ async function pool(items, worker) {
 
 async function main() {
   await mkdir(CACHE, { recursive: true });
-  await mkdir(path.join(OUT, "info"), { recursive: true });
-  await mkdir(path.join(OUT, "strokes"), { recursive: true });
 
   console.log("Downloading kanji-data…");
   const kanji = JSON.parse(await fetchText(KANJI_DATA_URL));
@@ -125,10 +126,8 @@ async function main() {
     });
   }
 
-  await writeFile(
-    path.join(OUT, "levels.json"),
-    JSON.stringify(byLevel) + "\n",
-  );
+  await mkdir(path.dirname(LEVELS_FILE), { recursive: true });
+  await writeFile(LEVELS_FILE, JSON.stringify(byLevel) + "\n");
 
   const allChars = Object.values(byLevel).flat();
   console.log(`Fetching ${allChars.length} KanjiVG glyphs (cached in scripts/.cache)…`);
@@ -140,10 +139,10 @@ async function main() {
   });
 
   let missing = 0;
+  const infoByLevel = {};
+  const strokes = {};
   for (const [level, chars] of Object.entries(byLevel)) {
-    const n = level.toLowerCase(); // n5..n1
-    const info = {};
-    const strokes = {};
+    const info = (infoByLevel[level] = {});
     for (const ch of chars) {
       const d = kanji[ch];
       info[ch] = {
@@ -158,15 +157,8 @@ async function main() {
       if (!sv || sv.strokes.length === 0) missing++;
       strokes[ch] = sv;
     }
-    await writeFile(
-      path.join(OUT, "info", `${n}.json`),
-      JSON.stringify(info) + "\n",
-    );
-    await writeFile(
-      path.join(OUT, "strokes", `${n}.json`),
-      JSON.stringify(strokes) + "\n",
-    );
   }
+  await writeKanjiShards(OUT, infoByLevel, strokes);
 
   const counts = Object.entries(byLevel)
     .map(([l, c]) => `${l}:${c.length}`)

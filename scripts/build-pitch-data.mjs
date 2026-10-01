@@ -6,9 +6,8 @@
 // comma-separated, sometimes with POS tags, e.g. "0,2" or "(副)0,(名)3"; we take
 // the first integer as the primary accent.
 //
-// Output (committed; lazy-loaded client-side only when pitch is enabled):
-//   src/data/pitch/accents.json = { byWord: { "<word>\t<hiragana>": accent },
-//                                   byReading: { "<hiragana>": accent } }
+// Output (committed; fetched client-side, one small shard per lookup, only when
+// pitch is enabled): public/data/pitch/<hex>.json — see scripts/lib/shards.mjs.
 //
 // Run: npm run pitch:build
 
@@ -17,10 +16,11 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { toHiragana } from "wanakana";
+import { writePitchShards } from "./lib/shards.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
-const OUT = path.join(ROOT, "src", "data", "pitch");
+const OUT = path.join(ROOT, "public", "data", "pitch");
 const CACHE = path.join(__dirname, ".cache", "accents.txt");
 
 const URL =
@@ -44,7 +44,6 @@ function primaryAccent(field) {
 }
 
 async function main() {
-  await mkdir(OUT, { recursive: true });
   const raw = await getRaw();
 
   const byWord = {};
@@ -65,14 +64,11 @@ async function main() {
     n++;
   }
 
-  await writeFile(
-    path.join(OUT, "accents.json"),
-    JSON.stringify({ byWord, byReading }) + "\n",
-  );
+  const shards = await writePitchShards(OUT, byWord, byReading);
   console.log(
     `Done. ${n} entries · ${Object.keys(byWord).length} words · ${Object.keys(byReading).length} readings.`,
   );
-  console.log(`Wrote ${path.relative(ROOT, path.join(OUT, "accents.json"))}`);
+  console.log(`Wrote ${shards} shards to ${path.relative(ROOT, OUT)}`);
 }
 
 main().catch((e) => {

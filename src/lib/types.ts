@@ -1,365 +1,52 @@
-/** Shared application types. */
-
-export type DiscussMessage = { role: "user" | "assistant"; content: string };
+import type { SrsRow } from "./srs";
 
 export type KnowledgeType = "vocab" | "grammar" | "expression";
 
-export interface Profile {
+/** A knowledge_items row as the app reads it. */
+export type Item = SrsRow & {
   id: string;
-  display_name: string | null;
-  interests: string | null;
-  jlpt_target: string;
-  native_language: string;
-  tone: string | null;
-  /** Which provider runs secondary (non-chat, non-lesson) AI calls:
-   *  'gemini' (default, cheaper) | 'claude'. Added in migration 0015. */
-  ai_engine?: string | null;
-  /** Study pace — how much work per day, and when the day rolls over.
-   *  Added in migration 0024; absent until it is run (code falls back to
-   *  DEFAULT_PACE in lib/study-pace, which matches the migration defaults). */
-  daily_new_limit?: number | null;
-  daily_review_limit?: number | null;
-  study_timezone?: string | null;
-  day_start_hour?: number | null;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface ChatMessage {
-  id: string;
-  conversation_id: string;
-  role: "user" | "assistant";
-  content: string;
-  created_at: string;
-}
-
-export interface Collection {
-  id: string;
-  user_id: string;
-  kind: string; // 'book' | 'game' | 'series' | 'other'
-  title: string;
-  author: string | null;
-  cover_path: string | null;
-  total_pages: number | null;
-  summary_md: string | null;
-  summary_generated_at: string | null;
-  created_at: string;
-}
-
-export interface KnowledgeItem {
-  id: string;
-  user_id: string;
   type: KnowledgeType;
   term: string;
   reading: string | null;
   meaning: string | null;
   example: string | null;
   jlpt_level: string | null;
-  notes: string | null;
-  /** Coarse grammatical class for the conjugation table (migration 0017).
-   *  e.g. 'godan verb' | 'ichidan verb' | 'suru verb' | 'i-adjective' | … */
   part_of_speech: string | null;
-  /** The learner's own note, separate from AI `notes` (migration 0017). */
   personal_note: string | null;
-  source: string | null;
-  /** Coarse attribution ('book' | 'game' | 'series' | 'internet' | 'real_world' | 'chat'). */
-  source_type: string | null;
-  /** Links to the collection (book/game/series) this came from, if any. */
-  collection_id: string | null;
-  /** The lesson this item was extracted from (real FK, replaces text-match). */
-  lesson_id: string | null;
-  times_seen: number;
-  last_seen: string;
-  created_at: string;
-  // Spaced-repetition scheduling (FSRS; srs_ease is legacy SM-2, unused)
-  srs_due: string | null;
-  srs_interval: number;
-  srs_ease: number;
-  srs_reps: number;
-  srs_lapses: number;
-  srs_stability: number | null;
-  srs_difficulty: number | null;
-  srs_state: number | null;
-  srs_last_review: string | null;
-  /** Parked: kept in the library but out of every review queue and due count.
-   *  Added in migration 0024. */
-  srs_suspended?: boolean | null;
-}
-
-export interface Lesson {
-  id: string;
-  user_id: string;
-  title: string | null;
   image_path: string | null;
-  /** All uploaded page images, in order. `image_path` is the first (back-compat). */
-  image_paths: string[] | null;
-  source_text: string | null;
-  article_md: string | null;
-  tags: string[] | null;
-  kind: string; // 'photo' | 'text' | 'chat' | 'summary'
-  /** Where the material came from (see MaterialType in lib/source). */
-  material_type: string;
-  /** Collection (book/game/series) this lesson belongs to, if any. */
-  collection_id: string | null;
-  /** Page range covered, for collection material. */
-  page_start: number | null;
-  page_end: number | null;
-  /** Free-text chapter/arc this lesson belongs to (migration 0023). */
-  chapter: string | null;
-  /** Optional page number WITHIN the chapter, independent of page_start/end (0023). */
-  chapter_page: number | null;
-  exercises: Exercise[] | null;
-  created_at: string;
-}
+  image_source: string | null;
+  srs_due?: string | null;
+  srs_suspended?: boolean;
+  times_seen?: number | null;
+  created_at?: string;
+  source_type?: string | null;
+};
 
-/** The structured payload Claude returns when extracting knowledge from
- *  a chat answer or a lesson. Stored into `knowledge_items` with dedupe. */
-export interface ExtractedKnowledge {
-  type: KnowledgeType;
-  term: string;
-  reading?: string;
-  meaning?: string;
-  example?: string;
-  jlpt_level?: string;
-  notes?: string;
-  /** Coarse grammatical class for the conjugation table; see KnowledgeItem. */
-  part_of_speech?: string;
-}
+/** Columns for Item. Keep in step with the type above. */
+export const ITEM_COLS =
+  "id,type,term,reading,meaning,example,jlpt_level,part_of_speech,personal_note,image_path,image_source," +
+  "srs_stability,srs_difficulty,srs_state,srs_interval,srs_reps,srs_lapses,srs_last_review,srs_due,srs_suspended," +
+  "last_seen,times_seen,created_at,source_type";
 
-/** A knowledge item retrieved by vector search, with similarity score. */
-export interface RecalledItem extends KnowledgeItem {
-  similarity: number;
-}
-
-/** A themed cluster of knowledge items on the Knowledge Map. */
-export interface MapGroup {
-  id: string;
-  label: string;
-  theme: string;
-  register: string | null;
-  note: string | null;
-  item_ids: string[];
-}
-
-/** A relationship between two items on the map. */
-export interface MapEdge {
-  source: string;
-  target: string;
-  relation: string;
-}
-
-/** What subset of items a map was generated from. */
-export interface MapScope {
-  type: "all" | "collection" | "level" | "source";
-  value?: string | null;
-  /** Human label for the picker/header, e.g. "One Piece" or "N2". */
-  label?: string | null;
-}
-
-/** The full generated map structure (item ids reference knowledge_items). */
-export interface MapData {
-  groups: MapGroup[];
-  edges: MapEdge[];
-  /** Manually-dragged node positions, keyed by node id (item id or
-   *  `group-<id>`). Persisted in-place; absent on a freshly generated map. */
-  positions?: Record<string, { x: number; y: number }>;
-  /** The scope this map was generated from (absent → all items). */
-  scope?: MapScope;
-}
-
-/** A cached knowledge map row. */
-export interface KnowledgeMap {
-  id: string;
-  user_id: string;
-  data: MapData;
-  item_count: number;
-  created_at: string;
-}
-
-// --- Practice exercises (generated from a lesson or a review test) ---
-
-export type ExerciseType = "mcq" | "arrange" | "cloze";
-
-interface ExerciseBase {
-  type: ExerciseType;
-  /** Question / instruction. May contain Japanese with <ruby> furigana. */
-  prompt: string;
-  /** Short why-this-is-right note shown after answering. */
-  explanation: string;
-  /** When set, links the exercise to a knowledge_items row for SRS grading. */
-  item_id?: string | null;
-}
-
-export interface McqExercise extends ExerciseBase {
-  type: "mcq";
-  choices: string[];
-  /** Index into `choices` of the correct option. */
-  answer: number;
-}
-
-export interface ArrangeExercise extends ExerciseBase {
-  type: "arrange";
-  /** Scrambled tokens shown to the learner. */
-  tokens: string[];
-  /** Correct ordering of the tokens. */
-  answer: string[];
-  /** JLPT "★" sentence-ordering mode: when set (0–3), `prompt` contains the
-   *  marker `{{BLANKS}}` where four ordered slots render, the slot at this index
-   *  carries the ★, and the graded answer is `answer[star_index]`. Absent on
-   *  legacy/whole-sentence arrange exercises. */
-  star_index?: number | null;
-}
-
-export interface ClozeExercise extends ExerciseBase {
-  type: "cloze";
-  /** The text that belongs in the blank. */
-  answer: string;
-  /** Optional multiple-choice options for the blank (pick mode). */
-  choices?: string[];
-}
-
-export type Exercise = McqExercise | ArrangeExercise | ClozeExercise;
-
-export interface ExerciseSet {
-  exercises: Exercise[];
-}
-
-/** What the floating "Ask Sensei" helper is currently looking at. Drives the
- *  context block in buildDiscussSystemPrompt so the tutor answers about the
- *  exact exercise / word / kanji / lesson the learner is viewing. */
+/** What Ask Sensei is looking at. */
 export type AskContext =
-  | { kind: "exercise"; exercise: Exercise }
   | {
       kind: "vocab";
-      item: {
-        type?: string;
-        term: string;
-        reading?: string | null;
-        meaning?: string | null;
-        example?: string | null;
-        jlpt_level?: string | null;
-      };
+      item: Pick<Item, "type" | "term" | "reading" | "meaning" | "example" | "jlpt_level">;
     }
-  | {
-      kind: "kanji";
-      char: string;
-      meanings?: string[];
-      on?: string[];
-      kun?: string[];
-    }
-  | { kind: "lesson"; title?: string | null; excerpt?: string | null }
-  | {
-      kind: "sns";
-      mode?: string;
-      situation?: string | null;
-      draft?: string | null;
-    }
+  | { kind: "kanji"; char: string; meanings?: string[]; on?: string[]; kun?: string[] }
   | { kind: "free" };
 
-// --- SNS communication assistant ---
+export type ChatTurn = { role: "user" | "assistant"; content: string };
 
-export type SnsMode = "reply" | "compose" | "explain";
-export type SnsRegister = "casual" | "friendly" | "polite";
-
-/** The lightweight context the learner gives the SNS assistant. */
-export interface SnsInputs {
-  mode: SnsMode;
-  register: SnsRegister;
-  /** What the learner already posted / the situation. */
-  posted?: string;
-  /** The message they're reacting to (their tweet to explain, or a reply). */
-  incoming?: string;
-  /** What they want to say (Thai or rough Japanese). */
-  intent?: string;
-  /** Anything else, free-form. */
-  extra?: string;
-}
-
-/** One natural Japanese phrasing option with a Thai gloss + nuance note. */
-export interface SnsOption {
-  /** Natural Japanese, furigana written as 漢字（かな） parentheses. */
-  japanese: string;
-  /** Thai translation. */
-  thai: string;
-  /** Register label (e.g. casual / friendly-polite). */
-  register: string;
-  /** Thai nuance / when-to-use note. */
-  nuance: string;
-}
-
-/** A tiny optional teaching aside (one kanji + one grammar point). */
-export interface SnsNote {
-  kanji: string;
-  grammar: string;
-}
-
-/** The assistant's response: phrasing options (+ optional explanation for
- *  "explain" mode, where the learner pastes a tweet to decode). */
-export interface SnsResult {
-  options: SnsOption[];
-  note: SnsNote | null;
-  /** For "explain" mode: a Thai explanation of what the pasted text means
-   *  (literal + between-the-lines). Empty for reply/compose. */
-  explanation: string;
-}
-
-/** A saved SNS interaction (history). */
-export interface SnsInteraction extends SnsResult {
-  id: string;
-  inputs: SnsInputs;
-  created_at: string;
-}
-
-/** One tagged mistake in the learner's own SNS draft — the learner-corpus unit. */
-export interface SnsError {
-  /** A short category, e.g. particle / politeness / word-choice / grammar /
-   *  spelling / naturalness. */
-  type: string;
-  /** The problematic fragment from the learner's draft. */
-  wrong: string;
-  /** The corrected fragment. */
-  right: string;
-  /** One-line why, in the learner's native language. */
-  note: string;
-}
-
-/** Teacher feedback on the learner's OWN edited SNS draft. */
-export interface SnsReview {
-  /** A natural, corrected version (furigana as 漢字（かな） parentheses). */
-  corrected: string;
-  /** Was the draft already natural (no real fixes needed)? */
-  natural: boolean;
-  /** Naturalness rating 1–5. */
-  rating: number;
-  /** Short encouraging teacher note in the learner's native language. */
-  feedback: string;
-  /** Tagged mistakes (may be empty when the draft is already good). */
-  errors: SnsError[];
-}
-
-/** A stored correction row (learner error log) — see migration 0020. */
-export interface SnsCorrection {
-  id: string;
-  /** The learner's own version. */
-  draft: string;
-  /** The teacher's fixed version. */
-  corrected: string;
-  /** The AI suggestion they started from, if any. */
-  original: string | null;
-  rating: number | null;
-  errors: SnsError[];
-  feedback: string | null;
-  created_at: string;
-}
-
-/** A saved practice test (the "test bank"). `exercises` replays for free. */
-export interface ReviewTest {
-  id: string;
-  title: string;
-  scope: string; // 'struggling' | 'new' | 'due' | 'filter'
-  meta: { level?: string | null; type?: string | null; item_count?: number } | null;
-  exercises: Exercise[];
-  created_at: string;
-  last_used_at: string | null;
-  used_count: number;
-}
+/** A word as quick-add drafts it (before saving). */
+export type DraftItem = {
+  type: KnowledgeType;
+  term: string;
+  reading: string;
+  meaning: string;
+  example: string;
+  jlpt_level: string;
+  part_of_speech: string;
+  notes: string;
+};

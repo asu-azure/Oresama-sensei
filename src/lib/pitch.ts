@@ -1,14 +1,12 @@
 // Pitch-accent helpers. The accent number is the "downstep" mora (0 = heiban /
 // flat, 1 = drop after mora 1, …). Dictionary data (kanjium, CC BY-SA 4.0) is
-// lazy-loaded only on lookup so it never weighs down the initial bundle.
+// fetched one small shard per lookup, only when pitch marks are on.
 
 import { toHiragana } from "wanakana";
 
 // Small kana that attach to the previous mora (ゃゅょ etc.); っ・ん・ー are their
 // own morae.
-const SMALL = new Set(
-  "ぁぃぅぇぉゃゅょゎァィゥェォャュョヮ".split(""),
-);
+const SMALL = new Set("ぁぃぅぇぉゃゅょゎァィゥェォャュョヮ".split(""));
 
 export function splitMora(kana: string): string[] {
   const out: string[] = [];
@@ -29,10 +27,8 @@ export function pitchPattern(reading: string, accent: number): Mora[] {
   return morae.map((mora, i) => {
     const pos = i + 1; // 1-based mora index
     let high: boolean;
-    if (a === 0)
-      high = pos !== 1; // heiban: low, then high to the end (no drop)
-    else if (a === 1)
-      high = pos === 1; // atamadaka: high, then low
+    if (a === 0) high = pos !== 1; // heiban: low, then high to the end (no drop)
+    else if (a === 1) high = pos === 1; // atamadaka: high, then low
     else high = pos >= 2 && pos <= a; // naka/odaka: low, high up to a, then low
     const drop = high && a >= 1 && pos === a; // pitch falls after this mora
     return { mora, high, drop };
@@ -52,97 +48,58 @@ export function accentType(reading: string, accent: number): AccentType {
   return "nakadaka"; // drop somewhere in the middle
 }
 
-export type AccentTypeMeta = {
-  jp: string; // Japanese label (平板 etc.)
-  en: string; // romanized label
-  border: string; // overline / hook color (all-sides class, used by legends)
-  over: string; // top-border color class for a HIGH mora's overline
-  drop: string; // right-border color class for the downstep hook
-  text: string; // tag + legend text color
-  dot: string; // legend swatch background
-  /** Raw CSS color (Tailwind v4 theme var) for the drawn pitch line + its glow. */
-  cssColor: string;
+/** Labels per type; colours are --pitch-<type> in global.css. */
+export const ACCENT_TYPE_META: Record<AccentType, { jp: string; en: string }> = {
+  heiban: { jp: "平板", en: "heiban" },
+  atamadaka: { jp: "頭高", en: "atamadaka" },
+  nakadaka: { jp: "中高", en: "nakadaka" },
+  odaka: { jp: "尾高", en: "odaka" },
 };
 
-/** Per-type colors + labels. Data-only (Tailwind class strings), mirroring the
- *  PRESET map in mastery.ts so the renderer and legend share one source. */
-export const ACCENT_TYPE_META: Record<AccentType, AccentTypeMeta> = {
-  heiban: {
-    jp: "平板",
-    en: "heiban",
-    border: "border-blue-500",
-    over: "border-t-blue-500",
-    drop: "border-r-blue-500",
-    text: "text-blue-600",
-    dot: "bg-blue-500",
-    cssColor: "var(--color-blue-500)",
-  },
-  atamadaka: {
-    jp: "頭高",
-    en: "atamadaka",
-    border: "border-rose-500",
-    over: "border-t-rose-500",
-    drop: "border-r-rose-500",
-    text: "text-rose-600",
-    dot: "bg-rose-500",
-    cssColor: "var(--color-rose-500)",
-  },
-  nakadaka: {
-    jp: "中高",
-    en: "nakadaka",
-    border: "border-amber-500",
-    over: "border-t-amber-500",
-    drop: "border-r-amber-500",
-    text: "text-amber-600",
-    dot: "bg-amber-500",
-    cssColor: "var(--color-amber-500)",
-  },
-  odaka: {
-    jp: "尾高",
-    en: "odaka",
-    border: "border-emerald-600",
-    over: "border-t-emerald-600",
-    drop: "border-r-emerald-600",
-    text: "text-emerald-700",
-    dot: "bg-emerald-600",
-    cssColor: "var(--color-emerald-600)",
-  },
-};
+export const ACCENT_TYPE_ORDER: AccentType[] = ["heiban", "atamadaka", "nakadaka", "odaka"];
 
-/** Order used for the legend. */
-export const ACCENT_TYPE_ORDER: AccentType[] = [
-  "heiban",
-  "atamadaka",
-  "nakadaka",
-  "odaka",
-];
+// --- shards (layout: scripts/lib/shards.mjs) ----------------------------------
 
-type Accents = {
-  byWord: Record<string, number>;
-  byReading: Record<string, number>;
-};
+const PITCH_BUCKETS = 256;
 
-let cache: Promise<Accents> | null = null;
-function load(): Promise<Accents> {
-  if (!cache) {
-    cache = import("@/data/pitch/accents.json").then(
-      (m) => m.default as Accents,
-    );
+/** 32-bit FNV-1a over UTF-16 code units — must match scripts/lib/shards.mjs. */
+export function fnv1a(s: string): number {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
   }
-  return cache;
+  return h;
 }
 
-/** Accent number for a term+reading (lazy). Exact word match first, then a
+export const pitchShardKey = (hira: string) =>
+  (fnv1a(hira) % PITCH_BUCKETS).toString(16).padStart(2, "0");
+
+type Shard = { w: Record<string, number>; r: Record<string, number> };
+const shards = new Map<string, Promise<Shard>>();
+
+function loadShard(key: string): Promise<Shard> {
+  let p = shards.get(key);
+  if (!p) {
+    p = fetch(`/data/pitch/${key}.json`)
+      .then((r) => (r.ok ? (r.json() as Promise<Shard>) : { w: {}, r: {} }))
+      .catch(() => {
+        shards.delete(key); // let a later lookup retry
+        return { w: {}, r: {} };
+      });
+    shards.set(key, p);
+  }
+  return p;
+}
+
+/** Accent number for a term+reading. Exact word match first, then a
  *  reading-only fallback; null if unknown. */
-export async function lookupAccent(
-  term: string,
-  reading: string,
-): Promise<number | null> {
+export async function lookupAccent(term: string, reading: string): Promise<number | null> {
   if (!reading) return null;
   const hira = toHiragana(reading);
-  const { byWord, byReading } = await load();
+  const { w, r } = await loadShard(pitchShardKey(hira));
   const key = `${term}\t${hira}`;
-  if (key in byWord) return byWord[key];
-  if (hira in byReading) return byReading[hira];
+  if (key in w) return w[key];
+  if (hira in r) return r[hira];
   return null;
 }
